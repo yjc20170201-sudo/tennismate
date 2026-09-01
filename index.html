@@ -980,12 +980,12 @@
     <h3>경기 결과 기록</h3>
     <label>경기 방식</label>
     <select id="rec-type" onchange="onRecType()">
-      <option value="s" selected>단식</option>
-      <option value="d">복식</option>
+      <option value="s">단식</option>
+      <option value="d" selected>복식</option><!-- 동호회는 복식이 주력이라 기본값 -->
     </select>
-    <label id="rec-opp-lbl">상대</label>
+    <label id="rec-opp-lbl">상대 1</label>
     <select id="rec-opp"></select>
-    <div id="rec-doubles" style="display:none">
+    <div id="rec-doubles">
       <label>내 파트너</label>
       <select id="rec-partner"></select>
       <label>상대 2</label>
@@ -2218,6 +2218,11 @@ function finishOnboard(skipped) {
 // B0 완료 후 TM_CONFIG를 채우면: 미로그인 → 로그인/가입 → 온보딩(프로필) → completeOnboarding 순서로 켜져요.
 function serverMode() { return !!(window.TM_CONFIG && TM_CONFIG.supabaseUrl && TM_CONFIG.supabaseAnonKey && window.TMAuth); }
 let authBusy = false;
+function skipAuth() { // 둘러보기: 이번 방문 동안 로그인 창 자동 오픈 중지
+  try { sessionStorage.setItem('tmSkipAuth', '1'); } catch (e) {}
+  closeModal('auth');
+  toast('👀 둘러보는 중이에요 — 기록·랭킹을 저장하려면 상단에서 로그인하세요');
+}
 function openAuth(view) {
   if (!serverMode()) return; // 데모 모드에서는 절대 열리지 않음
   renderAuth(view || 'login');
@@ -2256,6 +2261,7 @@ function renderAuth(view) {
       <button class="btn full" onclick="authDo('login')">로그인</button>
       <button class="btn full outline" onclick="authDo('kakao')">💬 카카오로 계속하기</button>
       <button class="btn full outline" onclick="authDo('google')">🔵 구글로 계속하기</button>
+      <button class="btn full outline" onclick="skipAuth()">👀 일단 둘러보기</button>
       <div class="row" style="gap:8px;margin-top:8px">
         <button class="btn outline" style="flex:1" onclick="renderAuth('signup')">회원가입</button>
         <button class="btn outline" style="flex:1" onclick="renderAuth('reset')">비밀번호 재설정</button>
@@ -2329,7 +2335,8 @@ async function initServerAuth() {
     return;
   }
   TMAuth.onChange(onAuthChange);
-  if (!TMAuth.isLoggedIn) openAuth('login');
+  // 둘러보기를 누른 방문자에게는 이번 방문 동안 로그인 창을 다시 들이밀지 않는다
+  if (!TMAuth.isLoggedIn && !sessionStorage.getItem('tmSkipAuth')) openAuth('login');
   else if (needsServerOnboard(TMAuth.profile)) openOnboard();
 }
 
