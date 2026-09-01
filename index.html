@@ -654,7 +654,7 @@
     <div class="filters">
       <select id="f-region" onchange="renderPartners()">
         <option value="">모든 지역</option>
-        <option>강남구</option><option>서초구</option><option>송파구</option><option>분당구</option><option>마포구</option>
+        <option>제주시</option><option>애월읍</option><option>조천읍</option><option>성산읍</option><option>서귀포시</option>
       </select>
       <select id="f-ntrp" onchange="renderPartners()">
         <option value="">모든 실력</option>
@@ -675,7 +675,7 @@
     <div class="filters">
       <select id="c-region" onchange="renderCoaches()">
         <option value="">모든 지역</option>
-        <option>강남구</option><option>서초구</option><option>송파구</option><option>분당구</option><option>마포구</option>
+        <option>제주시</option><option>애월읍</option><option>조천읍</option><option>성산읍</option><option>서귀포시</option>
       </select>
       <select id="c-spec" onchange="renderCoaches()">
         <option value="">모든 분야</option>
@@ -749,7 +749,7 @@
       <input type="text" id="club-q" placeholder="클럽 이름·소개·레벨 검색" oninput="renderClubList()">
       <select id="club-region" onchange="renderClubList()">
         <option value="">모든 지역</option>
-        <option>강남구</option><option>서초구</option><option>송파구</option><option>분당구</option><option>마포구</option>
+        <option>제주시</option><option>애월읍</option><option>조천읍</option><option>성산읍</option><option>서귀포시</option>
       </select>
     </div>
     <div class="muted" id="club-count" style="margin-bottom:8px"></div>
@@ -1036,7 +1036,7 @@
     <label>NTRP 실력</label>
     <select id="pf-ntrp"><option>2.5</option><option>3.0</option><option>3.5</option><option>4.0</option><option>4.5</option><option>5.0</option></select>
     <label>지역</label>
-    <select id="pf-region"><option>강남구</option><option>서초구</option><option>송파구</option><option>분당구</option><option>마포구</option></select>
+    <select id="pf-region"><option>제주시</option><option>애월읍</option><option>조천읍</option><option>성산읍</option><option>서귀포시</option></select>
     <label>플레이 스타일</label>
     <input type="text" id="pf-style" placeholder="예: 공격형 베이스라이너">
     <div id="pf-account"></div><!-- v0.38: 서버 계정 박스 (서버 모드 + 로그인 시에만 채워져요) -->
@@ -1613,10 +1613,10 @@ window.TMAuth = TMAuth;
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
 const APP_VERSION = 'v0.43';
-const ME = { name: '정철', ntrp: 3.5, region: '강남구', style: '올라운더', cal: 3.5, calDelta: 0 };
+const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
-   기존 5개(강남구·서초구·송파구·분당구·마포구)는 데모 데이터·정복 지도가 이름으로 참조하므로 표기 그대로 유지. */
+   데모 데이터·정복 지도는 제주 기반 (2026-09-01 제주 베타 전환). 서울 구 이름들은 선택지로만 남음. */
 const REGION_GROUPS = [
   // 클로즈드 베타는 제주 집중(밀도 전략) — 제주를 맨 앞 + 읍면 단위로 세분화
   ['제주', ['제주시','애월읍','한림읍','한경면','조천읍','구좌읍','서귀포시','중문','성산읍','표선면','남원읍','대정읍','안덕면','우도면']],
@@ -1643,29 +1643,29 @@ function regionOptionsHtml(sel) {
 })();
 
 let players = [
-  { id: 1, name: '김민준', ntrp: 3.5, region: '강남구', style: '공격형 베이스라이너', matches: 24, wins: 15, pts: 1240, monthPts: 68, seasonPts: 420, manner: 4.6, mannerN: 18, emoji: '🧢', tags: { '🎯 강서브': 5, '🔥 파워 스트로크': 3 } },
-  { id: 2, name: '이서연', ntrp: 4.0, region: '서초구', style: '올라운더', matches: 31, wins: 22, pts: 1580, monthPts: 92, seasonPts: 610, manner: 4.9, mannerN: 25, emoji: '🎽', tags: { '🧠 전략적 플레이': 7, '😊 좋은 매너': 6 } },
-  { id: 3, name: '박지훈', ntrp: 3.0, region: '송파구', style: '수비형', matches: 18, wins: 8, pts: 890, monthPts: 25, seasonPts: 180, manner: 4.2, mannerN: 12, emoji: '🛡️', tags: { '🛡️ 끈질긴 수비': 4 } },
-  { id: 4, name: '최수아', ntrp: 3.5, region: '강남구', style: '서브&발리', matches: 27, wins: 17, pts: 1310, monthPts: 74, seasonPts: 465, manner: 4.7, mannerN: 20, emoji: '🎾', tags: { '🎯 강서브': 4, '👟 빠른 발': 3 } },
-  { id: 5, name: '정도윤', ntrp: 4.5, region: '분당구', style: '공격형', matches: 40, wins: 31, pts: 1920, monthPts: 110, seasonPts: 790, manner: 4.4, mannerN: 30, emoji: '💪', tags: { '🔥 파워 스트로크': 8, '🎯 강서브': 5 } },
-  { id: 6, name: '한예린', ntrp: 2.5, region: '마포구', style: '초보 열정러', matches: 9, wins: 3, pts: 480, monthPts: 18, seasonPts: 95, manner: 5.0, mannerN: 7, emoji: '🌱', tags: { '😊 좋은 매너': 5 } },
-  { id: 7, name: '오태양', ntrp: 3.0, region: '분당구', style: '랠리형', matches: 15, wins: 7, pts: 760, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
+  { id: 1, name: '김민준', ntrp: 3.5, region: '제주시', style: '공격형 베이스라이너', matches: 24, wins: 15, pts: 1240, monthPts: 68, seasonPts: 420, manner: 4.6, mannerN: 18, emoji: '🧢', tags: { '🎯 강서브': 5, '🔥 파워 스트로크': 3 } },
+  { id: 2, name: '이서연', ntrp: 4.0, region: '애월읍', style: '올라운더', matches: 31, wins: 22, pts: 1580, monthPts: 92, seasonPts: 610, manner: 4.9, mannerN: 25, emoji: '🎽', tags: { '🧠 전략적 플레이': 7, '😊 좋은 매너': 6 } },
+  { id: 3, name: '박지훈', ntrp: 3.0, region: '조천읍', style: '수비형', matches: 18, wins: 8, pts: 890, monthPts: 25, seasonPts: 180, manner: 4.2, mannerN: 12, emoji: '🛡️', tags: { '🛡️ 끈질긴 수비': 4 } },
+  { id: 4, name: '최수아', ntrp: 3.5, region: '제주시', style: '서브&발리', matches: 27, wins: 17, pts: 1310, monthPts: 74, seasonPts: 465, manner: 4.7, mannerN: 20, emoji: '🎾', tags: { '🎯 강서브': 4, '👟 빠른 발': 3 } },
+  { id: 5, name: '정도윤', ntrp: 4.5, region: '성산읍', style: '공격형', matches: 40, wins: 31, pts: 1920, monthPts: 110, seasonPts: 790, manner: 4.4, mannerN: 30, emoji: '💪', tags: { '🔥 파워 스트로크': 8, '🎯 강서브': 5 } },
+  { id: 6, name: '한예린', ntrp: 2.5, region: '서귀포시', style: '초보 열정러', matches: 9, wins: 3, pts: 480, monthPts: 18, seasonPts: 95, manner: 5.0, mannerN: 7, emoji: '🌱', tags: { '😊 좋은 매너': 5 } },
+  { id: 7, name: '오태양', ntrp: 3.0, region: '성산읍', style: '랠리형', matches: 15, wins: 7, pts: 760, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
 ];
 // v0.8: 칭찬 태그 종류
 const SKILL_TAGS = ['🎯 강서브', '🔥 파워 스트로크', '🛡️ 끈질긴 수비', '👟 빠른 발', '🧠 전략적 플레이', '😊 좋은 매너'];
 
 let courts = [
-  { id: 1, name: '양재 시민의숲 테니스장', region: '서초구', surface: '하드', price: 10000,
-    addr: '서울 서초구 매헌로 99 (시민의숲 내)', desc: '시민의숲 산책로 옆 야외 하드코트. 나무 그늘이 많아 여름에도 쾌적하고, 주말 예약 경쟁이 치열한 인기 코트예요.',
+  { id: 1, name: '양재 시민의숲 테니스장', region: '애월읍', surface: '하드', price: 10000,
+    addr: '서울 애월읍 매헌로 99 (시민의숲 내)', desc: '시민의숲 산책로 옆 야외 하드코트. 나무 그늘이 많아 여름에도 쾌적하고, 주말 예약 경쟁이 치열한 인기 코트예요.',
     fac: ['야간 조명', '주차장', '화장실', '벤치/쉼터'] },
-  { id: 2, name: '올림픽공원 테니스장', region: '송파구', surface: '하드', price: 12000,
-    addr: '서울 송파구 올림픽로 424 (올림픽공원 내)', desc: '국제대회가 열렸던 정규 규격 코트. 관중석·부대시설이 잘 갖춰져 있어 대회 연습 코스로 좋아요.',
+  { id: 2, name: '제주종합경기장 테니스장', region: '조천읍', surface: '하드', price: 12000,
+    addr: '서울 조천읍 올림픽로 424 (제주종합경기장 내)', desc: '국제대회가 열렸던 정규 규격 코트. 관중석·부대시설이 잘 갖춰져 있어 대회 연습 코스로 좋아요.',
     fac: ['야간 조명', '샤워실', '주차장', '용품점'] },
-  { id: 3, name: '탄천 테니스장', region: '분당구', surface: '클레이', price: 8000,
-    addr: '경기 성남시 분당구 탄천변로 (탄천 체육공원)', desc: '탄천변의 클레이 코트. 관절 부담이 적어 긴 랠리 연습에 좋고 가격도 합리적이에요.',
+  { id: 3, name: '제주시민 테니스장', region: '성산읍', surface: '클레이', price: 8000,
+    addr: '경기 성남시 성산읍 탄천변로 (탄천 체육공원)', desc: '탄천변의 클레이 코트. 관절 부담이 적어 긴 랠리 연습에 좋고 가격도 합리적이에요.',
     fac: ['주차장', '음수대', '화장실'] },
-  { id: 4, name: '난지 한강공원 코트', region: '마포구', surface: '하드', price: 9000,
-    addr: '서울 마포구 한강난지로 162 (난지 한강공원)', desc: '한강 뷰와 함께 치는 야외 코트. 노을 시간대가 특히 인기이며, 강바람이 있는 날은 로브 조심!',
+  { id: 4, name: '난지 한강공원 코트', region: '서귀포시', surface: '하드', price: 9000,
+    addr: '서울 서귀포시 한강난지로 162 (난지 한강공원)', desc: '한강 뷰와 함께 치는 야외 코트. 노을 시간대가 특히 인기이며, 강바람이 있는 날은 로브 조심!',
     fac: ['야간 조명', '편의점 인근', '자전거 주차'] },
 ];
 const SLOTS = ['06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00'];
@@ -1697,34 +1697,34 @@ let openMatches = [           // v0.6: 오픈 매치 (데모)
 let nextOpenId = 4;
 // v0.7: 클럽 / 정기 모임 / 대항전 (데모 데이터) — v0.11: 디렉토리 확장 (8곳)
 let clubs = [
-  { id: 1, name: '강남 그린스매시', region: '강남구', emoji: '🔥', level: '3.0~4.0',
-    desc: '평일 저녁 랠리와 주말 복식 게임을 즐기는 강남 대표 동호회예요.', members: ['김민준', '최수아'], wins: 4, losses: 2 },
-  { id: 2, name: '서초 베이스라이너즈', region: '서초구', emoji: '🎯', level: '3.5~4.5',
+  { id: 1, name: '제주 그린스매시', region: '제주시', emoji: '🔥', level: '3.0~4.0',
+    desc: '평일 저녁 랠리와 주말 복식 게임을 즐기는 제주 대표 동호회예요.', members: ['김민준', '최수아'], wins: 4, losses: 2 },
+  { id: 2, name: '애월 베이스라이너즈', region: '애월읍', emoji: '🎯', level: '3.5~4.5',
     desc: '단식 위주의 실전파 클럽. 야간 리그와 전략 스터디를 운영해요.', members: ['이서연'], wins: 6, losses: 1 },
-  { id: 3, name: '분당 윈드밀', region: '분당구', emoji: '🌪️', level: '3.0~4.5',
-    desc: '탄천 클레이 코트를 홈으로 쓰는 클럽. 체력 훈련도 함께해요.', members: ['정도윤', '오태양'], wins: 3, losses: 3 },
-  { id: 4, name: '마포 선라이즈', region: '마포구', emoji: '🌅', level: '2.5~3.5',
-    desc: '한강 노을과 함께하는 즐테 클럽. 초보 환영, 분위기 최고!', members: ['한예린', '박지훈'], wins: 2, losses: 4 },
-  { id: 5, name: '송파 에이스', region: '송파구', emoji: '🏆', level: '4.0~5.0',
-    desc: '올림픽공원을 홈으로 쓰는 상위 레벨 클럽. 대회 입상자가 많아요.', members: ['윤성호', '배지원'], wins: 7, losses: 1 },
-  { id: 6, name: '강남 새벽테니스', region: '강남구', emoji: '⏰', level: '2.5~3.5',
+  { id: 3, name: '성산 윈드밀', region: '성산읍', emoji: '🌪️', level: '3.0~4.5',
+    desc: '중문 클레이 코트를 홈으로 쓰는 클럽. 체력 훈련도 함께해요.', members: ['정도윤', '오태양'], wins: 3, losses: 3 },
+  { id: 4, name: '서귀포 선라이즈', region: '서귀포시', emoji: '🌅', level: '2.5~3.5',
+    desc: '제주 바다 노을과 함께하는 즐테 클럽. 초보 환영, 분위기 최고!', members: ['한예린', '박지훈'], wins: 2, losses: 4 },
+  { id: 5, name: '조천 에이스', region: '조천읍', emoji: '🏆', level: '4.0~5.0',
+    desc: '제주종합경기장을 홈으로 쓰는 상위 레벨 클럽. 대회 입상자가 많아요.', members: ['윤성호', '배지원'], wins: 7, losses: 1 },
+  { id: 6, name: '제주 새벽테니스', region: '제주시', emoji: '⏰', level: '2.5~3.5',
     desc: '출근 전 새벽 6시에 모이는 아침형 클럽. 꾸준함이 무기예요!', members: ['임태오'], wins: 1, losses: 5 },
-  { id: 7, name: '서초 발리스타', region: '서초구', emoji: '🕸️', level: '3.0~4.0',
+  { id: 7, name: '애월 발리스타', region: '애월읍', emoji: '🕸️', level: '3.0~4.0',
     desc: '네트 플레이와 복식 전술을 파고드는 복식 전문 클럽이에요.', members: ['조은별', '권혁'], wins: 5, losses: 3 },
-  { id: 8, name: '분당 클레이러버스', region: '분당구', emoji: '🧱', level: '2.5~4.0',
+  { id: 8, name: '성산 클레이러버스', region: '성산읍', emoji: '🧱', level: '2.5~4.0',
     desc: '클레이 코트 마니아 모임. 슬라이딩 스텝 강습도 함께해요.', members: ['서다인'], wins: 2, losses: 2 },
 ];
 let myClubId = null;
 let meetings = [
   { id: 1, clubId: 1, date: todayStr(3), time: '19:00', place: '양재 시민의숲 테니스장', note: '수요 정기 랠리 + 복식 게임', rsvp: ['김민준', '최수아'] },
-  { id: 2, clubId: 1, date: todayStr(6), time: '08:00', place: '올림픽공원 테니스장', note: '주말 아침 클리닉', rsvp: ['김민준'] },
+  { id: 2, clubId: 1, date: todayStr(6), time: '08:00', place: '제주종합경기장 테니스장', note: '주말 아침 클리닉', rsvp: ['김민준'] },
   { id: 3, clubId: 2, date: todayStr(4), time: '20:00', place: '양재 시민의숲 테니스장', note: '야간 단식 리그', rsvp: ['이서연'] },
-  { id: 4, clubId: 3, date: todayStr(5), time: '10:00', place: '탄천 테니스장', note: '클레이 적응 훈련', rsvp: ['정도윤', '오태양'] },
+  { id: 4, clubId: 3, date: todayStr(5), time: '10:00', place: '제주시민 테니스장', note: '클레이 적응 훈련', rsvp: ['정도윤', '오태양'] },
   { id: 5, clubId: 4, date: todayStr(7), time: '16:00', place: '난지 한강공원 코트', note: '노을 복식 모임', rsvp: ['한예린'] },
 ];
 let interMatches = [
-  { id: 1, clubA: 1, clubB: 2, date: todayStr(9), place: '올림픽공원 테니스장', scoreA: null, scoreB: null },
-  { id: 2, clubA: 3, clubB: 4, date: todayStr(11), place: '탄천 테니스장', scoreA: null, scoreB: null },
+  { id: 1, clubA: 1, clubB: 2, date: todayStr(9), place: '제주종합경기장 테니스장', scoreA: null, scoreB: null },
+  { id: 2, clubA: 3, clubB: 4, date: todayStr(11), place: '제주시민 테니스장', scoreA: null, scoreB: null },
   { id: 3, clubA: 1, clubB: 3, date: todayStr(-5), place: '양재 시민의숲 테니스장', scoreA: 3, scoreB: 2 },
 ];
 let vsEditing = null;
@@ -1743,22 +1743,22 @@ let ladders = {
 let ladderChallenging = null; // v0.10: 도전 상대 이름
 // v0.11: 레슨/코치 (데모 데이터)
 let coaches = [
-  { id: 1, name: '서준혁', region: '강남구', spec: '스트로크', career: '前 실업팀 선수 · 경력 12년', price: 60000, rating: 4.9, ratingN: 48, emoji: '🎓', levels: '2.5~4.5' },
-  { id: 2, name: '한소민', region: '서초구', spec: '서브', career: 'KTA 지도자 자격 · 경력 8년', price: 55000, rating: 4.8, ratingN: 35, emoji: '🚀', levels: '3.0~5.0' },
-  { id: 3, name: '문경태', region: '송파구', spec: '발리/네트플레이', career: '대학 선수 출신 · 경력 10년', price: 50000, rating: 4.7, ratingN: 29, emoji: '🕸️', levels: '2.5~4.0' },
-  { id: 4, name: '유하늘', region: '마포구', spec: '입문/기초', career: '주니어 아카데미 코치 · 경력 6년', price: 45000, rating: 5.0, ratingN: 22, emoji: '🌱', levels: '1.0~3.0' },
-  { id: 5, name: '강민재', region: '분당구', spec: '전략/경기 운영', career: '前 국가대표 상비군 · 경력 15년', price: 70000, rating: 4.9, ratingN: 51, emoji: '🧠', levels: '3.5~5.5' },
+  { id: 1, name: '서준혁', region: '제주시', spec: '스트로크', career: '前 실업팀 선수 · 경력 12년', price: 60000, rating: 4.9, ratingN: 48, emoji: '🎓', levels: '2.5~4.5' },
+  { id: 2, name: '한소민', region: '애월읍', spec: '서브', career: 'KTA 지도자 자격 · 경력 8년', price: 55000, rating: 4.8, ratingN: 35, emoji: '🚀', levels: '3.0~5.0' },
+  { id: 3, name: '문경태', region: '조천읍', spec: '발리/네트플레이', career: '대학 선수 출신 · 경력 10년', price: 50000, rating: 4.7, ratingN: 29, emoji: '🕸️', levels: '2.5~4.0' },
+  { id: 4, name: '유하늘', region: '서귀포시', spec: '입문/기초', career: '주니어 아카데미 코치 · 경력 6년', price: 45000, rating: 5.0, ratingN: 22, emoji: '🌱', levels: '1.0~3.0' },
+  { id: 5, name: '강민재', region: '성산읍', spec: '전략/경기 운영', career: '前 국가대표 상비군 · 경력 15년', price: 70000, rating: 4.9, ratingN: 51, emoji: '🧠', levels: '3.5~5.5' },
 ];
 let lessons = [];             // v0.11: 내 레슨 예약 {coachId, date, slot, note}
 let lessonBooking = null;     // v0.11: 신청 중인 코치 id
 // v0.12: 활동 피드 (데모 이벤트) & 파트너 즐겨찾기
 let feed = [
   { id: 1, who: '이서연', emoji: '🎽', msg: '김민준 님과의 단식에서 세트 2:0 승리! 🏆', time: todayStr(-1), likes: 5, liked: false },
-  { id: 2, who: '정도윤', emoji: '💪', msg: '탄천 테니스장 코트를 예약했어요 (10:00) 🏟️', time: todayStr(-1), likes: 2, liked: false },
+  { id: 2, who: '정도윤', emoji: '💪', msg: '제주시민 테니스장 코트를 예약했어요 (10:00) 🏟️', time: todayStr(-1), likes: 2, liked: false },
   { id: 3, who: '한예린', emoji: '🌱', msg: '🎖️ "첫 승리" 뱃지를 획득했어요!', time: todayStr(-2), likes: 8, liked: false },
   { id: 4, who: '최수아', emoji: '🎾', msg: '⚡ 오픈 매치를 개설했어요 — 함께할 파트너를 찾습니다', time: todayStr(-2), likes: 3, liked: false },
-  { id: 5, who: '박지훈', emoji: '🛡️', msg: '📆 마포 선라이즈 정기 모임에 참석했어요', time: todayStr(-3), likes: 4, liked: false },
-  { id: 6, who: '오태양', emoji: '☀️', msg: '🪜 분당 윈드밀 래더에서 도전에 성공했어요!', time: todayStr(-3), likes: 6, liked: false },
+  { id: 5, who: '박지훈', emoji: '🛡️', msg: '📆 서귀포 선라이즈 정기 모임에 참석했어요', time: todayStr(-3), likes: 4, liked: false },
+  { id: 6, who: '오태양', emoji: '☀️', msg: '🪜 성산 윈드밀 래더에서 도전에 성공했어요!', time: todayStr(-3), likes: 6, liked: false },
 ];
 let nextFeedId = 7;
 let feedExpanded = false;
@@ -1790,11 +1790,13 @@ function availOverlap(p) {
 function availLabel(c) { return AVAIL_DAYS[c[0]] + ' ' + AVAIL_BANDS[c[1]]; }
 // v0.13: 지역 정복 지도 — 5개 지역의 SVG 구획·라벨·1짱 마커 좌표 (인라인 SVG, 외부 라이브러리 없음)
 const REGIONS = [
-  { name: '마포구', poly: '16,28 112,14 146,56 124,100 54,112 12,72', lx: 66, ly: 50, mx: 78, my: 76 },
-  { name: '서초구', poly: '36,148 128,136 152,184 134,240 56,248 22,198', lx: 80, ly: 166, mx: 90, my: 198 },
-  { name: '강남구', poly: '148,120 232,112 252,160 236,204 164,212 136,162', lx: 192, ly: 138, mx: 196, my: 168 },
-  { name: '송파구', poly: '258,96 344,86 354,142 334,192 276,198 250,146', lx: 300, ly: 114, mx: 302, my: 146 },
-  { name: '분당구', poly: '180,232 292,222 316,268 292,296 204,292 168,262', lx: 240, ly: 248, mx: 246, my: 272 },
+  // 제주 6구역 (viewBox 370x312, 단순화한 제주도 형태) — parts: 이 구역으로 집계되는 지역 값들
+  { name: '애월·한림', parts: ['애월읍','한림읍','한경면'], poly: '12,155 50,108 138,90 138,155', lx: 82, ly: 128, mx: 88, my: 133 },
+  { name: '제주시',   parts: ['제주시'],                    poly: '138,90 245,84 245,155 138,155', lx: 191, ly: 116, mx: 191, my: 128 },
+  { name: '조천·구좌', parts: ['조천읍','구좌읍','우도면'],  poly: '245,84 312,100 358,155 245,155', lx: 294, ly: 128, mx: 298, my: 133 },
+  { name: '대정·안덕', parts: ['대정읍','안덕면'],           poly: '12,155 138,155 138,222 66,208 32,182', lx: 80, ly: 186, mx: 86, my: 190 },
+  { name: '서귀포',   parts: ['서귀포시','중문'],            poly: '138,155 245,155 245,224 182,236 138,222', lx: 191, ly: 192, mx: 191, my: 197 },
+  { name: '성산·표선', parts: ['성산읍','표선면','남원읍'],  poly: '245,155 358,155 310,204 245,224', lx: 292, ly: 184, mx: 296, my: 188 },
 ];
 const TERR_COLORS = ['#2f9e5f', '#3b6fd4', '#e07a3f', '#8a5fd4', '#2ba8a0', '#d84b7a', '#b0892a'];
 let lastChamps = null;        // v0.13: 지역별 직전 1짱 (정복/탈환 감지용)
@@ -1809,8 +1811,8 @@ let slotAlerts = [];
 let nextAlertId = 1;
 // v0.14: 대타 찾기 (결원 보충)
 let subRequests = [
-  { id: 1, host: '박지훈', place: '올림픽공원 테니스장', date: todayStr(1), slot: '20:00', type: '복식', levelMin: 3.0, levelMax: 4.0, note: '멤버 한 명이 갑자기 못 나와요 — 복식 한 자리 급구!', volunteer: null, mine: false },
-  { id: 2, host: '정도윤', place: '탄천 테니스장', date: todayStr(2), slot: '06:00', type: '단식', levelMin: 4.0, levelMax: 5.0, note: '새벽 단식 상대가 취소했어요. 상급자 환영!', volunteer: null, mine: false },
+  { id: 1, host: '박지훈', place: '제주종합경기장 테니스장', date: todayStr(1), slot: '20:00', type: '복식', levelMin: 3.0, levelMax: 4.0, note: '멤버 한 명이 갑자기 못 나와요 — 복식 한 자리 급구!', volunteer: null, mine: false },
+  { id: 2, host: '정도윤', place: '제주시민 테니스장', date: todayStr(2), slot: '06:00', type: '단식', levelMin: 4.0, levelMax: 5.0, note: '새벽 단식 상대가 취소했어요. 상급자 환영!', volunteer: null, mine: false },
   { id: 3, host: '한예린', place: '난지 한강공원 코트', date: todayStr(3), slot: '16:00', type: '복식', levelMin: 2.5, levelMax: 3.5, note: '노을 복식 한 자리! 초보 환영이에요', volunteer: null, mine: false },
 ];
 let nextSubId = 4;
@@ -1909,7 +1911,7 @@ let groups = [
       { id: 2, who: '최수아', msg: '네 맞아요! 공지 확인 감사해요 🙌 몸 풀 시간 넉넉히 잡고 오세요', mine: false },
     ] },
   { id: 2, name: '주말 아침 복식 모임', emoji: '🌅', host: '박지훈', dow: 6, time: '08:00',
-    place: '올림픽공원 테니스장', cap: 4, desc: '토요일 아침 복식 한 게임! 정원이 차면 대기열 로테이션으로 공평하게 뛰어요.',
+    place: '제주종합경기장 테니스장', cap: 4, desc: '토요일 아침 복식 한 게임! 정원이 차면 대기열 로테이션으로 공평하게 뛰어요.',
     members: ['박지훈', '오태양', '한예린', '정도윤'],
     notices: [],
     att: {}, hist: [], mine: false,
@@ -1938,7 +1940,7 @@ let posts = [
     comments: [
       { id: 4, who: '김민준', msg: '축하해요! 다음엔 저랑도 한 게임 해요 🙌', mine: false },
     ] },
-  { id: 4, cat: 'Q&A', title: '비 온 다음 날 클레이 코트, 몇 시간 뒤에 칠 수 있나요?', body: '탄천 클레이 코트 자주 가는데, 비 온 다음 날 오전엔 보통 상태가 어떤가요?', who: '오태양', emoji: '☀️', date: todayStr(-3), likes: 1, liked: false, mine: false, solved: null, comments: [] },
+  { id: 4, cat: 'Q&A', title: '비 온 다음 날 클레이 코트, 몇 시간 뒤에 칠 수 있나요?', body: '중문 클레이 코트 자주 가는데, 비 온 다음 날 오전엔 보통 상태가 어떤가요?', who: '오태양', emoji: '☀️', date: todayStr(-3), likes: 1, liked: false, mine: false, solved: null, comments: [] },
   { id: 5, cat: '자유', title: '주말 아침 코트 예약 꿀팁 공유', body: '인기 코트는 예약 오픈 직후가 답이에요. 저는 빈자리 알림 등록해두고 양도 매물도 같이 노려요. 이번 주도 성공!', who: '이서연', emoji: '🎽', date: todayStr(-4), likes: 5, liked: false, mine: false, solved: null,
     comments: [
       { id: 5, who: '한예린', msg: '오 양도 게시판 활용 좋네요. 저도 해볼게요!', mine: false },
@@ -1961,7 +1963,7 @@ let socialEvents = [
     comments: [ { id: 1, who: '김민준', msg: '라켓 하나 더 챙겨갈게요!', mine: false } ] },
   { id: 2, type: '뉴비 환영회', title: '8월 뉴비 환영회 🎉', host: '한예린', emoji: '🌱', date: todayStr(3), slot: '16:00', place: '난지 한강공원 코트', cap: 8, joined: ['한예린', '박지훈', '오태양'], note: '이번 달에 테니스 시작한 분들 모여요! 기본 랠리 + 아이스브레이킹',
     comments: [ { id: 2, who: '박지훈', msg: '제가 공 한 박스 가져갈게요 🙌', mine: false } ] },
-  { id: 3, type: '관전 모임', title: '주말 클럽 대항전 같이 봐요', host: '이서연', emoji: '🎽', date: todayStr(5), slot: '10:00', place: '올림픽공원 테니스장 관중석', cap: 6, joined: ['이서연'], note: '대항전 구경하면서 전략 수다 떨어요. 음료는 각자!',
+  { id: 3, type: '관전 모임', title: '주말 클럽 대항전 같이 봐요', host: '이서연', emoji: '🎽', date: todayStr(5), slot: '10:00', place: '제주종합경기장 테니스장 관중석', cap: 6, joined: ['이서연'], note: '대항전 구경하면서 전략 수다 떨어요. 음료는 각자!',
     comments: [] },
 ];
 let nextEventId = 4, nextEvtCmtId = 3;
@@ -2100,7 +2102,7 @@ function renderOnboard() {
       <label>NTRP 실력 <span class="muted">— 잘 모르면 3.0(중급 입문)을 골라도 돼요</span></label>
       <select id="ob-ntrp">${['2.5','3.0','3.5','4.0','4.5','5.0'].map(v => `<option ${v === ME.ntrp.toFixed(1) ? 'selected' : ''}>${v}</option>`).join('')}</select>
       <label>주 활동 지역</label>
-      <select id="ob-region">${regionOptionsHtml(ME.region === '강남구' ? '제주시' : ME.region)}</select><!-- 제주 베타: 데모 기본값(강남구)이면 제주시를 기본 선택 -->
+      <select id="ob-region">${regionOptionsHtml(ME.region)}</select><!-- 제주 베타: 데모 기본값(제주시)이면 제주시를 기본 선택 -->
       ${dots}
       <button class="btn full" onclick="obNext()">다음 →</button>
       <button class="btn full outline" onclick="finishOnboard(true)">건너뛰기</button>`;
@@ -3266,7 +3268,7 @@ function openWrapped() {
       <div style="margin-top:10px">
         ${s.rival ? `<div class="wrap-line"><span>🤜🤛 최다 라이벌</span><b>${s.rival[0]} (${s.rival[1]}경기)</b></div>` : ''}
         ${s.bestMon ? `<div class="wrap-line"><span>🔥 가장 뜨거웠던 달</span><b>${s.bestMon[0]}월 (${s.bestMon[1]}경기)</b></div>` : ''}
-        <div class="wrap-line"><span>🗺️ 정복한 지역</span><b>${s.terr}/5 지역</b></div>
+        <div class="wrap-line"><span>🗺️ 정복한 지역</span><b>${s.terr}/${REGIONS.length} 지역</b></div>
         ${s.chk ? `<div class="wrap-line"><span>📍 코트 방문</span><b>${s.chk}회</b></div>` : ''}
         ${s.lives ? `<div class="wrap-line"><span>🎾 라이브 스코어 경기</span><b>${s.lives}회</b></div>` : ''}
       </div>`}
@@ -3951,9 +3953,11 @@ function renderFeed() {
 
 // ===== 지역 정복 지도 (v0.13) =====
 function regionChamp(region) {
-  const cands = players.filter(p => p.region === region)
+  const zone = REGIONS.find(r => r.name === region);
+  const parts = zone ? zone.parts : [region];
+  const cands = players.filter(p => parts.includes(p.region))
     .map(p => ({ name: p.name, emoji: p.emoji, pts: p.pts, ntrp: p.ntrp, me: false, p }));
-  if (ME.region === region) cands.push({ name: ME.name, emoji: '⭐', pts: myStats.pts, ntrp: ME.ntrp, me: true, p: null });
+  if (parts.includes(ME.region)) cands.push({ name: ME.name, emoji: '⭐', pts: myStats.pts, ntrp: ME.ntrp, me: true, p: null });
   if (!cands.length) return null;
   cands.sort((a, b) => b.pts - a.pts);
   return cands[0];
@@ -4011,8 +4015,8 @@ function renderMap() {
   ).join('');
   $('map-area').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:8px">
-      <b style="font-size:14px">서울·수도권 5개 지역</b>
-      <span class="badge" id="terr-count">⭐ 내 영토 ${myCount}/5</span>
+      <b style="font-size:14px">제주 6개 지역</b>
+      <span class="badge" id="terr-count">⭐ 내 영토 ${myCount}/${REGIONS.length}</span>
     </div>
     <svg class="map-svg" viewBox="0 0 370 312" xmlns="http://www.w3.org/2000/svg">${shapes}${markers}</svg>
     <div class="map-legend">${Object.values(owners).map(o => `<span class="lg"><span class="sw" style="background:${o.color}"></span>${o.label}</span>`).join('')}</div>
@@ -4030,7 +4034,7 @@ function renderHomeMap() {
   const data = REGIONS.map(r => ({ r, ch: regionChamp(r.name) }));
   const myCount = data.filter(d => d.ch && d.ch.me).length;
   $('home-map').innerHTML = `<div class="card">
-    <div class="row"><b style="font-size:14px">🗺️ 동네 1짱 현황</b><span class="badge">⭐ 내 영토 ${myCount}/5</span></div>
+    <div class="row"><b style="font-size:14px">🗺️ 동네 1짱 현황</b><span class="badge">⭐ 내 영토 ${myCount}/${REGIONS.length}</span></div>
     <div style="margin-top:4px">${data.filter(d => d.ch).map(d =>
       `<div class="terr-chip"><span>${d.ch.me ? '⭐ ' : ''}${d.r.name}</span><span class="muted">👑 ${d.ch.emoji} ${d.ch.name}${d.ch.me ? ' (나)' : ''}</span></div>`).join('')}</div>
   </div>`;
