@@ -3959,15 +3959,18 @@ function renderFeed() {
 }
 
 // ===== 지역 정복 지도 (v0.13) =====
-function regionChamp(region) {
+function regionRanking(region) {
   const zone = REGIONS.find(r => r.name === region);
   const parts = zone ? zone.parts : [region];
   const cands = players.filter(p => parts.includes(p.region))
     .map(p => ({ name: p.name, emoji: p.emoji, pts: p.pts, ntrp: p.ntrp, me: false, p }));
   if (parts.includes(ME.region)) cands.push({ name: ME.name, emoji: '⭐', pts: myStats.pts, ntrp: ME.ntrp, me: true, p: null });
-  if (!cands.length) return null;
   cands.sort((a, b) => b.pts - a.pts);
-  return cands[0];
+  return cands;
+}
+function regionChamp(region) {
+  const cands = regionRanking(region);
+  return cands.length ? cands[0] : null;
 }
 function champOwner(ch) { // 점유 세력: 1짱 소속 클럽 (없으면 1짱 개인)
   if (!ch) return null;
@@ -4047,25 +4050,42 @@ function renderHomeMap() {
   </div>`;
 }
 function openChamp(region) {
-  const ch = regionChamp(region);
-  if (!ch) return;
-  const ow = champOwner(ch);
-  const matches = ch.me ? myStats.matches : ch.p.matches;
-  const wins = ch.me ? myStats.wins : ch.p.wins;
-  const manner = ch.me ? null : ch.p.manner;
-  const wr = matches ? Math.round(wins / matches * 100) : 0;
-  const gap = ch.pts - myStats.pts + 1;
-  $('champ-body').innerHTML = `
+  const ranks = regionRanking(region);
+  if (!ranks.length) {
+    $('champ-body').innerHTML = `
     <div style="text-align:center">
-      <div class="avatar" style="width:64px;height:64px;font-size:32px;margin:0 auto">${ch.emoji}</div>
-      <h3 style="margin:8px 0 0">👑 ${region} 동네 1짱</h3>
-      <div style="font-size:18px;font-weight:800;margin-top:2px">${ch.me ? '⭐ ' : ''}${ch.name}${ch.me ? ' (나)' : ''}</div>
-      <div class="muted" style="margin-top:4px">NTRP ${ch.ntrp.toFixed(1)} · ${matches}전 ${wins}승 · 승률 ${wr}%${manner ? ' · 😊 매너 ' + manner.toFixed(1) : ''}</div>
-      <div style="margin-top:8px"><span class="badge">🏆 ${ch.pts.toLocaleString()} pt</span> <span class="badge orange">${ow.label} 세력</span></div>
-      ${ch.me ? '<div class="muted" style="margin-top:10px">이 지역은 내 영토예요. 도전자들로부터 자리를 지키세요!</div>'
-              : `<div class="muted" style="margin-top:10px">포인트를 ${gap.toLocaleString()}pt 더 쌓으면 이 지역을 정복할 수 있어요!</div>`}
+      <div style="font-size:40px">🏳️</div>
+      <h3 style="margin:8px 0 0">${region} — 무주공산</h3>
+      <div class="muted" style="margin-top:8px">아직 이 지역엔 랭커가 없어요.<br>여기서 경기를 기록하는 첫 번째 사람이 1짱이 됩니다!</div>
       <button class="btn full" style="margin-top:12px" onclick="closeModal('champ')">닫기</button>
     </div>`;
+    openModal('champ');
+    return;
+  }
+  const ch = ranks[0];
+  const ow = champOwner(ch);
+  const myIdx = ranks.findIndex(c => c.me);
+  const MEDALS = ['🥇', '🥈', '🥉'];
+  const row = (c, i) => `
+    <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:10px;margin-top:4px;${c.me ? 'background:rgba(47,158,95,.18);outline:1.5px solid rgba(47,158,95,.5)' : 'background:rgba(127,127,127,.08)'}">
+      <span style="width:30px;font-weight:800;font-size:${i < 3 ? '16px' : '12px'}">${MEDALS[i] || (i + 1) + '위'}</span>
+      <span style="font-size:17px">${c.emoji}</span>
+      <b style="flex:1;text-align:left">${c.name}${c.me ? ' (나)' : ''}</b>
+      <span class="muted" style="font-size:11px">NTRP ${c.ntrp.toFixed(1)}</span>
+      <b style="min-width:58px;text-align:right">${c.pts.toLocaleString()}pt</b>
+    </div>
+    ${c.me && i > 0 ? `<div class="muted" style="font-size:11.5px;text-align:right;margin-top:3px">🔥 ${i === 1 ? '1짱' : i + '위'}까지 ${(ranks[i-1].pts - c.pts + 1).toLocaleString()}pt!</div>` : ''}`;
+  let listHtml = ranks.slice(0, 5).map(row).join('');
+  if (myIdx >= 5) listHtml += `<div class="muted" style="text-align:center;margin-top:3px">⋯</div>` + row(ranks[myIdx], myIdx);
+  $('champ-body').innerHTML = `
+    <div style="text-align:center">
+      <h3 style="margin:0">👑 ${region} 랭킹</h3>
+      <div class="muted" style="margin-top:3px;font-size:12px">1짱 ${ch.emoji} <b>${ch.name}</b> · ${ow.label} 세력 · 총 ${ranks.length}명 활동 중</div>
+    </div>
+    <div style="margin-top:10px">${listHtml}</div>
+    ${myIdx === 0 ? '<div class="muted" style="margin-top:10px;text-align:center">이 지역은 내 영토예요. 도전자들로부터 자리를 지키세요!</div>'
+      : myIdx < 0 ? '<div class="muted" style="margin-top:10px;text-align:center">주 활동 지역을 여기로 바꾸면 이 랭킹에 참여해요.</div>' : ''}
+    <button class="btn full" style="margin-top:12px" onclick="closeModal('champ')">닫기</button>`;
   openModal('champ');
 }
 
