@@ -1361,9 +1361,13 @@
 </div>
 
 <!-- 라이브 스코어보드 모달 (v0.17) -->
-<div class="modal-bg" id="modal-live" onclick="if(event.target===this && (!live || live.done)) closeModal('live')">
+<div class="modal-bg" id="modal-live" onclick="lvBackdrop(event)">
   <div class="modal">
     <h3>🎾 라이브 스코어보드</h3>
+    <div id="lvrc-wrap" style="margin-bottom:6px">
+      <button type="button" class="tag-btn" id="lvrc-btn" onclick="lvRCHostToggle()">📟 리모컨 연결</button>
+      <span class="muted" id="lvrc-status" style="font-size:12px;margin-left:6px"></span>
+    </div>
     <div id="lvcam-wrap" style="margin-bottom:8px">
       <button type="button" class="tag-btn" id="lvcam-btn" onclick="lvCamToggle()">📹 촬영 모드 켜기</button>
       <span class="muted" id="lvcam-status" style="font-size:12px;margin-left:6px"></span>
@@ -3762,6 +3766,112 @@ function openArchive(id) {
   openModal('archive');
 }
 
+// ===== 점수 리모컨 (Realtime) =====
+// 점수판 폰(호스트)이 코드를 만들고, 파트너 폰·갤럭시워치 브라우저(리모컨)가 같은 코드로 입장.
+// 리모컨 탭 → broadcast 'point' → 호스트가 livePoint() 실행(촬영 모드면 랠리 클립까지) → 'state' 회신.
+// 로그인 불필요 — 서버 모드(anon key)면 동작. 테스트 훅: window.__rcTestClient
+let lvRC = null; // { chan, code, role: 'host'|'remote', peers }
+function lvRCClient() { return window.__rcTestClient || (serverMode() && TMAuth.client); }
+async function lvRCJoin(code, role) {
+  const client = lvRCClient();
+  if (!client) { toast('서버 연결이 있어야 리모컨을 쓸 수 있어요'); return; }
+  if (lvRC) await lvRCStop(true);
+  const chan = client.channel('score:' + code, { config: { presence: { key: role + '-' + Math.random().toString(36).slice(2, 6) }, broadcast: { self: false } } });
+  if (role === 'host') {
+    chan.on('broadcast', { event: 'point' }, p => { if (live && !live.done) livePoint(p.payload.side); });
+    chan.on('broadcast', { event: 'undo' }, () => liveUndo());
+    chan.on('broadcast', { event: 'hello' }, () => lvRCPushState());
+  } else {
+    chan.on('broadcast', { event: 'state' }, p => lvRCRemoteState(p.payload));
+  }
+  chan.on('presence', { event: 'sync' }, () => {
+    if (!lvRC) return;
+    lvRC.peers = Object.keys(chan.presenceState ? chan.presenceState() : {}).length || 1;
+    lvRCInfo();
+  });
+  await new Promise((res, rej) => chan.subscribe(st => {
+    if (st === 'SUBSCRIBED') { if (chan.track) chan.track({ at: Date.now() }); res(); }
+    else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
+  }));
+  lvRC = { chan, code, role, peers: 1 };
+  if (role === 'remote') { chan.send({ type: 'broadcast', event: 'hello', payload: {} }); renderLive(); }
+  lvRCInfo();
+}
+function lvRCInfo() {
+  if (!lvRC) return;
+  if (lvRC.role === 'host') {
+    const s = $('lvrc-status'), b = $('lvrc-btn');
+    if (b) b.textContent = '📟 리모컨 끊기';
+    if (s) s.textContent = '코드 ' + lvRC.code + ' · 연결 ' + lvRC.peers + '대 — 파트너 폰/워치에서 라이브 스코어 → 리모컨 입장';
+  } else {
+    const h = $('lvrc-remote-head');
+    if (h) h.textContent = '📟 리모컨 모드 — 방 ' + lvRC.code + ' · 연결 ' + lvRC.peers + '대';
+  }
+}
+function lvRCHostToggle() {
+  if (lvRC) { lvRCStop(); return; }
+  lvRCJoin(mrGenCode(), 'host').catch(e => toast('리모컨 연결 실패: ' + (e.message || e)));
+}
+function lvRCRemoteJoin() {
+  const c = ($('lvrc-code-in').value || '').trim().toUpperCase();
+  if (c.length !== 4) { toast('리모컨 코드 4자리를 입력해 주세요'); return; }
+  lvRCJoin(c, 'remote').catch(e => toast('입장 실패: ' + (e.message || e)));
+}
+function lvRCPoint(side) {
+  if (!lvRC || !lvRC.chan) return;
+  lvRC.chan.send({ type: 'broadcast', event: 'point', payload: { side } });
+  if (navigator.vibrate) navigator.vibrate(30);
+}
+function lvRCUndo() {
+  if (!lvRC || !lvRC.chan) return;
+  lvRC.chan.send({ type: 'broadcast', event: 'undo', payload: {} });
+}
+function lvRCPushState() {
+  if (!lvRC || lvRC.role !== 'host' || !lvRC.chan || !live) return;
+  const opp = players.find(p => p.id === live.oppId);
+  const d = live.done ? ['✓', '✓'] : liveDisp();
+  lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
+    d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1],
+    sets: live.sets.map(s => s[0] + '-' + s[1]).join(' '),
+    tb: live.tb, done: live.done, n0: ME.name, n1: opp ? opp.name : '상대'
+  } });
+}
+function lvRCRemoteState(p) {
+  const sc = $('lvrc-score'), sub = $('lvrc-sub'), n0 = $('lvrc-n0'), n1 = $('lvrc-n1');
+  if (sc) sc.textContent = p.d0 + ' : ' + p.d1;
+  if (sub) sub.textContent = '게임 ' + p.g0 + '-' + p.g1 + (p.sets ? ' · 세트 ' + p.sets : '') + (p.tb ? ' · 🔥 타이브레이크' : '') + (p.done ? ' · 🏁 경기 종료' : '');
+  if (n0) n0.textContent = p.n0;
+  if (n1) n1.textContent = p.n1;
+}
+function lvRCRenderRemote(body) {
+  body.innerHTML = `
+    <div class="muted" id="lvrc-remote-head" style="text-align:center">📟 리모컨 모드 — 방 ${lvRC.code}</div>
+    <div id="lvrc-score" style="text-align:center;font-size:30px;font-weight:800;margin:10px 0">— : —</div>
+    <div class="muted" id="lvrc-sub" style="text-align:center;margin-bottom:10px">점수판 폰에서 경기를 시작하면 여기 실시간으로 보여요</div>
+    <button class="btn full" style="padding:24px 0;font-size:18px" onclick="lvRCPoint(0)">🟢 <span id="lvrc-n0">점수판</span> 포인트</button>
+    <button class="btn full outline" style="padding:24px 0;font-size:18px;margin-top:8px" onclick="lvRCPoint(1)">🔴 <span id="lvrc-n1">상대</span> 포인트</button>
+    <div class="row" style="gap:8px;margin-top:10px">
+      <button class="btn small outline" style="flex:1" onclick="lvRCUndo()">↩️ 되돌리기</button>
+      <button class="btn small outline" style="flex:1" onclick="lvRCStop()">연결 끊기</button>
+    </div>`;
+}
+async function lvRCStop(silent) {
+  if (!lvRC) return;
+  const was = lvRC;
+  lvRC = null;
+  try { if (was.chan) { if (was.chan.unsubscribe) await was.chan.unsubscribe(); else if (lvRCClient() && lvRCClient().removeChannel) lvRCClient().removeChannel(was.chan); } } catch (e) {}
+  const s = $('lvrc-status'), b = $('lvrc-btn');
+  if (b) b.textContent = '📟 리모컨 연결';
+  if (s) s.textContent = '';
+  if (!silent) toast('리모컨 연결을 끊었어요');
+  if (was.role === 'remote') renderLive();
+}
+function lvBackdrop(ev) {
+  if (ev.target !== ev.currentTarget) return;
+  if (lvRC && lvRC.role === 'remote') { lvRCStop(true); closeModal('live'); return; }
+  if (!live || live.done) closeModal('live');
+}
+
 // ===== 랠리 하이라이트 촬영 모드 =====
 // 카메라는 계속 돌지만 저장은 안 한다. 점수를 누르는 순간 = 포인트 종료 신호이므로,
 // 그때 진행 중이던 구간(직전 랠리)만 클립으로 남긴다. 포인트 사이가 길어지면
@@ -3902,11 +4012,17 @@ function liveSetChips() {
 }
 function renderLive() {
   const body = $('live-body');
+  if (lvRC && lvRC.role === 'remote') { lvRCRenderRemote(body); return; }
   if (!live) {
     body.innerHTML = `<div class="muted">포인트 단위 원탭 스코어링 — 게임·세트·듀스·타이브레이크를 자동으로 계산하고, 경기가 끝나면 기록·랭킹에 자동 저장돼요. (3세트 2선승)</div>
       <label>상대</label>
       <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
-      <button class="btn full" onclick="startLive()">▶️ 경기 시작</button>`;
+      <button class="btn full" onclick="startLive()">▶️ 경기 시작</button>
+      <div class="dline" style="margin-top:10px">📟 아니면, 다른 폰의 점수판에 <b>리모컨으로 참여</b> — 코트에 안 가도 여기서 탭!</div>
+      <div class="row" style="gap:8px">
+        <input id="lvrc-code-in" placeholder="리모컨 코드 4자리" maxlength="4" style="flex:1;text-transform:uppercase">
+        <button class="btn small outline" onclick="lvRCRemoteJoin()">입장</button>
+      </div>`;
     return;
   }
   const opp = players.find(p => p.id === live.oppId);
@@ -3920,6 +4036,7 @@ function renderLive() {
       <div class="muted">vs ${opp.name} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
       <button class="btn full" style="margin-top:12px" onclick="closeLive()">확인</button>
     </div>`;
+    lvRCPushState();
     return;
   }
   const disp = liveDisp();
@@ -3940,6 +4057,7 @@ function renderLive() {
       <button class="btn small outline" style="flex:1" onclick="liveQuit()">경기 취소</button>
     </div>
     <div class="dline">총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]}</div>`;
+  lvRCPushState(); // 리모컨에 현재 점수 중계
 }
 function livePoint(side) {
   if (!live || live.done) return;
@@ -3975,6 +4093,7 @@ function liveUndo() {
   renderLive();
 }
 function liveQuit() {
+  if (lvRC && lvRC.role === 'host') lvRCStop(true);
   if (lvCam && lvCam.stream) lvCamStop();
   live = null;
   closeModal('live');
@@ -4004,6 +4123,7 @@ function finishLive(myS, opS) {
   renderLive();
 }
 function closeLive() {
+  if (lvRC && lvRC.role === 'host') lvRCStop(true);
   if (lvCam && lvCam.stream) lvCamStop();
   if (!live) { closeModal('live'); return; }
   const opp = players.find(p => p.id === live.oppId);
