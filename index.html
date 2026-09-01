@@ -1364,6 +1364,16 @@
 <div class="modal-bg" id="modal-live" onclick="if(event.target===this && (!live || live.done)) closeModal('live')">
   <div class="modal">
     <h3>🎾 라이브 스코어보드</h3>
+    <div id="lvcam-wrap" style="margin-bottom:8px">
+      <button type="button" class="tag-btn" id="lvcam-btn" onclick="lvCamToggle()">📹 촬영 모드 켜기</button>
+      <span class="muted" id="lvcam-status" style="font-size:12px;margin-left:6px"></span>
+      <div id="lvcam-view" style="display:none;margin-top:6px">
+        <video id="lvcam-prev" autoplay muted playsinline style="width:100%;max-height:150px;object-fit:cover;border-radius:10px;background:#000"></video>
+        <div class="muted" style="font-size:11.5px;margin-top:3px">폰을 코트가 보이게 세워두세요. 전체 영상은 저장되지 않고, <b>점수를 누를 때마다 직전 랠리만</b> 클립으로 남아요.</div>
+      </div>
+      <div id="lvcam-clips" style="margin-top:6px"></div>
+      <video id="lvcam-player" controls playsinline style="display:none;width:100%;border-radius:10px;background:#000;margin-top:6px"></video>
+    </div>
     <div id="live-body"></div>
   </div>
 </div>
@@ -3752,6 +3762,114 @@ function openArchive(id) {
   openModal('archive');
 }
 
+// ===== 랠리 하이라이트 촬영 모드 =====
+// 카메라는 계속 돌지만 저장은 안 한다. 점수를 누르는 순간 = 포인트 종료 신호이므로,
+// 그때 진행 중이던 구간(직전 랠리)만 클립으로 남긴다. 포인트 사이가 길어지면
+// 45초마다 구간을 조용히 버려서 메모리를 지키고 클립 앞의 죽은 시간도 줄인다.
+const LVCAM_MAX_SEG_MS = 45000;
+const LVCAM_MAX_CLIPS = 24;
+let lvCam = null; // { stream, recorder, chunks, startedAt, mime, clips: [] }
+function lvCamMime() {
+  const c = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'];
+  return c.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+}
+async function lvCamToggle() {
+  if (lvCam && lvCam.stream) { lvCamStop(); return; }
+  try {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: true });
+    } catch (e) { // 마이크 거부 시 영상만
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false });
+    }
+    lvCam = { stream, recorder: null, chunks: [], startedAt: 0, mime: lvCamMime(), clips: (lvCam && lvCam.clips) || [], rotateTimer: null };
+    $('lvcam-prev').srcObject = stream;
+    $('lvcam-view').style.display = '';
+    $('lvcam-btn').textContent = '⏹ 촬영 모드 끄기';
+    $('lvcam-status').textContent = '● 랠리 감시 중';
+    lvCamStartSeg();
+  } catch (e) {
+    toast('카메라를 켤 수 없어요: ' + (e.message || e));
+  }
+}
+function lvCamStartSeg() {
+  if (!lvCam || !lvCam.stream) return;
+  const rec = new MediaRecorder(lvCam.stream, lvCam.mime ? { mimeType: lvCam.mime } : undefined);
+  lvCam.chunks = [];
+  lvCam.startedAt = Date.now();
+  rec.ondataavailable = e => { if (e.data.size > 0 && lvCam && lvCam.chunks) lvCam.chunks.push(e.data); };
+  rec.start();
+  lvCam.recorder = rec;
+  if (lvCam.rotateTimer) clearTimeout(lvCam.rotateTimer);
+  lvCam.rotateTimer = setTimeout(() => { // 포인트 없이 45초 경과 → 구간 파기 후 재시작
+    if (lvCam && lvCam.recorder === rec && rec.state === 'recording') {
+      rec.onstop = null; rec.ondataavailable = null;
+      rec.stop();
+      lvCamStartSeg();
+    }
+  }, LVCAM_MAX_SEG_MS);
+}
+function lvCamClip(label) {
+  if (!lvCam || !lvCam.recorder || lvCam.recorder.state !== 'recording') return;
+  const rec = lvCam.recorder;
+  const startedAt = lvCam.startedAt;
+  const mime = lvCam.mime;
+  if (lvCam.rotateTimer) clearTimeout(lvCam.rotateTimer);
+  rec.onstop = () => {
+    if (!lvCam || !lvCam.chunks) return;
+    const blob = new Blob(lvCam.chunks, { type: mime || 'video/webm' });
+    const dur = Math.round((Date.now() - startedAt) / 1000);
+    lvCam.clips.push({ url: URL.createObjectURL(blob), blob, label, dur, at: new Date().toTimeString().slice(0, 5) });
+    while (lvCam.clips.length > LVCAM_MAX_CLIPS) {
+      const old = lvCam.clips.shift();
+      URL.revokeObjectURL(old.url);
+    }
+    lvCamRenderClips();
+    lvCamStartSeg(); // 다음 랠리 감시 시작
+  };
+  rec.stop();
+}
+function lvCamRenderClips() {
+  const box = $('lvcam-clips');
+  if (!box) return;
+  const clips = lvCam ? lvCam.clips : [];
+  if (!clips.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:3px">🎬 랠리 클립 ' + clips.length + '개</div>' +
+    clips.map((c, i) => `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-top:1px solid rgba(127,127,127,.15)">
+      <button type="button" class="tag-btn" onclick="lvCamPlay(${i})">▶</button>
+      <span style="flex:1;font-size:12.5px">${c.label} <span class="muted">· ${c.dur}초 · ${c.at}</span></span>
+      <a class="tag-btn" href="${clips[i].url}" download="랠리_${i + 1}.webm">💾</a>
+      <button type="button" class="tag-btn" onclick="lvCamDel(${i})">✕</button>
+    </div>`).join('');
+}
+function lvCamPlay(i) {
+  const pl = $('lvcam-player');
+  if (!lvCam || !lvCam.clips[i]) return;
+  pl.src = lvCam.clips[i].url;
+  pl.style.display = '';
+  pl.play();
+}
+function lvCamDel(i) {
+  if (!lvCam || !lvCam.clips[i]) return;
+  URL.revokeObjectURL(lvCam.clips[i].url);
+  lvCam.clips.splice(i, 1);
+  lvCamRenderClips();
+}
+function lvCamStop() {
+  if (!lvCam) return;
+  if (lvCam.rotateTimer) clearTimeout(lvCam.rotateTimer);
+  if (lvCam.recorder && lvCam.recorder.state === 'recording') { lvCam.recorder.onstop = null; lvCam.recorder.stop(); }
+  lvCam.stream.getTracks().forEach(t => t.stop());
+  const keep = lvCam.clips; // 클립은 페이지를 떠나기 전까지 보관 (💾로 저장 가능)
+  lvCam = null;
+  const b = $('lvcam-btn'), s = $('lvcam-status'), v = $('lvcam-view');
+  if (b) b.textContent = '📹 촬영 모드 켜기';
+  if (s) s.textContent = keep.length ? '클립 ' + keep.length + '개 — 저장(💾)은 페이지를 닫기 전에!' : '';
+  if (v) v.style.display = 'none';
+  if (keep.length) lvCam = { clips: keep, stream: null, recorder: null, chunks: null }; // 목록 유지용 껍데기
+  lvCamRenderClips();
+}
+
 // ===== 라이브 포인트 스코어보드 (v0.17) =====
 let live = null;              // {oppId, sets, g, p, tb, hist, ptsTotal, done}
 const PT_LABEL = ['0', '15', '30', '40'];
@@ -3844,6 +3962,10 @@ function livePoint(side) {
     }
   }
   const myS = live.sets.filter(s => s[0] > s[1]).length, opS = live.sets.length - myS;
+  if (lvCam && lvCam.stream) { // 촬영 모드: 방금 끝난 랠리를 점수 라벨과 함께 클립으로
+    const d = liveDisp();
+    lvCamClip((side === 0 ? '🟢 내 포인트' : '🔴 상대 포인트') + ' · ' + (live.tb ? 'TB' : (live.sets.length + 1) + '세트') + ' ' + d[0] + ':' + d[1]);
+  }
   if (myS === 2 || opS === 2) finishLive(myS, opS);
   else renderLive();
 }
@@ -3853,6 +3975,7 @@ function liveUndo() {
   renderLive();
 }
 function liveQuit() {
+  if (lvCam && lvCam.stream) lvCamStop();
   live = null;
   closeModal('live');
   toast('라이브 스코어보드를 종료했어요 (기록은 저장하지 않았어요)');
@@ -3881,6 +4004,7 @@ function finishLive(myS, opS) {
   renderLive();
 }
 function closeLive() {
+  if (lvCam && lvCam.stream) lvCamStop();
   if (!live) { closeModal('live'); return; }
   const opp = players.find(p => p.id === live.oppId);
   const myS = live.sets.filter(s => s[0] > s[1]).length, opS = live.sets.length - myS;
