@@ -3918,11 +3918,13 @@ async function lvCamToggle() {
     } catch (e) { // 마이크 거부 시 영상만
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false });
     }
-    lvCam = { stream, recorder: null, chunks: [], startedAt: 0, mime: lvCamMime(), clips: (lvCam && lvCam.clips) || [], rotateTimer: null };
+    lvCam = { stream, recorder: null, chunks: [], startedAt: 0, mime: lvCamMime(), clips: (lvCam && lvCam.clips) || [], rotateTimer: null, wakeLock: null };
+    // 포인트 사이에 화면이 꺼지면 촬영이 죽으므로 화면 꺼짐 방지 (지원 기기만)
+    try { if (navigator.wakeLock) lvCam.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
     $('lvcam-prev').srcObject = stream;
     $('lvcam-view').style.display = '';
     $('lvcam-btn').textContent = '⏹ 촬영 모드 끄기';
-    $('lvcam-status').textContent = '● 랠리 감시 중';
+    $('lvcam-status').textContent = '● 랠리 감시 중 — 화면은 자동으로 안 꺼져요';
     lvCamStartSeg();
   } catch (e) {
     toast('카메라를 켤 수 없어요: ' + (e.message || e));
@@ -3993,6 +3995,7 @@ function lvCamDel(i) {
 }
 function lvCamStop() {
   if (!lvCam) return;
+  if (lvCam.wakeLock) { try { lvCam.wakeLock.release(); } catch (e) {} lvCam.wakeLock = null; }
   if (lvCam.rotateTimer) clearTimeout(lvCam.rotateTimer);
   if (lvCam.recorder && lvCam.recorder.state === 'recording') { lvCam.recorder.onstop = null; lvCam.recorder.stop(); }
   lvCam.stream.getTracks().forEach(t => t.stop());
