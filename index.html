@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1b5e20">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>테니스메이트 🎾</title>
+<script>
+// PWA: 설치형 웹앱 등록 (크롬 메뉴에 "앱 설치"가 뜨게 함). 실패해도 앱 동작엔 무관.
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
 <style>
   :root {
     --green: #1b7a43;

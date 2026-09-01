@@ -1,0 +1,15 @@
+{
+  "name": "테니스메이트",
+  "short_name": "테니스메이트",
+  "description": "파트너 매칭 · 경기 기록 · ELO 랭킹 — 제주 테니스 앱",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#10231a",
+  "theme_color": "#1b5e20",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
