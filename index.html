@@ -261,7 +261,7 @@
   /* v0.13: 지역 정복 지도 */
   .map-svg { width: 100%; height: auto; display: block; }
   .region-shape { stroke: #fff; stroke-width: 2.5; cursor: pointer; stroke-linejoin: round; }
-  .region-label { font-size: 12px; font-weight: 800; fill: rgba(255,255,255,.95); pointer-events: none; }
+  .region-label { font-size: 10px; font-weight: 800; fill: rgba(255,255,255,.95); pointer-events: none; }
   .champ-marker { cursor: pointer; }
   .champ-marker text { pointer-events: none; }
   .map-legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
@@ -1649,7 +1649,7 @@ let players = [
   { id: 4, name: '최수아', ntrp: 3.5, region: '제주시', style: '서브&발리', matches: 27, wins: 17, pts: 1310, monthPts: 74, seasonPts: 465, manner: 4.7, mannerN: 20, emoji: '🎾', tags: { '🎯 강서브': 4, '👟 빠른 발': 3 } },
   { id: 5, name: '정도윤', ntrp: 4.5, region: '성산읍', style: '공격형', matches: 40, wins: 31, pts: 1920, monthPts: 110, seasonPts: 790, manner: 4.4, mannerN: 30, emoji: '💪', tags: { '🔥 파워 스트로크': 8, '🎯 강서브': 5 } },
   { id: 6, name: '한예린', ntrp: 2.5, region: '서귀포시', style: '초보 열정러', matches: 9, wins: 3, pts: 480, monthPts: 18, seasonPts: 95, manner: 5.0, mannerN: 7, emoji: '🌱', tags: { '😊 좋은 매너': 5 } },
-  { id: 7, name: '오태양', ntrp: 3.0, region: '성산읍', style: '랠리형', matches: 15, wins: 7, pts: 760, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
+  { id: 7, name: '오태양', ntrp: 3.0, region: '한림읍', style: '랠리형', matches: 15, wins: 7, pts: 760, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
 ];
 // v0.8: 칭찬 태그 종류
 const SKILL_TAGS = ['🎯 강서브', '🔥 파워 스트로크', '🛡️ 끈질긴 수비', '👟 빠른 발', '🧠 전략적 플레이', '😊 좋은 매너'];
@@ -1790,13 +1790,20 @@ function availOverlap(p) {
 function availLabel(c) { return AVAIL_DAYS[c[0]] + ' ' + AVAIL_BANDS[c[1]]; }
 // v0.13: 지역 정복 지도 — 5개 지역의 SVG 구획·라벨·1짱 마커 좌표 (인라인 SVG, 외부 라이브러리 없음)
 const REGIONS = [
-  // 제주 6구역 (viewBox 370x312, 단순화한 제주도 형태) — parts: 이 구역으로 집계되는 지역 값들
-  { name: '애월·한림', parts: ['애월읍','한림읍','한경면'], poly: '12,155 50,108 138,90 138,155', lx: 82, ly: 128, mx: 88, my: 133 },
-  { name: '제주시',   parts: ['제주시'],                    poly: '138,90 245,84 245,155 138,155', lx: 191, ly: 116, mx: 191, my: 128 },
-  { name: '조천·구좌', parts: ['조천읍','구좌읍','우도면'],  poly: '245,84 312,100 358,155 245,155', lx: 294, ly: 128, mx: 298, my: 133 },
-  { name: '대정·안덕', parts: ['대정읍','안덕면'],           poly: '12,155 138,155 138,222 66,208 32,182', lx: 80, ly: 186, mx: 86, my: 190 },
-  { name: '서귀포',   parts: ['서귀포시','중문'],            poly: '138,155 245,155 245,224 182,236 138,222', lx: 191, ly: 192, mx: 191, my: 197 },
-  { name: '성산·표선', parts: ['성산읍','표선면','남원읍'],  poly: '245,155 358,155 310,204 245,224', lx: 292, ly: 184, mx: 296, my: 188 },
+  { name: '제주시', short: '제주시', parts: ['제주시'], poly: '136,82 149,80 163,79 177,78 191,78 204,79 218,80 232,82 245,84 257,87 260,88 204,141 198,140 191,139 184,139 176,139 172,140', lx: 196, ly: 98, mx: 193, my: 115 },
+  { name: '조천읍', short: '조천', parts: ['조천읍'], poly: '260,88 276,88 288,92 300,97 310,102 317,107 219,146 214,143 208,141 204,141', lx: 271, ly: 110, mx: 244, my: 124 },
+  { name: '구좌읍', short: '구좌', parts: ['구좌읍'], poly: '317,107 326,113 333,120 340,126 345,133 349,141 362,144 231,156 226,152 223,149 219,146', lx: 308, ly: 135, mx: 269, my: 141 },
+  { name: '성산읍', short: '성산', parts: ['성산읍'], poly: '362,144 364,152 365,160 364,168 362,176 347,182 346,184 227,166 231,163 232,158 231,156', lx: 329, ly: 167, mx: 264, my: 155 },
+  { name: '표선면', short: '표선', parts: ['표선면'], poly: '346,184 342,191 336,198 329,204 321,211 312,216 310,218 217,175 222,172 225,168 227,166', lx: 303, ly: 196, mx: 266, my: 183 },
+  { name: '남원읍', short: '남원', parts: ['남원읍'], poly: '310,218 300,223 288,228 276,232 264,236 251,239 248,240 201,181 208,179 214,177 217,175', lx: 262, ly: 219, mx: 238, my: 199 },
+  { name: '서귀포시', short: '서귀포', parts: ['서귀포시'], poly: '248,240 234,242 220,244 205,245 191,246 176,246 162,245 150,244 176,182 183,182 191,182 198,181 201,181', lx: 197, ly: 232, mx: 193, my: 207 },
+  { name: '중문', short: '중문', parts: ['중문'], poly: '150,244 136,242 122,240 109,237 96,233 86,230 159,178 166,180 173,181 176,182', lx: 130, ly: 226, mx: 147, my: 203 },
+  { name: '안덕면', short: '안덕', parts: ['안덕면'], poly: '86,230 75,225 64,220 54,214 39,210 32,205 145,172 152,174 157,177 159,178', lx: 85, ly: 209, mx: 116, my: 192 },
+  { name: '대정읍', short: '대정', parts: ['대정읍'], poly: '32,205 25,198 19,191 15,183 11,176 9,168 17,163 141,161 140,165 142,169 145,172', lx: 49, ly: 183, mx: 92, my: 174 },
+  { name: '한경면', short: '한경', parts: ['한경면'], poly: '17,163 17,155 19,148 21,141 25,133 30,126 32,125 145,151 143,155 141,158 141,161', lx: 53, ly: 150, mx: 94, my: 151 },
+  { name: '한림읍', short: '한림', parts: ['한림읍'], poly: '32,125 38,118 46,112 54,106 64,100 73,96 156,143 151,146 146,150 145,151', lx: 76, ly: 123, mx: 110, my: 132 },
+  { name: '애월읍', short: '애월', parts: ['애월읍'], poly: '73,96 84,91 96,87 113,87 125,84 136,82 172,140 166,141 158,142 156,143', lx: 121, ly: 106, mx: 141, my: 121 },
+  { name: '우도면', short: '우도', parts: ['우도면'], poly: '348,116 359,112 366,118 365,128 354,131 346,124', lx: 356, ly: 108, mx: 356, my: 122 },
 ];
 const TERR_COLORS = ['#2f9e5f', '#3b6fd4', '#e07a3f', '#8a5fd4', '#2ba8a0', '#d84b7a', '#b0892a'];
 let lastChamps = null;        // v0.13: 지역별 직전 1짱 (정복/탈환 감지용)
@@ -4002,23 +4009,23 @@ function renderMap() {
   const { data, owners } = mapData();
   const myCount = data.filter(d => d.ch && d.ch.me).length;
   const shapes = data.map(d =>
-    `<polygon class="region-shape" points="${d.r.poly}" fill="${d.color}" onclick="openChamp('${d.r.name}')"></polygon>
-     <text class="region-label" x="${d.r.lx}" y="${d.r.ly}" text-anchor="middle">${d.ch && d.ch.me ? '⭐ ' : ''}${d.r.name}</text>`
+    `<polygon class="region-shape" points="${d.r.poly}" fill="${d.color}" onclick="openChamp('${d.r.name}')"></polygon>` +
+    (d.ch ? '' : `<text class="region-label" x="${d.r.lx}" y="${d.r.ly}" text-anchor="middle">${d.r.short || d.r.name}</text>`)
   ).join('');
   const markers = data.filter(d => d.ch).map(d =>
     `<g class="champ-marker" onclick="openChamp('${d.r.name}')">
-       <circle cx="${d.r.mx}" cy="${d.r.my}" r="14" fill="#fff" opacity=".93"></circle>
-       <text x="${d.r.mx}" y="${d.r.my + 5}" font-size="14" text-anchor="middle">${d.ch.emoji}</text>
-       <text x="${d.r.mx + 13}" y="${d.r.my - 10}" font-size="11" text-anchor="middle">👑</text>
-       <text x="${d.r.mx}" y="${d.r.my + 29}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#1d2b22" stroke="#ffffff" stroke-width="3" paint-order="stroke">${d.ch.name}${d.ch.me ? ' (나)' : ''}</text>
+       <circle cx="${d.r.mx}" cy="${d.r.my}" r="12" fill="#fff" opacity=".93"></circle>
+       <text x="${d.r.mx}" y="${d.r.my + 4}" font-size="12.5" text-anchor="middle">${d.ch.emoji}</text>
+       <text x="${d.r.mx + 11}" y="${d.r.my - 9}" font-size="10" text-anchor="middle">👑</text>
+       <text x="${d.r.mx}" y="${d.r.my + 25}" font-size="9.5" font-weight="700" text-anchor="middle" fill="#1d2b22" stroke="#ffffff" stroke-width="3" paint-order="stroke">${d.r.short} ${d.ch.me ? '⭐' : ''}${d.ch.name}${d.ch.me ? ' (나)' : ''}</text>
      </g>`
   ).join('');
   $('map-area').innerHTML = `<div class="card">
     <div class="row" style="margin-bottom:8px">
-      <b style="font-size:14px">제주 6개 지역</b>
+      <b style="font-size:14px">제주 ${REGIONS.length}개 구역</b>
       <span class="badge" id="terr-count">⭐ 내 영토 ${myCount}/${REGIONS.length}</span>
     </div>
-    <svg class="map-svg" viewBox="0 0 370 312" xmlns="http://www.w3.org/2000/svg">${shapes}${markers}</svg>
+    <svg class="map-svg" viewBox="0 0 370 312" xmlns="http://www.w3.org/2000/svg">${shapes}<ellipse cx="185" cy="160" rx="41" ry="20" fill="#28502e"></ellipse><text x="185" y="157" font-size="13" text-anchor="middle">🌋</text><text x="185" y="171" font-size="9" font-weight="800" fill="rgba(255,255,255,.9)" text-anchor="middle">한라산</text>${markers}</svg>
     <div class="map-legend">${Object.values(owners).map(o => `<span class="lg"><span class="sw" style="background:${o.color}"></span>${o.label}</span>`).join('')}</div>
     <div class="muted" style="margin-top:8px">지역 랭킹 1위(동네 1짱)의 세력이 그 지역을 차지해요. 경기에서 이겨 포인트를 쌓으면 우리 동네를 정복할 수 있어요! 마커를 탭하면 1짱 프로필이 열려요.</div>
   </div>`;
