@@ -803,6 +803,11 @@
       <button class="tag-btn" data-p="month" onclick="setRankPeriod('month', this)">📅 월간</button>
       <button class="tag-btn" data-p="season" onclick="setRankPeriod('season', this)">🗓️ 시즌</button>
     </div>
+    <div class="filters" id="rank-kind" style="margin-bottom:8px">
+      <button class="tag-btn sel" data-k="all" onclick="setRankKind('all', this)">🏆 전체</button>
+      <button class="tag-btn" data-k="s" onclick="setRankKind('s', this)">🎾 단식</button>
+      <button class="tag-btn" data-k="d" onclick="setRankKind('d', this)">👥 복식</button>
+    </div>
     <div class="muted" id="rank-period-label" style="margin-bottom:8px"></div>
     <div class="card"><table id="rank-table">
       <thead><tr><th>순위</th><th>이름</th><th>NTRP</th><th>전적</th><th id="rank-pts-th">포인트</th></tr></thead>
@@ -1643,13 +1648,13 @@ function regionOptionsHtml(sel) {
 })();
 
 let players = [
-  { id: 1, name: '김민준', ntrp: 3.5, region: '제주시', style: '공격형 베이스라이너', matches: 24, wins: 15, pts: 1240, monthPts: 68, seasonPts: 420, manner: 4.6, mannerN: 18, emoji: '🧢', tags: { '🎯 강서브': 5, '🔥 파워 스트로크': 3 } },
-  { id: 2, name: '이서연', ntrp: 4.0, region: '애월읍', style: '올라운더', matches: 31, wins: 22, pts: 1580, monthPts: 92, seasonPts: 610, manner: 4.9, mannerN: 25, emoji: '🎽', tags: { '🧠 전략적 플레이': 7, '😊 좋은 매너': 6 } },
-  { id: 3, name: '박지훈', ntrp: 3.0, region: '조천읍', style: '수비형', matches: 18, wins: 8, pts: 890, monthPts: 25, seasonPts: 180, manner: 4.2, mannerN: 12, emoji: '🛡️', tags: { '🛡️ 끈질긴 수비': 4 } },
-  { id: 4, name: '최수아', ntrp: 3.5, region: '제주시', style: '서브&발리', matches: 27, wins: 17, pts: 1310, monthPts: 74, seasonPts: 465, manner: 4.7, mannerN: 20, emoji: '🎾', tags: { '🎯 강서브': 4, '👟 빠른 발': 3 } },
-  { id: 5, name: '정도윤', ntrp: 4.5, region: '성산읍', style: '공격형', matches: 40, wins: 31, pts: 1920, monthPts: 110, seasonPts: 790, manner: 4.4, mannerN: 30, emoji: '💪', tags: { '🔥 파워 스트로크': 8, '🎯 강서브': 5 } },
-  { id: 6, name: '한예린', ntrp: 2.5, region: '서귀포시', style: '초보 열정러', matches: 9, wins: 3, pts: 480, monthPts: 18, seasonPts: 95, manner: 5.0, mannerN: 7, emoji: '🌱', tags: { '😊 좋은 매너': 5 } },
-  { id: 7, name: '오태양', ntrp: 3.0, region: '한림읍', style: '랠리형', matches: 15, wins: 7, pts: 760, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
+  { id: 1, name: '김민준', ntrp: 3.5, region: '제주시', style: '공격형 베이스라이너', matches: 24, wins: 15, pts: 1240, sPts: 1265, dPts: 1220, sMatches: 10, sWins: 6, dMatches: 14, dWins: 9, monthPts: 68, seasonPts: 420, manner: 4.6, mannerN: 18, emoji: '🧢', tags: { '🎯 강서브': 5, '🔥 파워 스트로크': 3 } },
+  { id: 2, name: '이서연', ntrp: 4.0, region: '애월읍', style: '올라운더', matches: 31, wins: 22, pts: 1580, sPts: 1560, dPts: 1605, sMatches: 12, sWins: 9, dMatches: 19, dWins: 13, monthPts: 92, seasonPts: 610, manner: 4.9, mannerN: 25, emoji: '🎽', tags: { '🧠 전략적 플레이': 7, '😊 좋은 매너': 6 } },
+  { id: 3, name: '박지훈', ntrp: 3.0, region: '조천읍', style: '수비형', matches: 18, wins: 8, pts: 890, sPts: 915, dPts: 870, sMatches: 7, sWins: 3, dMatches: 11, dWins: 5, monthPts: 25, seasonPts: 180, manner: 4.2, mannerN: 12, emoji: '🛡️', tags: { '🛡️ 끈질긴 수비': 4 } },
+  { id: 4, name: '최수아', ntrp: 3.5, region: '제주시', style: '서브&발리', matches: 27, wins: 17, pts: 1310, sPts: 1290, dPts: 1335, sMatches: 11, sWins: 7, dMatches: 16, dWins: 10, monthPts: 74, seasonPts: 465, manner: 4.7, mannerN: 20, emoji: '🎾', tags: { '🎯 강서브': 4, '👟 빠른 발': 3 } },
+  { id: 5, name: '정도윤', ntrp: 4.5, region: '성산읍', style: '공격형', matches: 40, wins: 31, pts: 1920, sPts: 1945, dPts: 1900, sMatches: 16, sWins: 12, dMatches: 24, dWins: 19, monthPts: 110, seasonPts: 790, manner: 4.4, mannerN: 30, emoji: '💪', tags: { '🔥 파워 스트로크': 8, '🎯 강서브': 5 } },
+  { id: 6, name: '한예린', ntrp: 2.5, region: '서귀포시', style: '초보 열정러', matches: 9, wins: 3, pts: 480, sPts: 460, dPts: 505, sMatches: 4, sWins: 1, dMatches: 5, dWins: 2, monthPts: 18, seasonPts: 95, manner: 5.0, mannerN: 7, emoji: '🌱', tags: { '😊 좋은 매너': 5 } },
+  { id: 7, name: '오태양', ntrp: 3.0, region: '한림읍', style: '랠리형', matches: 15, wins: 7, pts: 760, sPts: 785, dPts: 740, sMatches: 6, sWins: 3, dMatches: 9, dWins: 4, monthPts: 33, seasonPts: 210, manner: 4.5, mannerN: 11, emoji: '☀️', tags: { '🛡️ 끈질긴 수비': 2, '👟 빠른 발': 2 } },
 ];
 // v0.8: 칭찬 태그 종류
 const SKILL_TAGS = ['🎯 강서브', '🔥 파워 스트로크', '🛡️ 끈질긴 수비', '👟 빠른 발', '🧠 전략적 플레이', '😊 좋은 매너'];
@@ -1670,7 +1675,7 @@ let courts = [
 ];
 const SLOTS = ['06:00','08:00','10:00','12:00','14:00','16:00','18:00','20:00'];
 
-let myStats = { matches: 12, wins: 7, pts: 1105, monthPts: 45, seasonPts: 380 };
+let myStats = { matches: 12, wins: 7, pts: 1105, monthPts: 45, seasonPts: 380, sPts: 1090, dPts: 1120, sMatches: 5, sWins: 3, dMatches: 7, dWins: 4 };
 let bookings = [];            // {courtId, date, slot}
 let history = [               // 최근 경기
   { opp: '김민준', my: 6, op: 3, date: '2026-07-18', note: '와이드 서브 리턴 위치를 미리 잡은 게 잘 통했다. 백핸드 공략 유지!', mental: [4, 4, 3] }, // v0.37: 멘탈 체크 데모
@@ -1729,6 +1734,7 @@ let interMatches = [
 ];
 let vsEditing = null;
 let rankPeriod = 'all';       // v0.9: 랭킹 기간 (all | month | season)
+let rankKind = 'all';         // 랭킹 종목 (all | s | d) — 통산에서만 적용
 // v0.10: 클럽별 래더 리그 순위 (위 → 아래)
 let ladders = {
   1: ['김민준', '최수아'],
@@ -3849,10 +3855,12 @@ function finishLive(myS, opS) {
   const opp = players.find(p => p.id === live.oppId);
   const win = myS > opS;
   const delta = eloDelta(myStats.pts, opp.pts, win);
-  applyPts(myStats, delta);
+  applyPts(myStats, delta, 's');
   myStats.matches++; if (win) myStats.wins++;
-  applyPts(opp, -delta);
+  bumpKind(myStats, 's', win);
+  applyPts(opp, -delta, 's');
   opp.matches++; if (!win) opp.wins++;
+  bumpKind(opp, 's', !win);
   const setsStr = live.sets.map(s => s[0] + '-' + s[1]).join(' ');
   history.unshift({ opp: opp.name, my: myS, op: opS, sets: setsStr, date: todayStr(), type: 's', pstat: `🎾 라이브 · 총 포인트 ${live.ptsTotal[0]}:${live.ptsTotal[1]}` });
   logPts(delta, opp.name, win); // v0.25: 포인트 추이 로그
@@ -6539,40 +6547,84 @@ function eloDelta(myR, opR, win) {
   const d = Math.round(32 * ((win ? 1 : 0) - exp));
   return win ? Math.max(1, d) : Math.min(-1, d);
 }
-function applyPts(obj, delta) {
+function applyPts(obj, delta, kind) {
   obj.pts = Math.max(0, obj.pts + delta);
   obj.monthPts = (obj.monthPts || 0) + delta;
   obj.seasonPts = (obj.seasonPts || 0) + delta;
+  // 종목 통장: 단식/복식이 명시된 경기만 해당 풀에 반영 (서버 004와 동일 설계)
+  if (kind === 's') obj.sPts = Math.max(0, (obj.sPts == null ? 1000 : obj.sPts) + delta);
+  if (kind === 'd') obj.dPts = Math.max(0, (obj.dPts == null ? 1000 : obj.dPts) + delta);
+}
+function bumpKind(obj, kind, won) {
+  const m = kind === 'd' ? 'dMatches' : 'sMatches', w = kind === 'd' ? 'dWins' : 'sWins';
+  obj[m] = (obj[m] || 0) + 1;
+  if (won) obj[w] = (obj[w] || 0) + 1;
 }
 function rankedList(period) {
-  const key = period === 'month' ? 'monthPts' : period === 'season' ? 'seasonPts' : 'pts';
   const all = [
     ...players.map(p => ({ ...p, me: false })),
-    { name: ME.name, ntrp: ME.ntrp, matches: myStats.matches, wins: myStats.wins, pts: myStats.pts, monthPts: myStats.monthPts, seasonPts: myStats.seasonPts, me: true }
+    { name: ME.name, ntrp: ME.ntrp, matches: myStats.matches, wins: myStats.wins, pts: myStats.pts,
+      monthPts: myStats.monthPts, seasonPts: myStats.seasonPts,
+      sPts: myStats.sPts, dPts: myStats.dPts, sMatches: myStats.sMatches, sWins: myStats.sWins,
+      dMatches: myStats.dMatches, dWins: myStats.dWins, me: true }
   ];
+  if (period === 'all' && rankKind !== 'all') {
+    const key = rankKind === 'd' ? 'dPts' : 'sPts';
+    const mkey = rankKind === 'd' ? 'dMatches' : 'sMatches';
+    // 해당 종목 1경기 이상만 순위에 (서버 랭킹 뷰와 동일) — 나는 0전이어도 보여줌
+    return all.filter(p => (p[mkey] || 0) > 0 || p.me).sort((a, b) => ((b[key] == null ? 1000 : b[key])) - ((a[key] == null ? 1000 : a[key])));
+  }
+  const key = period === 'month' ? 'monthPts' : period === 'season' ? 'seasonPts' : 'pts';
   return all.sort((a, b) => (b[key] || 0) - (a[key] || 0));
+}
+function setRankKind(k, btn) {
+  rankKind = k;
+  document.querySelectorAll('#rank-kind .tag-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  renderRank();
 }
 function setRankPeriod(p, btn) {
   rankPeriod = p;
   document.querySelectorAll('#rank-period .tag-btn').forEach(b => b.classList.remove('sel'));
   btn.classList.add('sel');
+  // 종목 분리는 통산에서만 — 월간/시즌은 통합 기준이라 종목 탭을 숨긴다
+  const kindRow = $('rank-kind');
+  if (p === 'all') { kindRow.style.display = ''; }
+  else {
+    kindRow.style.display = 'none';
+    rankKind = 'all';
+    kindRow.querySelectorAll('.tag-btn').forEach(b => b.classList.toggle('sel', b.dataset.k === 'all'));
+  }
   renderRank();
 }
 function renderRank() {
   const now = new Date();
+  const kindOn = rankPeriod === 'all' && rankKind !== 'all';
+  const kindName = rankKind === 'd' ? '복식' : '단식';
   $('rank-period-label').textContent =
     rankPeriod === 'month' ? `📅 ${now.getMonth() + 1}월 월간 랭킹 — 이번 달 획득 포인트 기준`
     : rankPeriod === 'season' ? `🗓️ ${now.getFullYear()} 시즌 랭킹 — 시즌 누적 획득 포인트 기준`
+    : kindOn ? `${rankKind === 'd' ? '👥' : '🎾'} ${kindName} 랭킹 — ${kindName} 경기만 반영되는 별도 포인트예요 (${kindName} 1경기 이상)`
     : '🏆 통산 랭킹 — 전체 ELO 포인트 기준 (경기 결과에 따라 상대 실력을 반영해 증감해요)';
-  $('rank-pts-th').textContent = rankPeriod === 'month' ? '월간 pt' : rankPeriod === 'season' ? '시즌 pt' : '포인트';
+  $('rank-pts-th').textContent = rankPeriod === 'month' ? '월간 pt' : rankPeriod === 'season' ? '시즌 pt' : kindOn ? kindName + ' pt' : '포인트';
   const tbody = $('rank-table').querySelector('tbody');
   tbody.innerHTML = rankedList(rankPeriod).map((p, i) => {
     const cls = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
     const me = p.me;
-    const val = rankPeriod === 'month' ? (p.monthPts || 0) : rankPeriod === 'season' ? (p.seasonPts || 0) : p.pts;
+    let val, rec;
+    if (kindOn) {
+      val = (rankKind === 'd' ? p.dPts : p.sPts);
+      if (val == null) val = 1000;
+      const km = (rankKind === 'd' ? p.dMatches : p.sMatches) || 0;
+      const kw = (rankKind === 'd' ? p.dWins : p.sWins) || 0;
+      rec = km ? `${kw}승 ${km - kw}패` : '0전';
+    } else {
+      val = rankPeriod === 'month' ? (p.monthPts || 0) : rankPeriod === 'season' ? (p.seasonPts || 0) : p.pts;
+      rec = `${p.wins}승 ${p.matches - p.wins}패`;
+    }
     return `<tr style="${me ? 'background:#f0f7f2' : ''}">
       <td class="${cls}">${i + 1}</td><td>${me ? '⭐ ' : ''}${p.name}${me ? ' (나)' : ''}</td>
-      <td>${p.ntrp.toFixed(1)}</td><td>${p.wins}승 ${p.matches - p.wins}패</td><td><b>${val.toLocaleString()}</b></td></tr>`;
+      <td>${p.ntrp.toFixed(1)}</td><td>${rec}</td><td><b>${val.toLocaleString()}</b></td></tr>`;
   }).join('');
   renderTrend(); // v0.25: 랭킹 갱신 시 포인트 추이도 갱신
 }
@@ -6643,11 +6695,12 @@ function saveMatch() {
   const myR = type === 'd' ? (myStats.pts + partner.pts) / 2 : myStats.pts;
   const opR = type === 'd' ? (opp.pts + opp2.pts) / 2 : opp.pts;
   const delta = eloDelta(myR, opR, win);
-  applyPts(myStats, delta);
+  applyPts(myStats, delta, type);
   myStats.matches++;
   if (win) myStats.wins++;
-  targets.forEach(t => { applyPts(t, -delta); t.matches++; if (!win) t.wins++; });
-  if (partner) { applyPts(partner, delta); partner.matches++; if (win) partner.wins++; }
+  bumpKind(myStats, type, win);
+  targets.forEach(t => { applyPts(t, -delta, type); t.matches++; if (!win) t.wins++; bumpKind(t, type, !win); });
+  if (partner) { applyPts(partner, delta, type); partner.matches++; if (win) partner.wins++; bumpKind(partner, type, win); }
   const oppName = type === 'd' ? opp.name + '·' + opp2.name : opp.name;
   const note = $('rec-note').value.trim() || null; // v0.35: 경기 노트
   const mental = mentRead('rec-mental'); // v0.37: 멘탈 체크
