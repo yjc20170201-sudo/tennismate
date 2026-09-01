@@ -1638,7 +1638,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.43';
+const APP_VERSION = 'v0.44';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2327,8 +2327,20 @@ function onAuthChange(session, profile) {
   svRenderGate(); // v0.43: 서버 경기 카드
   if (!session && mrChan) mrLeave(true); // 로그아웃 시 방 정리
   if (!session) return;
+  applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
+}
+function applyServerProfile(p) { // 서버 프로필 → ME 동기화 + 전체 화면 갱신
+  if (!p || !p.nickname) return;
+  const changed = ME.name !== p.nickname || ME.region !== (p.region || ME.region);
+  ME.name = p.nickname;
+  const n = parseFloat(p.ntrp);
+  if (!isNaN(n) && n !== ME.ntrp) { ME.ntrp = n; ME.cal = n; ME.calDelta = 0; }
+  if (p.region) ME.region = p.region;
+  if (p.play_style) ME.style = p.play_style;
+  updateHeader();
+  if (changed) { try { renderAll(); } catch (e) { console.warn('프로필 반영 후 재렌더 실패', e); } }
 }
 function renderAccountBox() { // v0.38: 프로필 모달의 서버 계정 박스 (서버 모드 + 로그인 시에만)
   const box = $('pf-account');
