@@ -3854,12 +3854,11 @@ function lvRCUndo() {
 }
 function lvRCPushState() {
   if (!lvRC || lvRC.role !== 'host' || !lvRC.chan || !live) return;
-  const opp = players.find(p => p.id === live.oppId);
   const d = live.done ? ['✓', '✓'] : liveDisp();
   lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
     d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1],
     sets: live.sets.map(s => s[0] + '-' + s[1]).join(' '),
-    tb: live.tb, done: live.done, n0: ME.name, n1: opp ? opp.name : '상대'
+    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs
   } });
 }
 function lvRCRemoteState(p) {
@@ -4012,13 +4011,33 @@ function lvCamStop() {
 // ===== 라이브 포인트 스코어보드 (v0.17) =====
 let live = null;              // {oppId, sets, g, p, tb, hist, ptsTotal, done}
 const PT_LABEL = ['0', '15', '30', '40'];
+function lvTypeChange() {
+  const d = $('lv-type') && $('lv-type').value === 'd';
+  if ($('lv-doubles')) $('lv-doubles').style.display = d ? '' : 'none';
+  if ($('lv-opp-lbl')) $('lv-opp-lbl').textContent = d ? '상대 1' : '상대';
+}
+function liveTeams() { // 현재 경기의 양 팀 표기 (복식은 A·B)
+  const opp = players.find(p => p.id === live.oppId);
+  if (live.type !== 'd') return { mine: ME.name + ' (나)', theirs: opp ? opp.name : '상대', opp };
+  const pt = players.find(p => p.id === live.partnerId);
+  const o2 = players.find(p => p.id === live.opp2Id);
+  return { mine: ME.name + '·' + (pt ? pt.name : '?'), theirs: (opp ? opp.name : '?') + '·' + (o2 ? o2.name : '?'), opp, pt, o2 };
+}
 function openLive() {
   live = null;
   renderLive();
   openModal('live');
 }
 function startLive() {
-  live = { oppId: parseInt($('lv-opp').value), sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
+  const type = $('lv-type') ? $('lv-type').value : 's';
+  const oppId = parseInt($('lv-opp').value);
+  let partnerId = null, opp2Id = null;
+  if (type === 'd') {
+    partnerId = parseInt($('lv-partner').value);
+    opp2Id = parseInt($('lv-opp2').value);
+    if (new Set([oppId, partnerId, opp2Id]).size < 3) { toast('⚠️ 복식은 파트너와 상대 2명이 모두 서로 달라야 해요'); return; }
+  }
+  live = { type, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
   renderLive();
 }
 function liveDisp() {
@@ -4044,14 +4063,26 @@ function renderLive() {
   if (lvRC && lvRC.role === 'remote') { lvRCRenderRemote(body); return; }
   if (!live) {
     body.innerHTML = `<div class="muted">포인트 단위 원탭 스코어링 — 게임·세트·듀스·타이브레이크를 자동으로 계산하고, 경기가 끝나면 기록·랭킹에 자동 저장돼요. (3세트 2선승)</div>
-      <label>상대</label>
+      <label>경기 방식</label>
+      <select id="lv-type" onchange="lvTypeChange()">
+        <option value="d" selected>👥 복식</option>
+        <option value="s">🎾 단식</option>
+      </select>
+      <label id="lv-opp-lbl">상대 1</label>
       <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+      <div id="lv-doubles">
+        <label>내 파트너</label>
+        <select id="lv-partner">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+        <label>상대 2</label>
+        <select id="lv-opp2">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+      </div>
       <button class="btn full" onclick="startLive()">▶️ 경기 시작</button>
       <div class="dline" style="margin-top:10px">📟 아니면, 다른 폰의 점수판에 <b>리모컨으로 참여</b> — 코트에 안 가도 여기서 탭!</div>
       <div class="row" style="gap:8px">
         <input id="lvrc-code-in" placeholder="리모컨 코드 4자리" maxlength="4" style="flex:1;text-transform:uppercase">
         <button class="btn small outline" onclick="lvRCRemoteJoin()">입장</button>
       </div>`;
+    if ($('lv-partner') && players.length >= 4) { $('lv-partner').value = '2'; $('lv-opp2').value = '4'; }
     return;
   }
   const opp = players.find(p => p.id === live.oppId);
@@ -4062,7 +4093,7 @@ function renderLive() {
       <div style="font-size:34px">${win ? '🏆' : '🎾'}</div>
       <h3 style="margin-top:6px">${win ? '승리!' : '아쉬운 패배'} — 세트 ${myS}:${opS}</h3>
       <div style="margin:8px 0">${liveSetChips()}</div>
-      <div class="muted">vs ${opp.name} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
+      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
       <button class="btn full" style="margin-top:12px" onclick="closeLive()">확인</button>
     </div>`;
     lvRCPushState();
@@ -4070,15 +4101,15 @@ function renderLive() {
   }
   const disp = liveDisp();
   body.innerHTML = `
-    <div class="muted" style="text-align:center">vs ${opp.name} · ${live.tb ? '🔥 타이브레이크' : (live.sets.length + 1) + '세트'} ${liveStateLabel()}</div>
+    <div class="muted" style="text-align:center">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${liveTeams().theirs} · ${live.tb ? '🔥 타이브레이크' : (live.sets.length + 1) + '세트'} ${liveStateLabel()}</div>
     <div class="dline">완료 세트: ${liveSetChips()}</div>
     <div class="live-grid">
-      <div><div class="live-name">⭐ ${ME.name} (나)</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
+      <div><div class="live-name">⭐ ${liveTeams().mine}</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
       <div style="font-weight:800;color:var(--muted)">:</div>
-      <div><div class="live-name">${opp.name}</div><div class="live-pts" id="lv-p1">${disp[1]}</div><div class="muted">게임 ${live.g[1]}</div></div>
+      <div><div class="live-name">${liveTeams().theirs}</div><div class="live-pts" id="lv-p1">${disp[1]}</div><div class="muted">게임 ${live.g[1]}</div></div>
     </div>
     <div class="row" style="gap:8px">
-      <button class="btn pt-btn" onclick="livePoint(0)">+ 내 포인트</button>
+      <button class="btn pt-btn" onclick="livePoint(0)">+ ${live.type === 'd' ? '우리' : '내'} 포인트</button>
       <button class="btn outline pt-btn" onclick="livePoint(1)">+ 상대 포인트</button>
     </div>
     <div class="row" style="gap:8px;margin-top:8px">
@@ -4113,7 +4144,7 @@ function livePoint(side) {
   const myS = live.sets.filter(s => s[0] > s[1]).length, opS = live.sets.length - myS;
   if (lvCam && lvCam.stream) { // 촬영 모드: 방금 끝난 랠리를 점수 라벨과 함께 클립으로
     const d = liveDisp();
-    lvCamClip((side === 0 ? '🟢 내 포인트' : '🔴 상대 포인트') + ' · ' + (live.tb ? 'TB' : (live.sets.length + 1) + '세트') + ' ' + d[0] + ':' + d[1]);
+    lvCamClip((side === 0 ? (live.type === 'd' ? '🟢 우리 포인트' : '🟢 내 포인트') : '🔴 상대 포인트') + ' · ' + (live.tb ? 'TB' : (live.sets.length + 1) + '세트') + ' ' + d[0] + ':' + d[1]);
   }
   if (myS === 2 || opS === 2) finishLive(myS, opS);
   else renderLive();
@@ -4133,23 +4164,32 @@ function liveQuit() {
 }
 function finishLive(myS, opS) {
   live.done = true;
-  const opp = players.find(p => p.id === live.oppId);
+  const t = liveTeams();
+  const opp = t.opp;
+  const isD = live.type === 'd';
+  const kind = isD ? 'd' : 's';
   const win = myS > opS;
-  const delta = eloDelta(myStats.pts, opp.pts, win);
-  applyPts(myStats, delta, 's');
+  // 복식은 팀 평균 레이팅 기준 (saveMatch·서버 confirm_match와 동일 규칙)
+  const myR = isD ? (myStats.pts + t.pt.pts) / 2 : myStats.pts;
+  const opR = isD ? (opp.pts + t.o2.pts) / 2 : opp.pts;
+  const delta = eloDelta(myR, opR, win);
+  applyPts(myStats, delta, kind);
   myStats.matches++; if (win) myStats.wins++;
-  bumpKind(myStats, 's', win);
-  applyPts(opp, -delta, 's');
-  opp.matches++; if (!win) opp.wins++;
-  bumpKind(opp, 's', !win);
+  bumpKind(myStats, kind, win);
+  [opp, isD ? t.o2 : null].filter(Boolean).forEach(o => {
+    applyPts(o, -delta, kind);
+    o.matches++; if (!win) o.wins++;
+    bumpKind(o, kind, !win);
+  });
+  if (isD) { applyPts(t.pt, delta, 'd'); t.pt.matches++; if (win) t.pt.wins++; bumpKind(t.pt, 'd', win); }
   const setsStr = live.sets.map(s => s[0] + '-' + s[1]).join(' ');
-  history.unshift({ opp: opp.name, my: myS, op: opS, sets: setsStr, date: todayStr(), type: 's', pstat: `🎾 라이브 · 총 포인트 ${live.ptsTotal[0]}:${live.ptsTotal[1]}` });
-  lvTagCommit(opp.name); // 🏷️ 포인트 태그를 상대 분석 데이터로 적립
-  logPts(delta, opp.name, win); // v0.25: 포인트 추이 로그
-  calibrate(win, opp.ntrp);
+  history.unshift({ opp: t.theirs, my: myS, op: opS, sets: setsStr, date: todayStr(), type: kind, partner: isD ? t.pt.name : undefined, pstat: `🎾 라이브 · 총 포인트 ${live.ptsTotal[0]}:${live.ptsTotal[1]}` });
+  lvTagCommit(t.theirs); // 🏷️ 포인트 태그를 상대(팀) 분석 데이터로 적립
+  logPts(delta, t.theirs, win); // v0.25: 포인트 추이 로그
+  calibrate(win, isD ? (opp.ntrp + t.o2.ntrp) / 2 : opp.ntrp);
   useGear();
-  addNotif(`🎾 라이브 경기 종료 — vs ${opp.name} 세트 ${myS}:${opS} ${win ? '승리' : '패배'} (${setsStr}, ELO ${delta >= 0 ? '+' : ''}${delta}pt)`);
-  addFeed(`${win ? '🏆' : '🎾'} 라이브 스코어보드로 ${opp.name} 님과 단식 — 세트 ${myS}:${opS} ${win ? '승리!' : '패배'} (${setsStr})`);
+  addNotif(`🎾 라이브 경기 종료 — vs ${t.theirs} 세트 ${myS}:${opS} ${win ? '승리' : '패배'} (${setsStr}, ELO ${delta >= 0 ? '+' : ''}${delta}pt)`);
+  addFeed(`${win ? '🏆' : '🎾'} 라이브 스코어보드로 ${t.theirs} 님과 ${isD ? '복식' : '단식'} — 세트 ${myS}:${opS} ${win ? '승리!' : '패배'} (${setsStr})`);
   if (ME.calDelta) addNotif(`📐 레벨 보정 ${ME.calDelta > 0 ? '▲ +' : '▼ '}${ME.calDelta.toFixed(2)} → 현재 보정 레벨 ${ME.cal.toFixed(2)}`);
   toast(win ? `🎉 라이브 경기 승리! ELO +${delta}pt` : `라이브 경기 종료 — ELO ${delta}pt`);
   renderRank(); renderHistory(); renderMap(); renderHome();
