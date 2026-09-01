@@ -828,7 +828,14 @@
         <div class="vj-mark set" id="sv-mystats">서버 전적 —</div>
         <div class="vj-sub">🎾 경기 결과 제출</div>
         <div class="vj-ctrl" style="margin-top:0">
-          <input id="sv-opp" placeholder="상대 닉네임 검색" style="flex:1">
+          <select id="sv-kind" onchange="svKindChange()" style="flex:1">
+            <option value="doubles" selected>👥 복식</option>
+            <option value="singles">🎾 단식</option>
+          </select>
+        </div>
+        <div id="sv-slots" style="margin-top:6px"></div>
+        <div class="vj-ctrl" style="margin-top:6px">
+          <input id="sv-opp" placeholder="닉네임 검색해서 자리 채우기" style="flex:1">
           <button type="button" class="tag-btn" onclick="svSearch()">검색</button>
         </div>
         <div id="sv-opp-list" style="margin-top:6px"></div>
@@ -5453,7 +5460,22 @@ function vcFmt(t) { return t.toFixed(2) + '초'; }
 // ===== 서버 경기 — B2 웹앱 통합 (v0.43, 베타) =====
 // 002 RPC(report/confirm/reject/cancel) + 003 이관(import_legacy_data)을 UI로 연결.
 // 전부 TM_CONFIG 게이트 — 데모 모드 동작 불변. 테스트 훅: window.__svTestClient
-let svOppSel = null;
+let svSlots = { partner: null, opp1: null, opp2: null }; // 복식: 파트너·상대1·상대2 / 단식: 상대1만
+function svKind() { const el = $('sv-kind'); return el ? el.value : 'doubles'; }
+function svNeededSlots() { return svKind() === 'doubles' ? ['partner', 'opp1', 'opp2'] : ['opp1']; }
+function svSlotLabel(k) { return k === 'partner' ? '🤝 내 파트너' : k === 'opp1' ? '🆚 상대 1' : '🆚 상대 2'; }
+function svKindChange() { svSlots = { partner: null, opp1: null, opp2: null }; svRenderSlots(); }
+function svClearSlot(k) { svSlots[k] = null; svRenderSlots(); }
+function svRenderSlots() {
+  const box = $('sv-slots');
+  if (!box) return;
+  box.innerHTML = svNeededSlots().map(k => {
+    const s = svSlots[k];
+    return s
+      ? `<span class="badge" style="margin:2px">${svSlotLabel(k)}: ${s.nick} <a onclick="svClearSlot('${k}')" style="cursor:pointer;font-weight:800">✕</a></span>`
+      : `<span class="tag-btn" style="margin:2px;opacity:.65">${svSlotLabel(k)}: 검색해서 선택</span>`;
+  }).join('');
+}
 function svClient() { return window.__svTestClient || TMAuth.client; }
 function svLogged() { return !!window.__svTestClient || (serverMode() && TMAuth.isLoggedIn); }
 function svMyId() { return window.__svTestClient ? '00000000-test' : TMAuth.session.user.id; }
@@ -5481,14 +5503,14 @@ function svRenderGate() {
   if (m) m.style.display = on ? 'block' : 'none';
   if (on) {
     const d = $('sv-date'); if (d && !d.value) d.value = todayStr();
-    svRenderStats(); svRefresh();
+    svRenderSlots(); svRenderStats(); svRefresh();
   }
 }
 function svRenderStats() {
   const el = $('sv-mystats');
   if (!el) return;
   const pf = TMAuth.profile;
-  el.textContent = pf ? `☁️ ${pf.nickname} · ${pf.elo_pts}pt · ${pf.matches}전 ${pf.wins}승` : '서버 전적 —';
+  el.textContent = pf ? `☁️ ${pf.nickname} · 통합 ${pf.elo_pts}pt · 🎾 단식 ${pf.singles_pts == null ? 1000 : pf.singles_pts}pt (${pf.singles_matches || 0}전) · 👥 복식 ${pf.doubles_pts == null ? 1000 : pf.doubles_pts}pt (${pf.doubles_matches || 0}전)` : '서버 전적 —';
 }
 async function svSearch() {
   const q = ($('sv-opp').value || '').trim();
@@ -5507,27 +5529,35 @@ async function svSearch() {
   } catch (e) { box.innerHTML = '<span class="muted" style="font-size:12px">검색 실패: ' + (e.message || e) + '</span>'; }
 }
 function svPick(id, nick) {
-  svOppSel = { id, nick };
-  $('sv-opp').value = nick;
-  $('sv-opp-list').innerHTML = `<span class="badge">상대 확정: ${nick}</span>`;
+  if (Object.values(svSlots).some(s => s && s.id === id)) { toast('이미 선택한 선수예요'); return; }
+  const empty = svNeededSlots().find(k => !svSlots[k]);
+  if (!empty) { toast('자리가 다 찼어요 — ✕로 비우고 다시 선택하세요'); return; }
+  svSlots[empty] = { id, nick };
+  $('sv-opp').value = '';
+  $('sv-opp-list').innerHTML = '';
+  svRenderSlots();
 }
 async function svReport() {
-  if (!svOppSel) { toast('상대를 검색해서 선택해 주세요'); return; }
+  const kind = svKind();
+  const missing = svNeededSlots().find(k => !svSlots[k]);
+  if (missing) { toast(svSlotLabel(missing) + ' 자리를 채워 주세요 (닉네임 검색)'); return; }
   const ps = svParseSets($('sv-sets').value);
   if (!ps) { toast('세트 스코어 형식을 확인해 주세요 (예: 6-4,3-6,7-5 — 무승부 불가)'); return; }
+  const team1 = kind === 'doubles' ? [svMyId(), svSlots.partner.id] : [svMyId()];
+  const team2 = kind === 'doubles' ? [svSlots.opp1.id, svSlots.opp2.id] : [svSlots.opp1.id];
   try {
     const { error } = await svClient().rpc('report_match', {
-      p_kind: 'singles',
+      p_kind: kind,
       p_played_at: $('sv-date').value || todayStr(),
       p_court: null,
       p_sets: ps.sets,
-      p_team1: [svMyId()],
-      p_team2: [svOppSel.id],
+      p_team1: team1,
+      p_team2: team2,
       p_winner_team: ps.winner
     });
     if (error) throw error;
-    toast(`📤 제출 완료 — ${svOppSel.nick} 님이 승인하면 랭킹에 반영돼요`);
-    svOppSel = null; $('sv-opp').value = ''; $('sv-sets').value = ''; $('sv-opp-list').innerHTML = '';
+    toast(`📤 ${kind === 'doubles' ? '복식' : '단식'} 제출 완료 — 상대편이 승인하면 랭킹에 반영돼요`);
+    svKindChange(); $('sv-sets').value = ''; $('sv-opp').value = ''; $('sv-opp-list').innerHTML = '';
     svRefresh();
   } catch (e) { toast('제출 실패: ' + (e.message || e)); }
 }
@@ -5543,8 +5573,10 @@ async function svRefresh() {
     const me = svMyId();
     box.innerHTML = data.map(m => {
       const mine = m.reporter_id === me;
-      const opp = (m.match_players || []).find(p => p.player_id !== me);
-      const oppName = (opp && opp.profiles && opp.profiles.nickname) || '상대';
+      const nick = p => (p && p.profiles && p.profiles.nickname) || '?';
+      const t1 = (m.match_players || []).filter(p => p.team === 1).map(nick).join('·');
+      const t2 = (m.match_players || []).filter(p => p.team === 2).map(nick).join('·');
+      const oppName = `${m.kind === 'doubles' ? '👥 ' : ''}${t1} vs ${t2}`;
       const setsTxt = (m.sets || []).map(x => x.join('-')).join(', ');
       const btns = mine
         ? `<button type="button" class="tag-btn" onclick="svCancel('${m.id}')">제출 취소</button>`
