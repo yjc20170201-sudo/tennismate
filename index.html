@@ -906,6 +906,14 @@
         </div>
         <div id="ai-status" class="muted" style="font-size:12px;margin-top:6px"></div>
         <div id="ai-result" style="margin-top:6px"></div>
+        <div class="vj-sub">🦴 폼 분석 (베타) — 스윙 자세를 AI가 관절로 봐요</div>
+        <div class="muted" style="font-size:12px">영상 위에 관절 스켈레톤을 그리고, 정지한 장면의 팔꿈치·무릎 각도를 측정해요. 카메라 1대 2D 근사치라 <b>경향 참고용</b>이에요 — 통증이 있다면 전문가와 상담하세요.</div>
+        <div class="vj-ctrl" style="margin-top:6px">
+          <button type="button" class="btn small outline" style="flex:1" id="pose-btn" onclick="poseToggle()">🦴 스켈레톤 오버레이</button>
+          <button type="button" class="btn small" style="flex:1" onclick="poseFrame()">📐 이 장면 각도 측정</button>
+        </div>
+        <div id="pose-status" class="muted" style="font-size:12px;margin-top:6px"></div>
+        <div id="pose-result" style="margin-top:6px"></div>
       </div>
       <div class="vj-sub" style="margin-top:16px">⚖️ 비디오 챌린지 — 2영상 나란히 보기</div>
       <div class="muted" style="font-size:12px">양쪽 베이스라인 뒤에서 각자 폰으로 찍었다면 두 영상을 나란히 돌려보세요. 각 영상에서 같은 순간(타구)을 찾아 싱크를 맞추면 재생·프레임 이동이 함께 움직여요. 판정은 공이 떨어진 쪽에 가까운 영상을 기준으로!</div>
@@ -968,6 +976,12 @@
           <div id="mr-status" class="muted" style="font-size:12px;margin-top:6px">카메라를 켜면 챌린지 버튼이 활성화돼요. 화면은 자동으로 꺼지지 않게 유지합니다</div>
         </div>
       </div>
+    </div>
+    <div class="section-title">🧠 AI 코치 (준비 중)</div>
+    <div class="card">
+      <div class="muted">🦴 폼 측정치와 🏷️ 포인트 태그가 쌓이면, AI가 사람 코치처럼 <b>스윙 교정 + 상대 공략 리포트</b>를 써주는 기능이에요. API 비용이 들어 베타 동안은 잠겨 있어요.</div>
+      <div id="coach-data" class="muted" style="font-size:12.5px;margin-top:8px">모인 데이터가 아직 없어요 — 위의 🦴 폼 분석과 라이브 스코어보드의 🏷️ 포인트 태그를 써보세요.</div>
+      <button class="btn full" disabled style="margin-top:10px;opacity:.55">🔒 AI 코칭 리포트 생성 — 베타 후 오픈</button>
     </div>
     <div class="section-title">🤜🤛 라이벌 & 상대 전적</div>
     <div class="muted" style="margin:-4px 0 10px">경기를 기록한 상대와의 맞대결 전적이에요. 카드를 탭하면 상세 전적이 열려요.</div>
@@ -4001,7 +4015,7 @@ function openLive() {
   openModal('live');
 }
 function startLive() {
-  live = { oppId: parseInt($('lv-opp').value), sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], done: false };
+  live = { oppId: parseInt($('lv-opp').value), sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
   renderLive();
 }
 function liveDisp() {
@@ -4068,12 +4082,14 @@ function renderLive() {
       <button class="btn small outline" style="flex:1" onclick="liveUndo()" ${live.hist.length ? '' : 'disabled'}>↩️ 되돌리기</button>
       <button class="btn small outline" style="flex:1" onclick="liveQuit()">경기 취소</button>
     </div>
+    ${lvTagRowHtml()}
     <div class="dline">총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]}</div>`;
   lvRCPushState(); // 리모컨에 현재 점수 중계
 }
 function livePoint(side) {
   if (!live || live.done) return;
   live.hist.push(JSON.stringify({ sets: live.sets, g: live.g, p: live.p, tb: live.tb, ptsTotal: live.ptsTotal }));
+  live.tags.push({ side, tag: null }); // 🏷️ 포인트 태그 슬롯
   const o = 1 - side;
   live.ptsTotal[side]++;
   live.p[side]++;
@@ -4102,6 +4118,7 @@ function livePoint(side) {
 function liveUndo() {
   if (!live || !live.hist.length || live.done) return;
   Object.assign(live, JSON.parse(live.hist.pop()));
+  if (live.tags && live.tags.length) live.tags.pop();
   renderLive();
 }
 function liveQuit() {
@@ -4124,6 +4141,7 @@ function finishLive(myS, opS) {
   bumpKind(opp, 's', !win);
   const setsStr = live.sets.map(s => s[0] + '-' + s[1]).join(' ');
   history.unshift({ opp: opp.name, my: myS, op: opS, sets: setsStr, date: todayStr(), type: 's', pstat: `🎾 라이브 · 총 포인트 ${live.ptsTotal[0]}:${live.ptsTotal[1]}` });
+  lvTagCommit(opp.name); // 🏷️ 포인트 태그를 상대 분석 데이터로 적립
   logPts(delta, opp.name, win); // v0.25: 포인트 추이 로그
   calibrate(win, opp.ntrp);
   useGear();
@@ -6095,6 +6113,141 @@ document.addEventListener('DOMContentLoaded', () => {
   const c = $('ai-canvas');
   if (c) c.addEventListener('click', aiCanvasClick);
 });
+
+// ===== 폼 분석 — 포즈 스켈레톤·각도 측정 (MoveNet, 베타) =====
+// 온디바이스 AI(무료) — 최초 1회 모델 다운로드 후 폰 안에서만 계산. 테스트 훅: window.__poseTestDetector
+const POSE_EDGES = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+const AI_COACH_ENABLED = false; // Claude 코칭 리포트 — API 비용 때문에 베타 동안 잠금
+let poseDet = null, poseOn = false, poseRAF = null, poseKp = null;
+let coachTags = {}; // 상대별 포인트 태그 누적 (메모리)
+function poseStatus(t) { const el = $('pose-status'); if (el) el.textContent = t; }
+async function poseLoad() {
+  if (window.__poseTestDetector) { poseDet = window.__poseTestDetector; return; }
+  if (poseDet) return;
+  poseStatus('🧠 AI 모델 내려받는 중… (최초 1회, 몇 MB)');
+  const load = src => new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('모델 로드 실패 — 인터넷 연결을 확인하세요')); document.head.appendChild(s); });
+  if (!window.tf) await load('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js');
+  if (!window.poseDetection) await load('https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js');
+  poseDet = await window.poseDetection.createDetector(window.poseDetection.SupportedModels.MoveNet, { modelType: 'SinglePose.Lightning' });
+}
+async function poseToggle() {
+  if (poseOn) {
+    poseOn = false;
+    if (poseRAF) cancelAnimationFrame(poseRAF);
+    const b = $('pose-btn'); if (b) b.textContent = '🦴 스켈레톤 오버레이';
+    poseStatus('');
+    return;
+  }
+  const v = $('vj-video');
+  if (!v || !v.src) { toast('먼저 영상을 불러오세요'); return; }
+  try { await poseLoad(); } catch (e) { poseStatus('⚠️ ' + (e.message || e)); return; }
+  poseOn = true;
+  const b = $('pose-btn'); if (b) b.textContent = '⏹ 오버레이 끄기';
+  poseStatus('🦴 관절 추적 중 — 스윙 장면에서 멈추고 📐로 각도를 재보세요');
+  poseLoop();
+}
+async function poseLoop() {
+  if (!poseOn) return;
+  const v = $('vj-video');
+  if (v && v.videoWidth && poseDet) {
+    try {
+      const poses = await poseDet.estimatePoses(v);
+      poseKp = poses && poses[0] ? poses[0].keypoints : null;
+      poseDrawSkeleton();
+    } catch (e) { /* 프레임 단위 실패는 무시 */ }
+  }
+  poseRAF = requestAnimationFrame(poseLoop);
+}
+function poseDrawSkeleton() {
+  aiSyncCanvas();
+  const c = $('ai-canvas'), v = $('vj-video');
+  if (!c || !v || !poseKp) return;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const fit = aiFitRect(v.videoWidth, v.videoHeight, c.width, c.height);
+  if (!fit) return;
+  const mp = k => [fit.x + k.x / v.videoWidth * fit.w, fit.y + k.y / v.videoHeight * fit.h];
+  ctx.strokeStyle = 'rgba(90,255,150,.9)'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+  POSE_EDGES.forEach(e => {
+    const ka = poseKp[e[0]], kb = poseKp[e[1]];
+    if (!ka || !kb || ka.score < 0.3 || kb.score < 0.3) return;
+    const p1 = mp(ka), p2 = mp(kb);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+  });
+  ctx.fillStyle = '#fff';
+  poseKp.forEach(k => { if (k.score >= 0.3) { const p = mp(k); ctx.beginPath(); ctx.arc(p[0], p[1], 3, 0, 7); ctx.fill(); } });
+}
+function poseAngle(a, b, c) { // b가 꼭짓점인 관절 각도
+  if (!a || !b || !c || a.score < 0.3 || b.score < 0.3 || c.score < 0.3) return null;
+  const v1 = [a.x - b.x, a.y - b.y], v2 = [c.x - b.x, c.y - b.y];
+  const m = Math.hypot(v1[0], v1[1]) * Math.hypot(v2[0], v2[1]);
+  if (!m) return null;
+  const dot = v1[0] * v2[0] + v1[1] * v2[1];
+  return Math.round(Math.acos(Math.max(-1, Math.min(1, dot / m))) * 180 / Math.PI);
+}
+function poseFrame() {
+  if (!poseKp) { toast('🦴 오버레이를 켜고 잠시 기다린 뒤 측정하세요'); return; }
+  const k = poseKp;
+  const m = {
+    '오른팔꿈치': poseAngle(k[6], k[8], k[10]),
+    '왼팔꿈치': poseAngle(k[5], k[7], k[9]),
+    '오른무릎': poseAngle(k[12], k[14], k[16]),
+    '왼무릎': poseAngle(k[11], k[13], k[15])
+  };
+  const rows = Object.keys(m).filter(n => m[n] != null);
+  if (!rows.length) { toast('관절이 충분히 안 보여요 — 몸 전체가 나온 장면에서 재보세요'); return; }
+  const fb = [];
+  const elb = m['오른팔꿈치'] != null ? m['오른팔꿈치'] : m['왼팔꿈치'];
+  if (elb != null) fb.push(elb > 165 ? '팔이 거의 펴진 채 임팩트 — 타점이 늦거나 몸에서 먼 신호일 수 있어요'
+    : elb < 80 ? '팔이 많이 접혀 있어요 — 타점이 몸에 너무 가까울 수 있어요'
+    : '팔꿈치 각도 좋아요 (90~160° 권장 범위)');
+  const knees = [m['오른무릎'], m['왼무릎']].filter(v => v != null);
+  if (knees.length) fb.push(Math.min.apply(null, knees) > 165 ? '무릎이 펴져 있어요 — 낮은 자세(무릎 굽힘)를 의식해보세요' : '무릎 굽힘 좋아요 — 안정된 하체');
+  $('pose-result').innerHTML = '<div class="card" style="padding:10px"><b>📐 이 장면 측정 (2D 근사치)</b>' +
+    '<div style="margin-top:6px">' + rows.map(n => '<span class="badge" style="margin:2px">' + n + ' ' + m[n] + '°</span>').join('') + '</div>' +
+    fb.map(t => '<div class="muted" style="font-size:12.5px;margin-top:5px">💡 ' + t + '</div>').join('') + '</div>';
+  window.__coachForm = { metrics: m };
+  renderCoachData();
+}
+// ── 포인트 태그 → 상대 분석 데이터 ──
+const TAG_LABEL = { ace: '🎯 에이스', winner: '💥 위너', net: '🥅 네트', out: '🎾 아웃', dbl: '⚡ 더블폴트' };
+function lvTagRowHtml() {
+  if (!live || !live.tags || !live.tags.length) return '';
+  const last = live.tags[live.tags.length - 1];
+  return '<div class="muted" style="font-size:12px;margin-top:8px">🏷️ 방금 포인트는 어떻게 끝났나요? (선택 — 상대 분석 데이터로 쌓여요)</div><div style="margin-top:4px">' +
+    Object.keys(TAG_LABEL).map(t => '<button type="button" class="tag-btn ' + (last.tag === t ? 'sel' : '') + '" onclick="lvTag(\'' + t + '\')">' + TAG_LABEL[t] + '</button>').join(' ') + '</div>';
+}
+function lvTag(t) {
+  if (!live || !live.tags.length) return;
+  const last = live.tags[live.tags.length - 1];
+  last.tag = last.tag === t ? null : t; // 같은 걸 다시 누르면 해제
+  renderLive();
+}
+function lvTagCommit(oppName) {
+  if (!live || !live.tags) return;
+  const rec = coachTags[oppName] || (coachTags[oppName] = { my: {}, op: {} });
+  live.tags.forEach(t => { if (!t.tag) return; const b = t.side === 0 ? rec.my : rec.op; b[t.tag] = (b[t.tag] || 0) + 1; });
+  renderCoachData();
+}
+function renderCoachData() {
+  const el = $('coach-data');
+  if (!el) return;
+  const parts = [];
+  if (window.__coachForm) {
+    const ms = Object.keys(window.__coachForm.metrics).filter(n => window.__coachForm.metrics[n] != null)
+      .map(n => n + ' ' + window.__coachForm.metrics[n] + '°').join(' · ');
+    if (ms) parts.push('🦴 최근 폼 측정: ' + ms);
+  }
+  Object.keys(coachTags).forEach(opp => {
+    const r = coachTags[opp];
+    const f = b => Object.keys(b).map(t => TAG_LABEL[t] + ' ' + b[t]).join(' · ');
+    const line = ['vs ' + opp, f(r.my) ? '내 득점 포인트(' + f(r.my) + ')' : '', f(r.op) ? '실점 포인트(' + f(r.op) + ')' : ''].filter(Boolean).join(' — ');
+    parts.push('🏷️ ' + line);
+  });
+  el.innerHTML = parts.length
+    ? parts.map(p => '<div style="margin-top:3px">' + p + '</div>').join('') + '<div class="muted" style="font-size:11.5px;margin-top:6px">이 데이터가 AI 코칭 리포트의 재료가 돼요</div>'
+    : '모인 데이터가 아직 없어요 — 위의 🦴 폼 분석과 라이브 스코어보드의 🏷️ 포인트 태그를 써보세요.';
+}
 
 // ===== 매치 룸 — 라이브 챌린지 (v0.40, 베타) =====
 // 링버퍼 녹화(서버 업로드 없음) + Realtime 챌린지 신호 + Storage 클립 교환 + 자동 싱크 듀얼 뷰어
