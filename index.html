@@ -528,6 +528,21 @@
 </style>
 </head>
 <body>
+<!-- 카카오톡 인앱 브라우저 감지 배너: 카메라·공유가 제한되므로 외부 브라우저로 유도 -->
+<div id="kakao-warn" style="display:none;background:#4a3800;color:#ffe08a;padding:10px 14px;font-size:13px;line-height:1.5">
+  ⚠️ <b>카카오톡 브라우저</b>로 열려 있어요 — 카메라 촬영·클립 공유가 제한됩니다.
+  <button onclick="openExternalBrowser()" style="margin-left:6px;padding:4px 10px;border:none;border-radius:8px;background:#ffd45e;color:#3a2c00;font-weight:800;cursor:pointer">크롬으로 열기</button>
+</div>
+<script>
+(function () {
+  if (/KAKAOTALK/i.test(navigator.userAgent)) {
+    document.getElementById('kakao-warn').style.display = 'block';
+  }
+})();
+function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 현재 주소 열기
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+}
+</script>
 
 <header>
   <span class="profile-chip" id="profile-chip" onclick="openProfile()" style="cursor:pointer">🎾 나: 정철 (NTRP 3.5)</span>
