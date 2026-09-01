@@ -6446,10 +6446,15 @@ function renderTourney() {
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
         <input type="checkbox" value="${n}" ${i < 4 ? 'checked' : ''} onchange="updateTCount()"> ${n}${n === ME.name ? ' (나)' : ''}</label>`).join('') +
       `</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <input type="text" id="t-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')tAddPlayer()">
+        <button class="btn small outline" onclick="tAddPlayer()">+ 추가</button>
+      </div>
       <div class="muted" id="t-count" style="margin-top:8px"></div>
       <button class="btn full" onclick="startTourney()">🏅 토너먼트 시작</button>
     </div>`;
     updateTCount();
+    tLoadServer(); // 로그인 상태면 서버 가입자들을 목록에 추가 (☁️ 표시)
     return;
   }
   let html = `<div class="card row"><h3>🏅 ${tourney.name}</h3><button class="btn small outline" onclick="resetTourney()">대회 종료</button></div>`;
@@ -6479,6 +6484,35 @@ function updateTCount() {
   const n = document.querySelectorAll('#t-players input:checked').length;
   const el = $('t-count');
   if (el) el.textContent = `선택: ${n}명 ${n === 4 || n === 8 ? '✅' : '(4명 또는 8명이어야 해요)'}`;
+}
+function tAppendPlayer(name, checked, cloud) {
+  const box = $('t-players');
+  if (!box) return;
+  const label = document.createElement('label');
+  label.style.cssText = 'display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.value = name; cb.checked = !!checked; cb.onchange = updateTCount;
+  label.appendChild(cb);
+  label.appendChild(document.createTextNode(' ' + (cloud ? '☁️ ' : '') + name));
+  box.appendChild(label);
+}
+function tAddPlayer() { // 목록에 없는 사람(앱 미가입자 포함)을 이름으로 추가
+  const inp = $('t-add');
+  const name = (inp.value || '').replace(/["'<>]/g, '').trim();
+  if (!name) return;
+  if ([...document.querySelectorAll('#t-players input')].some(c => c.value === name)) { toast('이미 목록에 있어요'); inp.value = ''; return; }
+  tAppendPlayer(name, true, false);
+  inp.value = '';
+  updateTCount();
+}
+async function tLoadServer() { // 서버 가입자 닉네임을 참가자 후보로 (내 닉네임·중복 제외)
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  try {
+    const { data } = await svClient().from('profiles').select('nickname').is('deleted_at', null).limit(50);
+    const have = new Set([...document.querySelectorAll('#t-players input')].map(c => c.value));
+    have.add(ME.name);
+    (data || []).forEach(p => { if (p.nickname && !have.has(p.nickname)) tAppendPlayer(p.nickname, false, true); });
+  } catch (e) { /* 서버 목록은 보조 — 실패해도 조용히 넘어감 */ }
 }
 function startTourney() {
   const names = [...document.querySelectorAll('#t-players input:checked')].map(c => c.value);
