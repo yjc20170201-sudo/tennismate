@@ -2342,8 +2342,39 @@ function onAuthChange(session, profile) {
   if (!session && mrChan) mrLeave(true); // 로그아웃 시 방 정리
   if (!session) return;
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
+  svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
+}
+async function svImportPlayers() { // 서버 가입자를 로컬 선수 목록에 합류 — 라이브 스코어·기록·대회·지도에서 실제 멤버 선택 가능
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  try {
+    const { data } = await svClient().from('profiles')
+      .select('id, nickname, ntrp, region, play_style, elo_pts, singles_pts, doubles_pts, matches, wins')
+      .is('deleted_at', null).limit(100);
+    if (!data) return;
+    const myNick = (TMAuth.profile && TMAuth.profile.nickname) || null;
+    let added = 0;
+    data.forEach(pr => {
+      if (!pr.nickname || pr.nickname === myNick || pr.nickname === ME.name) return;
+      if (players.some(p => p.name === pr.nickname)) return;
+      players.push({
+        id: 1000 + players.length, cloud: true, uid: pr.id,
+        name: pr.nickname, ntrp: parseFloat(pr.ntrp) || 3.0, region: pr.region || '',
+        style: pr.play_style || '미입력', matches: pr.matches || 0, wins: pr.wins || 0,
+        pts: pr.elo_pts == null ? 1000 : pr.elo_pts,
+        sPts: pr.singles_pts == null ? 1000 : pr.singles_pts,
+        dPts: pr.doubles_pts == null ? 1000 : pr.doubles_pts,
+        sMatches: 0, sWins: 0, dMatches: 0, dWins: 0,
+        monthPts: 0, seasonPts: 0, manner: null, mannerN: 0, emoji: '☁️', tags: {}
+      });
+      added++;
+    });
+    if (added) {
+      try { renderAll(); } catch (e) {}
+      toast('☁️ 서버 멤버 ' + added + '명을 선수 목록에 불러왔어요');
+    }
+  } catch (e) { /* 서버 목록은 보조 — 실패해도 데모 목록으로 동작 */ }
 }
 function applyServerProfile(p) { // 서버 프로필 → ME 동기화 + 전체 화면 갱신
   if (!p || !p.nickname) return;
