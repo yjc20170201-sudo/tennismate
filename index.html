@@ -12,6 +12,32 @@
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
+// 자동 업데이트 감지: 설치형 앱은 새로고침 버튼이 없어 옛 버전에 갇히기 쉽다.
+// 배포마다 갱신되는 version.json을 주기적으로 확인해, 바뀌면 상단 바로 안내한다.
+(function () {
+  let firstBuild = null;
+  async function tmCheckVer() {
+    try {
+      const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+      const v = (await r.json()).build;
+      if (firstBuild === null) { firstBuild = v; return; }
+      if (v !== firstBuild) tmShowUpdateBar();
+    } catch (e) { /* version.json 없거나 오프라인 — 무시 */ }
+  }
+  function tmShowUpdateBar() {
+    if (document.getElementById('tm-update-bar')) return;
+    const d = document.createElement('div');
+    d.id = 'tm-update-bar';
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999;background:#1b5e20;color:#fff;text-align:center;padding:11px;font-size:14px;font-weight:800;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.3)';
+    d.textContent = '🔄 새 버전이 나왔어요 — 여기를 탭해서 업데이트';
+    d.onclick = () => location.reload();
+    document.body.appendChild(d);
+  }
+  addEventListener('load', tmCheckVer);
+  setInterval(tmCheckVer, 4 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tmCheckVer(); });
+  window.__tmCheckVer = tmCheckVer; // 테스트 훅
+})();
 </script>
 <style>
   :root {
