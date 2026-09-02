@@ -1754,6 +1754,8 @@ const REGION_GROUPS = [
    출처: psf.kr(제주 공공체육시설 예약통합시스템) 테니스장 목록, seogwipo.go.kr 공공체육시설 안내.
    전화번호는 서귀포시청 페이지에서 확인된 것만 넣음 — 확인 안 된 정보는 비워둠. */
 const JEJU_COURTS = [
+  { name: '서부테니스장', region: '서부', addr: '', book: '클럽 문의', tel: null, fav: '⭐ SBC 주력', noPsf: true },
+  { name: '디아넥스 PTC 실내테니스장', region: '안덕면', addr: '서귀포시 안덕면 산록남로762번길 71 (디아넥스호텔)', book: '실내 데코터프 · 호텔 문의(멤버십·대관)', tel: '064-793-6005', fav: 'SBC 가끔 이용', noPsf: true },
   { name: '한림 옹포천 테니스장', region: '한림읍', addr: '제주시 한림읍 한림상로 36', book: '전화문의', tel: null },
   { name: '애월체육공원 테니스장', region: '애월읍', addr: '제주시 애월읍 일주서로 6349 (애월체육관)', book: '온라인예약', tel: null },
   { name: '제주경찰청 어울림 테니스장', region: '제주시', addr: '제주시 수목원서길 37 (노형동)', book: '온라인예약', tel: null },
@@ -1770,11 +1772,12 @@ function renderJejuCourts() {
   if (!el) return;
   el.innerHTML = JEJU_COURTS.map(c => `<div class="card" style="${c.closed ? 'opacity:.6' : ''}">
     <div class="row">
-      <div><h3 style="font-size:14.5px">${c.name} <span class="badge ${c.closed ? 'gray' : ''}">${c.region}</span></h3>
-      <div class="muted" style="font-size:12px">${c.addr} · ${c.book}</div></div>
+      <div><h3 style="font-size:14.5px">${c.name} <span class="badge ${c.closed ? 'gray' : ''}">${c.region}</span>${c.fav ? ` <span class="badge orange">${c.fav}</span>` : ''}</h3>
+      <div class="muted" style="font-size:12px">${[c.addr, c.book].filter(Boolean).join(' · ')}</div></div>
     </div>
     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
       ${c.closed ? '<span class="tag-btn" style="opacity:.7">🚧 공사중</span>'
+        : c.noPsf ? ''
         : `<a class="tag-btn" href="${JEJU_BOOKING_HUB}" target="_blank" rel="noopener">🔗 공식 예약처</a>`}
       ${c.tel ? `<a class="tag-btn" href="tel:${c.tel}">📞 ${c.tel}</a>` : ''}
       <a class="tag-btn" href="https://map.kakao.com/link/search/${encodeURIComponent(c.name)}" target="_blank" rel="noopener">🗺️ 지도</a>
