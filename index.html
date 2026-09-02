@@ -805,6 +805,20 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       </select>
     </div>
     <div class="muted" id="club-count" style="margin-bottom:8px"></div>
+    <button class="btn small outline full" style="margin-bottom:8px" onclick="const f=$('club-new-form');f.style.display=f.style.display==='none'?'block':'none'">➕ 내 클럽 등록</button>
+    <div id="club-new-form" class="card" style="display:none">
+      <label>클럽 이름</label>
+      <input type="text" id="cb-name" maxlength="30" placeholder="예: SBC">
+      <label>활동 지역</label>
+      <select id="cb-region"></select>
+      <label>레벨 (선택)</label>
+      <input type="text" id="cb-level" maxlength="12" placeholder="예: 2.5~3.5">
+      <label>이모지 (선택)</label>
+      <input type="text" id="cb-emoji" maxlength="4" value="🎾">
+      <label>한 줄 소개 (선택)</label>
+      <input type="text" id="cb-desc" maxlength="60" placeholder="예: 한경 청백전·복식 모임">
+      <button class="btn full" onclick="svCreateClub()">🏘️ 클럽 등록</button>
+    </div>
     <div id="club-list"></div>
   </div>
 
@@ -1738,7 +1752,7 @@ function regionOptionsHtml(sel) {
 }
 /* 정적 HTML에 5개만 박혀 있던 셀렉트를 전국 목록으로 교체 (첫 "모든 지역" 옵션은 유지) */
 (function fillRegionSelects() {
-  [['f-region', true], ['c-region', true], ['club-region', true], ['pf-region', false]].forEach(pair => {
+  [['f-region', true], ['c-region', true], ['club-region', true], ['pf-region', false], ['cb-region', false]].forEach(pair => {
     const el = document.getElementById(pair[0]);
     if (!el) return;
     el.innerHTML = (pair[1] ? '<option value="">모든 지역</option>' : '') + regionOptionsHtml('');
@@ -2406,8 +2420,67 @@ function onAuthChange(session, profile) {
   if (!session) return;
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
+  svLoadClubs();     // 🏘️ 서버 클럽 목록으로 교체 (비동기)
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
+}
+async function svLoadClubs() { // 실전 모드: 서버 클럽으로 교체 (전 멤버 공유)
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  try {
+    const { data } = await svClient().from('clubs')
+      .select('id, name, region, emoji, level, descr, owner_id, club_members(user_id, role, profiles(nickname))')
+      .limit(100);
+    if (!data) return;
+    const myUid = window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null);
+    clubs.length = 0;
+    myClubId = null;
+    data.forEach((c, i) => {
+      const rows = c.club_members || [];
+      const names = rows.map(m => (m.profiles && m.profiles.nickname) || '?').filter(n => n !== ME.name);
+      const lid = 2000 + i;
+      clubs.push({ id: lid, cid: c.id, cloud: true, name: c.name, region: c.region, emoji: c.emoji || '🎾',
+        level: c.level || '-', desc: c.descr || '', members: names, wins: 0, losses: 0, ownerUid: c.owner_id });
+      if (myUid && rows.some(m => m.user_id === myUid)) myClubId = lid;
+    });
+    try { renderClubs(); renderMap(); renderHome(); } catch (e) {}
+  } catch (e) { /* 실패 시 기존 목록 유지 */ }
+}
+async function svCreateClub() {
+  if (typeof svLogged !== 'function' || !svLogged()) { toast('로그인 후 등록할 수 있어요'); return; }
+  const name = ($('cb-name').value || '').trim();
+  if (!name) { toast('클럽 이름을 입력해 주세요'); return; }
+  try {
+    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const { error } = await svClient().from('clubs').insert({
+      name, region: $('cb-region').value || '', emoji: ($('cb-emoji').value || '🎾').trim() || '🎾',
+      level: ($('cb-level').value || '').trim(), descr: ($('cb-desc').value || '').trim(), owner_id: myUid
+    });
+    if (error) throw error;
+    toast('🏘️ ' + name + ' 클럽을 등록했어요! 멤버들에게 가입하라고 알려주세요');
+    $('club-new-form').style.display = 'none';
+    $('cb-name').value = '';
+    svLoadClubs();
+  } catch (e) {
+    toast('등록 실패: ' + ((e && e.message) || e) + (String((e && e.message) || '').includes('duplicate') ? ' — 이미 있는 이름이에요' : ''));
+  }
+}
+async function svJoinClub(c) {
+  try {
+    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const { error } = await svClient().from('club_members').insert({ club_id: c.cid, user_id: myUid });
+    if (error) throw error;
+    toast('🏘️ ' + c.name + '에 가입했어요!');
+    svLoadClubs();
+  } catch (e) { toast('가입 실패: ' + ((e && e.message) || e)); }
+}
+async function svLeaveClub(c) {
+  try {
+    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const { error } = await svClient().from('club_members').delete().eq('club_id', c.cid).eq('user_id', myUid);
+    if (error) throw error;
+    toast(c.name + '에서 탈퇴했어요');
+    svLoadClubs();
+  } catch (e) { toast('탈퇴 실패: ' + ((e && e.message) || e)); }
 }
 let realModeOn = false;
 function enterRealMode(pf) { // 실전 모드: 데모 전적을 서버 실데이터로 교체 (로그인 세션당 1회)
@@ -4227,7 +4300,9 @@ function startLive() {
     opp2Id = parseInt($('lv-opp2').value);
     if (new Set([oppId, partnerId, opp2Id]).size < 3) { toast('⚠️ 복식은 파트너와 상대 2명이 모두 서로 달라야 해요'); return; }
   }
-  live = { type, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
+  const gT = parseInt($('lv-games') ? $('lv-games').value : '6') || 6;
+  const sNeed = parseInt($('lv-sets') ? $('lv-sets').value : '2') || 2;
+  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
   renderLive();
 }
 function liveDisp() {
@@ -4262,6 +4337,10 @@ function renderLive() {
         <option value="d" selected>👥 복식</option>
         <option value="s">🎾 단식</option>
       </select>
+      <div class="row" style="gap:8px">
+        <div style="flex:1"><label>세트당 게임</label><select id="lv-games"><option value="6" selected>6게임</option><option value="4">4게임</option></select></div>
+        <div style="flex:1"><label>세트 수</label><select id="lv-sets"><option value="2" selected>3판 2선승</option><option value="1">단판</option></select></div>
+      </div>
       <label id="lv-opp-lbl">상대 1</label>
       <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       <div id="lv-doubles">
@@ -4287,7 +4366,7 @@ function renderLive() {
       <div style="font-size:34px">${win ? '🏆' : '🎾'}</div>
       <h3 style="margin-top:6px">${win ? '승리!' : '아쉬운 패배'} — 세트 ${myS}:${opS}</h3>
       <div style="margin:8px 0">${liveSetChips()}</div>
-      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
+      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}${(live.gT || 6) === 4 ? '⚡4게임제 · ' : ''}${(live.sNeed || 2) === 1 ? '단판 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
       <button class="btn full" style="margin-top:12px" onclick="closeLive()">확인</button>
     </div>`;
     lvRCPushState();
@@ -4322,16 +4401,17 @@ function livePoint(side) {
   live.ptsTotal[side]++;
   live.p[side]++;
   if (live.tb) {
-    if (live.p[side] >= 7 && live.p[side] - live.p[o] >= 2) { // 타이브레이크 승리 → 세트 7-6
-      const set = [0, 0]; set[side] = 7; set[o] = 6;
+    if (live.p[side] >= 7 && live.p[side] - live.p[o] >= 2) { // 타이브레이크 승리 (6게임제 7-6, 4게임제 5-4)
+      const gT = live.gT || 6;
+      const set = [0, 0]; set[side] = gT + 1; set[o] = gT;
       live.sets.push(set);
       live.g = [0, 0]; live.p = [0, 0]; live.tb = false;
     }
   } else if (live.p[side] >= 4 && live.p[side] - live.p[o] >= 2) { // 게임 승리
     live.g[side]++; live.p = [0, 0];
-    if (live.g[side] >= 6 && live.g[side] - live.g[o] >= 2) { // 세트 승리
+    if (live.g[side] >= (live.gT || 6) && live.g[side] - live.g[o] >= 2) { // 세트 승리
       live.sets.push(live.g.slice()); live.g = [0, 0];
-    } else if (live.g[0] === 6 && live.g[1] === 6) { // 6-6 → 타이브레이크
+    } else if (live.g[0] === (live.gT || 6) && live.g[1] === (live.gT || 6)) { // 동률 → 타이브레이크
       live.tb = true;
     }
   }
@@ -4340,7 +4420,8 @@ function livePoint(side) {
     const d = liveDisp();
     lvCamClip((side === 0 ? (live.type === 'd' ? '🟢 우리 포인트' : '🟢 내 포인트') : '🔴 상대 포인트') + ' · ' + (live.tb ? 'TB' : (live.sets.length + 1) + '세트') + ' ' + d[0] + ':' + d[1]);
   }
-  if (myS === 2 || opS === 2) finishLive(myS, opS);
+  const sNeed = live.sNeed || 2;
+  if (myS === sNeed || opS === sNeed) finishLive(myS, opS);
   else renderLive();
 }
 function liveUndo() {
@@ -5428,6 +5509,7 @@ function joinClub(id) {
   if (myClubId === id) return;
   if (myClubId) { toast('⚠️ 한 번에 한 클럽만 가입할 수 있어요. 먼저 탈퇴해주세요'); return; }
   const c = clubs.find(x => x.id === id);
+  if (c && c.cloud) { svJoinClub(c); return; }
   myClubId = id;
   ladders[id] = ladders[id] || c.members.slice();
   if (!ladders[id].includes(ME.name)) ladders[id].push(ME.name); // v0.10: 래더 최하위로 합류
@@ -5439,6 +5521,7 @@ function joinClub(id) {
 function leaveClub() {
   const c = myClub();
   if (!c) return;
+  if (c.cloud) { myClubId = null; svLeaveClub(c); return; }
   meetings.forEach(m => { if (m.clubId === c.id) m.rsvp = m.rsvp.filter(n => n !== ME.name); });
   if (Array.isArray(ladders[c.id])) ladders[c.id] = ladders[c.id].filter(n => n !== ME.name); // v0.10
   myClubId = null;
