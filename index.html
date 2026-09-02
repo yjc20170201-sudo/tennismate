@@ -6982,49 +6982,93 @@ function aiCanvasClick(ev) {
   aiDraw();
 }
 // ── 분석 ──────────────────────────
-function aiFindBall(prev, cur, w, h, predict) { // 프레임 한 쌍에서 공 후보 찾기
+// ── 공 추적 v3: 프레임별 후보 추출 → 여러 프레임을 관통하는 "트랙" 중 최적을 공으로 ──
+// 빠른 공은 흐릿한 줄무늬로 찍히므로 색·모양은 감점/가점만 하고, 움직임의 연속성으로 판정한다.
+function aiExtractCands(prevD, curD, nextD, w, h) {
   const mask = new Uint8Array(w * h);
+  let moved = 0;
   for (let i = 0, p = 0; i < w * h; i++, p += 4) {
-    const r = cur[p], g = cur[p + 1], b = cur[p + 2];
-    const d = Math.abs(r - prev[p]) + Math.abs(g - prev[p + 1]) + Math.abs(b - prev[p + 2]);
-    if (d < AI_DIFF_MIN) continue;                 // 안 움직인 픽셀
-    if ((r + g + b) / 3 < AI_BRIGHT_MIN) continue; // 너무 어두움
-    if (g < b + AI_GB_MIN) continue;               // 노랑·연두 아님
+    const d1 = Math.abs(curD[p] - prevD[p]) + Math.abs(curD[p + 1] - prevD[p + 1]) + Math.abs(curD[p + 2] - prevD[p + 2]);
+    if (d1 < AI_DIFF_MIN) continue;
+    moved++;
+    if (nextD) { // 3프레임 비교: "지금" 프레임에 있는 물체만 (잔상 제거)
+      const d2 = Math.abs(curD[p] - nextD[p]) + Math.abs(curD[p + 1] - nextD[p + 1]) + Math.abs(curD[p + 2] - nextD[p + 2]);
+      if (d2 < AI_DIFF_MIN * 0.6) continue;
+    }
+    if ((curD[p] + curD[p + 1] + curD[p + 2]) / 3 < 45) continue; // 심하게 어두운 건 제외
     mask[i] = 1;
   }
-  // 연결된 덩어리(blob) 찾기 — 공 크기만 후보로
-  const seen = new Uint8Array(w * h), stack = [], blobs = [];
+  if (moved > w * h * 0.2) return { shake: true, cands: [] }; // 카메라 자체가 흔들린 프레임
+  const seen = new Uint8Array(w * h), stack = [], cands = [];
   for (let i = 0; i < w * h; i++) {
     if (!mask[i] || seen[i]) continue;
     stack.length = 0; stack.push(i); seen[i] = 1;
-    let n = 0, sx = 0, sy = 0, minX = w, maxX = 0, minY = h, maxY = 0;
+    let n = 0, sx = 0, sy = 0, minX = w, maxX = 0, minY = h, maxY = 0, gSum = 0, bSum = 0, brSum = 0;
     while (stack.length) {
-      const q = stack.pop(), qx = q % w, qy = (q / w) | 0;
+      const q = stack.pop(), qx = q % w, qy = (q / w) | 0, qp = q * 4;
       n++; sx += qx; sy += qy;
       if (qx < minX) minX = qx; if (qx > maxX) maxX = qx;
       if (qy < minY) minY = qy; if (qy > maxY) maxY = qy;
+      gSum += curD[qp + 1]; bSum += curD[qp + 2]; brSum += (curD[qp] + curD[qp + 1] + curD[qp + 2]) / 3;
       if (qx > 0 && mask[q - 1] && !seen[q - 1]) { seen[q - 1] = 1; stack.push(q - 1); }
       if (qx < w - 1 && mask[q + 1] && !seen[q + 1]) { seen[q + 1] = 1; stack.push(q + 1); }
       if (qy > 0 && mask[q - w] && !seen[q - w]) { seen[q - w] = 1; stack.push(q - w); }
       if (qy < h - 1 && mask[q + w] && !seen[q + w]) { seen[q + w] = 1; stack.push(q + w); }
     }
-    if (n < AI_BLOB_MIN || n > AI_BLOB_MAX) continue;
+    if (n < 1 || n > 500) continue; // 사람·큰 그림자 제외
     const bw = maxX - minX + 1, bh = maxY - minY + 1;
-    if (bw > bh * 4 || bh > bw * 4) continue; // 공은 대체로 동글동글 (라켓·팔 배제)
-    blobs.push({ x: sx / n, y: sy / n, n });
+    if (bw > bh * 8 || bh > bw * 8) continue; // 극단적으로 긴 것만 제외 (모션블러 줄무늬는 허용)
+    let sc = 1 / (1 + Math.abs(n - 12) / 12);           // 공다운 크기
+    if (gSum / n > bSum / n + 10) sc += 0.5;             // 노랑·연두 가점
+    if (brSum / n > 130) sc += 0.25;                     // 밝음 가점
+    cands.push({ x: sx / n, y: sy / n, n, sc });
   }
-  if (!blobs.length) return null;
-  // 점수: 작을수록(공다움) + 예측 위치에 가까울수록
-  let best = null;
-  blobs.forEach(bl => {
-    let sc = 1 / (1 + Math.abs(bl.n - 14) / 14);
-    if (predict) {
-      const dist = Math.hypot(bl.x - predict.x, bl.y - predict.y);
-      sc += Math.max(0, 1.6 - dist / 26);
-    }
-    if (!best || sc > best.sc) best = { x: bl.x, y: bl.y, n: bl.n, sc };
+  cands.sort((a, b) => b.sc - a.sc);
+  return { shake: false, cands: cands.slice(0, 8) };
+}
+function aiBuildTracks(frames) { // frames: [{t, cands: [...]}] → 최적 트랙 or null
+  let tracks = [];
+  frames.forEach(f => {
+    const used = new Set();
+    tracks.forEach(tr => {
+      if (tr.dead) return;
+      const last = tr.pts[tr.pts.length - 1];
+      const px = last.x + tr.vx, py = last.y + tr.vy;
+      const R = 15 + Math.hypot(tr.vx, tr.vy) * 1.4; // 빠를수록 넓게 탐색
+      let best = null, bestD = 1e9;
+      f.cands.forEach((c, ci) => {
+        if (used.has(ci)) return;
+        const d = Math.hypot(c.x - px, c.y - py);
+        if (d < R && d < bestD) { best = ci; bestD = d; }
+      });
+      if (best !== null) {
+        const c = f.cands[best];
+        used.add(best);
+        const nvx = c.x - last.x, nvy = c.y - last.y;
+        // 급반전 카운트 (팔·라켓은 왔다갔다 — 공은 방향 유지)
+        if (tr.pts.length >= 2 && (nvx * tr.vx + nvy * tr.vy) < 0 && Math.hypot(nvx, nvy) > 4) tr.turns++;
+        tr.vx = nvx; tr.vy = nvy;
+        tr.pts.push({ t: f.t, x: c.x, y: c.y, s: c.sc });
+        tr.miss = 0;
+      } else if (++tr.miss > 2) tr.dead = true; // 2프레임까지는 놓쳐도 관성으로 유지
+      else { tr.vx *= 0.95; tr.vy *= 0.95; }
+    });
+    f.cands.forEach((c, ci) => { // 남은 후보로 새 트랙 시작
+      if (used.has(ci) || tracks.filter(t => !t.dead).length > 45) return;
+      tracks.push({ pts: [{ t: f.t, x: c.x, y: c.y, s: c.sc }], vx: 0, vy: 0, miss: 0, turns: 0, dead: false });
+    });
   });
-  return best;
+  let best = null, bestScore = -1;
+  tracks.forEach(tr => {
+    if (tr.pts.length < 4) return;
+    let path = 0;
+    for (let i = 1; i < tr.pts.length; i++) path += Math.hypot(tr.pts[i].x - tr.pts[i - 1].x, tr.pts[i].y - tr.pts[i - 1].y);
+    const span = Math.hypot(tr.pts[tr.pts.length - 1].x - tr.pts[0].x, tr.pts[tr.pts.length - 1].y - tr.pts[0].y);
+    // 길이 + 실제 이동거리 크게, 제자리 왕복(turns)은 크게 감점 → 공은 span이 큼
+    const score = tr.pts.length * 2 + span * 0.35 + path * 0.05 - tr.turns * 6;
+    if (score > bestScore) { bestScore = score; best = tr; }
+  });
+  return best && best.pts.length >= 4 ? best : null;
 }
 async function aiAnalyze() {
   const v = $('vj-video');
@@ -7042,34 +7086,32 @@ async function aiAnalyze() {
     cv.width = tw; cv.height = th;
     const cx = cv.getContext('2d', { willReadFrequently: true });
     const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
-    const sx = v.videoWidth / tw, sy = v.videoHeight / th;
-    let prev = null, n = 0;
-    const total = Math.max(1, Math.round((t1 - t0) / AI_STEP));
-    for (let t = t0; t <= t1 + 1e-6; t += AI_STEP) {
+    // 1단계: 프레임 캡처
+    const caps = [];
+    const total = Math.max(2, Math.round((t1 - t0) / AI_STEP));
+    for (let k = 0; k <= total; k++) {
+      const t = t0 + k * AI_STEP;
       await seekTo(t);
       cx.drawImage(v, 0, 0, tw, th);
-      const cur = cx.getImageData(0, 0, tw, th).data;
-      if (prev) {
-        // 직전 두 점으로 다음 위치 예측 (궤적 연속성)
-        let predict = null;
-        const L = aiTraj.length;
-        if (L >= 2) {
-          const a = aiTraj[L - 2], b = aiTraj[L - 1];
-          predict = { x: (2 * b.x - a.x) / sx, y: (2 * b.y - a.y) / sy };
-        } else if (L === 1) {
-          predict = { x: aiTraj[0].x / sx, y: aiTraj[0].y / sy };
-        }
-        const c = aiFindBall(prev, cur, tw, th, predict);
-        if (c) aiTraj.push({ t, x: c.x * sx, y: c.y * sy, s: Math.min(1, c.sc / 2) });
-      }
-      prev = cur;
-      n++;
-      aiStatus('🔍 공 찾는 중… ' + n + '/' + total + ' · 발견 ' + aiTraj.length + '회');
-      aiSyncCanvas(); aiDraw();
+      caps.push({ t, d: cx.getImageData(0, 0, tw, th).data });
+      aiStatus('📸 장면 수집 ' + (k + 1) + '/' + (total + 1));
     }
+    // 2단계: 프레임별 공 후보 → 3단계: 트랙 연결
+    const frames = [];
+    let shaky = 0;
+    for (let k = 1; k < caps.length; k++) {
+      const r = aiExtractCands(caps[k - 1].d, caps[k].d, caps[k + 1] ? caps[k + 1].d : null, tw, th);
+      if (r.shake) shaky++;
+      frames.push({ t: caps[k].t, cands: r.cands });
+      aiStatus('🔍 공 후보 찾는 중 ' + k + '/' + (caps.length - 1));
+    }
+    const track = aiBuildTracks(frames);
+    const sx = v.videoWidth / tw, sy = v.videoHeight / th;
+    if (track) aiTraj = track.pts.map(p => ({ t: p.t, x: p.x * sx, y: p.y * sy, s: Math.min(1, p.s) }));
+    if (shaky > frames.length * 0.4) aiStatus('⚠️ 손떨림이 심한 영상이에요 — 폰을 고정하고 찍으면 훨씬 잘 잡혀요');
     aiFinish(t0, t1);
-    if (aiTraj.length >= 3) { // 찾았으면 바로 슬로우 재생 (궤적이 따라 그려짐)
-      v.currentTime = t0;
+    if (aiTraj.length >= 4) { // 찾았으면 바로 슬로우 재생 (궤적이 따라 그려짐)
+      v.currentTime = Math.max(t0, aiTraj[0].t - 0.2);
       v.playbackRate = 0.25;
       document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
       v.play();
@@ -7082,7 +7124,7 @@ async function aiAnalyze() {
 }
 function aiFinish(t0, t1) {
   const res = $('ai-result');
-  if (aiTraj.length < 3) {
+  if (aiTraj.length < 4) {
     aiStatus('공을 못 찾았어요 (' + aiTraj.length + '회) — 이럴 땐 0.25× 슬로우와 ◀▶ 프레임 버튼으로 직접 보는 게 제일 정확해요. 다시 시도하려면 공이 크게 보이는 순간에 멈추고 눌러주세요.');
     res.innerHTML = ''; aiDraw(); return;
   }
