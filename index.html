@@ -2465,6 +2465,7 @@ function onAuthChange(session, profile) {
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
   svLoadClubs();     // 🏘️ 서버 클럽 목록으로 교체 (비동기)
+  svLoadKdkHistory(); // 📜 서버 개인전 기록 (비동기)
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
 }
@@ -5618,7 +5619,10 @@ function renderKdk() {
   const st = kdkStandings();
   el.innerHTML = `<div class="card">
     <div class="row"><b>참가 ${kdk.names.length}명 · ${kdk.games.length}게임${kdk.seed ? ' · 시드(고수 추천 번호): ' + kdk.seed : ''}</b>
-      <button class="btn small outline" onclick="if(confirm('개인전을 초기화할까요?')){kdk=null;renderKdk();}">초기화</button></div>
+      <span>
+        <button class="btn small" onclick="kdkSaveServer()">☁️ 결과 저장</button>
+        <button class="btn small outline" onclick="if(confirm('개인전을 초기화할까요? 저장 안 한 점수는 사라져요')){kdk=null;renderKdk();}">초기화</button>
+      </span></div>
     <div class="muted" style="font-size:12px;margin-top:2px">${kdk.names.map((n, i) => kdkLabel(i) + '=' + n).join(' · ')}</div>
   </div>` +
   kdk.games.map((g, gi) => {
@@ -5698,6 +5702,59 @@ function kdkStandings() {
   });
   return st.sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
 }
+let svKdkEvents = []; // 서버에 저장된 개인전 기록
+function kdkMyUid() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
+async function kdkSaveServer() { // ☁️ 완료된 개인전을 서버에 저장 → 클럽 멤버 전원에게 보임
+  if (!kdk) return;
+  if (typeof svLogged !== 'function' || !svLogged()) { toast('로그인하면 클럽 기록으로 저장할 수 있어요'); return; }
+  const undone = kdk.games.filter(g => g.sa === null).length;
+  if (undone) { toast('아직 점수가 안 들어간 게임이 ' + undone + '개 있어요 — 전부 입력 후 저장하세요'); return; }
+  const st = kdkStandings();
+  const results = st.map(r => {
+    const played = kdk.games.filter(g => g.a.includes(r.idx) || g.b.includes(r.idx)).length;
+    return { name: r.name, w: r.w, l: played - r.w, gf: r.gf, ga: r.ga };
+  });
+  try {
+    const { error } = await svClient().from('kdk_events').insert({
+      club: (typeof myClub === 'function' && myClub() && myClub().name) || '',
+      place: '',
+      note: kdk.names.length + '명 · KDK 개인전',
+      names: kdk.names,
+      games: kdk.games,
+      results,
+      created_by: kdkMyUid()
+    });
+    if (error) throw error;
+    toast('☁️ 개인전 결과를 저장했어요 — 클럽 멤버 모두에게 보여요!');
+    kdk = null;
+    renderKdk();
+    svLoadKdkHistory();
+  } catch (e) { toast('저장 실패: ' + ((e && e.message) || e)); }
+}
+async function svLoadKdkHistory() {
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  try {
+    const { data } = await svClient().from('kdk_events')
+      .select('id, played_on, club, place, note, results, created_by')
+      .order('played_on', { ascending: false }).limit(30);
+    if (!data) return;
+    const me = kdkMyUid();
+    svKdkEvents = data.map(ev => ({
+      cid: ev.id, date: ev.played_on, club: ev.club || '클럽', place: ev.place || '',
+      note: ev.note || '', results: ev.results || [], mine: ev.created_by === me
+    }));
+    renderKdkHistory();
+  } catch (e) { /* 서버 기록은 보조 */ }
+}
+async function kdkDelEvent(cid) {
+  if (!confirm('이 개인전 기록을 삭제할까요?')) return;
+  try {
+    const { error } = await svClient().from('kdk_events').delete().eq('id', cid);
+    if (error) throw error;
+    toast('기록을 삭제했어요');
+    svLoadKdkHistory();
+  } catch (e) { toast('삭제 실패: ' + ((e && e.message) || e)); }
+}
 document.addEventListener('DOMContentLoaded', renderKdk);
 // 지난 개인전 결과 (실제 경기 기록 — 종이 점수판에서 옮김)
 const CLUB_KDK_HISTORY = [
@@ -5713,8 +5770,9 @@ const CLUB_KDK_HISTORY = [
 function renderKdkHistory() {
   const el = $('kdk-history');
   if (!el) return;
-  if (!CLUB_KDK_HISTORY.length) { el.innerHTML = '<div class="empty">아직 기록이 없어요</div>'; return; }
-  el.innerHTML = CLUB_KDK_HISTORY.map(ev => {
+  const merged = [...svKdkEvents, ...CLUB_KDK_HISTORY].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  if (!merged.length) { el.innerHTML = '<div class="empty">아직 기록이 없어요 — 위에서 개인전을 치고 ☁️ 결과 저장을 눌러보세요</div>'; return; }
+  el.innerHTML = merged.map(ev => {
     const sorted = [...ev.results].sort((a, b) => b.w - a.w);
     // 공동 순위: 승수가 같으면 같은 순위
     let lastW = null, lastRank = 0;
@@ -5724,7 +5782,7 @@ function renderKdkHistory() {
       return { ...r, rank };
     });
     return `<div class="card">
-      <div class="row"><b>🏘️ ${ev.club} 개인전</b><span class="muted" style="font-size:12px">${ev.date} · ${ev.place}</span></div>
+      <div class="row"><b>🏘️ ${ev.club} 개인전</b><span class="muted" style="font-size:12px">${[ev.date, ev.place].filter(Boolean).join(' · ')}${ev.mine ? ` <a onclick="kdkDelEvent('${ev.cid}')" style="cursor:pointer;font-weight:800">✕</a>` : ''}</span></div>
       <div class="muted" style="font-size:12px;margin-top:2px">${ev.note}</div>
       <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>` +
       rows.map(r => `<tr style="${r.name === ME.name || r.name === '정철' ? 'background:rgba(47,158,95,.12)' : ''}">
