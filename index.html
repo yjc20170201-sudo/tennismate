@@ -745,7 +745,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 
   <!-- ============ 예약 ============ -->
   <div class="tab-content" id="tab-court">
-    <div class="section-title">🏟️ 코트 예약</div>
+    <div class="section-title">🏝️ 제주 공공 테니스장 (실제)</div>
+    <div class="muted" style="margin:-4px 0 8px;font-size:12px">출처: 제주 공공체육시설 예약통합시스템(psf.kr)·서귀포시청. <b>예약은 공식 예약처에서</b> — 앱은 정보와 연결만 해드려요.</div>
+    <div id="jeju-court-list"></div>
+    <div class="section-title" style="margin-top:14px">🏟️ 코트 예약 <span class="badge gray">데모</span></div>
     <div class="card">
       <div class="row" style="margin-bottom:10px">
         <button class="btn small outline" onclick="moveWeek(-1)" id="wk-prev">◀ 이전 주</button>
@@ -1747,6 +1750,38 @@ const REGION_GROUPS = [
   ['전라', ['전주','군산','익산','정읍','목포','여수','순천','광양','나주']],
   ['경상', ['창원','김해','양산','진주','거제','통영','구미','포항','경주','안동','경산']]
 ];
+/* 제주 공공 테니스장 실데이터 (2026-09-02 확인)
+   출처: psf.kr(제주 공공체육시설 예약통합시스템) 테니스장 목록, seogwipo.go.kr 공공체육시설 안내.
+   전화번호는 서귀포시청 페이지에서 확인된 것만 넣음 — 확인 안 된 정보는 비워둠. */
+const JEJU_COURTS = [
+  { name: '한림 옹포천 테니스장', region: '한림읍', addr: '제주시 한림읍 한림상로 36', book: '전화문의', tel: null },
+  { name: '애월체육공원 테니스장', region: '애월읍', addr: '제주시 애월읍 일주서로 6349 (애월체육관)', book: '온라인예약', tel: null },
+  { name: '제주경찰청 어울림 테니스장', region: '제주시', addr: '제주시 수목원서길 37 (노형동)', book: '온라인예약', tel: null },
+  { name: '성산 국민체육센터 테니스장', region: '성산읍', addr: '서귀포시 성산읍 일주동로 4024', book: '온라인예약', tel: '064-784-2274' },
+  { name: '표선생활체육관 테니스장', region: '표선면', addr: '서귀포시 표선면 한마음초등로 399', book: '온라인예약', tel: '064-760-3657' },
+  { name: '제주공천포 전지훈련센터 테니스장', region: '남원읍', addr: '서귀포시 신례로 96', book: '전화문의', tel: '064-760-3665' },
+  { name: '서귀포 테니스장', region: '서귀포시', addr: '서귀포시 동홍로99번길 36', book: '내부공사로 예약불가', tel: '064-763-2662', closed: true },
+  { name: '제주종합경기장 연정정구장', region: '제주시', addr: '제주시 서광로2길 24', book: '내부공사로 예약불가', tel: null, closed: true },
+  { name: '제주시 생활체육공원 테니스장', region: '제주시', addr: '제주시 와흘전1길 32 (회천동)', book: '내부공사로 예약불가', tel: null, closed: true },
+];
+const JEJU_BOOKING_HUB = 'https://psf.kr/sports/tennis';
+function renderJejuCourts() {
+  const el = $('jeju-court-list');
+  if (!el) return;
+  el.innerHTML = JEJU_COURTS.map(c => `<div class="card" style="${c.closed ? 'opacity:.6' : ''}">
+    <div class="row">
+      <div><h3 style="font-size:14.5px">${c.name} <span class="badge ${c.closed ? 'gray' : ''}">${c.region}</span></h3>
+      <div class="muted" style="font-size:12px">${c.addr} · ${c.book}</div></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      ${c.closed ? '<span class="tag-btn" style="opacity:.7">🚧 공사중</span>'
+        : `<a class="tag-btn" href="${JEJU_BOOKING_HUB}" target="_blank" rel="noopener">🔗 공식 예약처</a>`}
+      ${c.tel ? `<a class="tag-btn" href="tel:${c.tel}">📞 ${c.tel}</a>` : ''}
+      <a class="tag-btn" href="https://map.kakao.com/link/search/${encodeURIComponent(c.name)}" target="_blank" rel="noopener">🗺️ 지도</a>
+    </div>
+  </div>`).join('');
+}
+document.addEventListener('DOMContentLoaded', renderJejuCourts);
 function regionOptionsHtml(sel) {
   return REGION_GROUPS.map(g => `<optgroup label="${g[0]}">${g[1].map(r => `<option ${r === sel ? 'selected' : ''}>${r}</option>`).join('')}</optgroup>`).join('');
 }
