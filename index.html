@@ -826,12 +826,21 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div class="section-title" style="margin-top:14px">🏆 클럽 랭킹 — 누적 포인트</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">개인전·청백전 결과가 자동 합산돼요. <b>참가 +10pt · 게임 승리 +10pt</b> (동점이면 승수 → 득실차)</div>
     <div id="club-rank"></div>
+    <div class="card" style="margin-top:8px">
+      <div class="row">
+        <span class="muted" style="font-size:12.5px;flex:1">🎥 클럽 경기 중 <b>인아웃 시비</b>가 나면 — 촬영 모드를 켜두고 시비 순간 ✂️ 저장 → 🚨 슬로우·AI 판독</span>
+        <button class="btn small" onclick="clubCamOpen()">📹 판독 카메라</button>
+      </div>
+    </div>
     <div class="section-title" style="margin-top:14px">🎮 클럽 미니게임 — 개인전 (KDK)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">번호 뽑고 정해진 조합으로 파트너를 바꿔가며 4게임씩 — 서부테니스장 보드의 대진표 그대로예요. 승 → 득실차 → 득점 순으로 개인 순위!</div>
     <div id="kdk-area"></div>
     <div class="section-title" style="margin-top:14px">⚔️ 클럽 미니게임 — 청백전</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">멤버를 청·백 두 팀으로 나눠 복식 여러 판 — 팀 합산 승수로 승부!</div>
     <div id="cw-area"></div>
+    <div class="section-title" style="margin-top:14px">🎾 클럽 미니게임 — 단식 대전</div>
+    <div class="muted" style="margin:-4px 0 8px;font-size:12px">1:1 단식 여러 판 — 승수 → 득실차로 순위! 결과는 클럽 랭킹 포인트에도 합산돼요.</div>
+    <div id="ss-area"></div>
     <div class="section-title" style="margin-top:14px">📜 지난 미니게임 기록</div>
     <div id="kdk-history"></div>
   </div>
@@ -1467,7 +1476,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <span class="muted" id="lvcam-status" style="font-size:12px;margin-left:6px"></span>
       <div id="lvcam-view" style="display:none;margin-top:6px">
         <video id="lvcam-prev" autoplay muted playsinline style="width:100%;max-height:150px;object-fit:cover;border-radius:10px;background:#000"></video>
-        <div class="muted" style="font-size:11.5px;margin-top:3px">폰을 코트가 보이게 세워두세요. 전체 영상은 저장되지 않고, <b>점수를 누를 때마다 직전 랠리만</b> 클립으로 남아요.</div>
+        <div class="muted" style="font-size:11.5px;margin-top:3px">폰을 코트가 보이게 세워두세요. 전체 영상은 저장되지 않고, <b>점수를 누를 때마다 직전 랠리만</b> 클립으로 남아요. 점수판 없이 쓸 땐 ✂️로 직접 저장!</div>
+        <button type="button" class="btn small outline full" style="margin-top:6px" onclick="lvCamCut()">✂️ 방금 장면 저장 (점수판 없이)</button>
       </div>
       <div id="lvcam-clips" style="margin-top:6px"></div>
       <video id="lvcam-player" controls playsinline style="display:none;width:100%;border-radius:10px;background:#000;margin-top:6px"></video>
@@ -2582,6 +2592,7 @@ async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선�
     // 미니게임 참가자 목록도 실제 멤버로 갱신 (진행 중인 판은 건드리지 않음)
     try { if (typeof kdk !== 'undefined' && !kdk) renderKdk(); } catch (e) {}
     try { if (typeof cw !== 'undefined' && !cw) renderCw(); } catch (e) {}
+    try { if (typeof ss !== 'undefined' && !ss) renderSs(); } catch (e) {}
     try { renderKdkHistory(); } catch (e) {}
     toast(real.length ? '👥 실전 모드 — 가입 멤버 ' + real.length + '명만 표시해요' : '👥 실전 모드 — 아직 다른 가입 멤버가 없어요. 초대해 보세요!');
   } catch (e) { /* 서버 목록은 보조 — 실패해도 데모 목록으로 동작 */ }
@@ -4270,6 +4281,11 @@ function backToLive() {
   openModal('live');
   renderLive();
 }
+function lvCamCut() { // ✂️ 점수 입력 없이 현재 구간을 클립으로 (클럽 인아웃 시비용)
+  if (!lvCam || !lvCam.stream) { toast('먼저 📹 촬영 모드를 켜주세요'); return; }
+  lvCamClip('✂️ 판독용 장면');
+  toast('✂️ 저장! 아래 목록에서 🚨 슬로우로 확인하거나 🤖 AI 판독하세요');
+}
 function lvCamDel(i) {
   if (!lvCam || !lvCam.clips[i]) return;
   URL.revokeObjectURL(lvCam.clips[i].url);
@@ -5875,6 +5891,138 @@ async function cwSave() {
   } catch (e) { toast('저장 실패: ' + ((e && e.message) || e)); }
 }
 document.addEventListener('DOMContentLoaded', renderCw);
+// ===== 클럽 미니게임: 단식 대전 =====
+let ss = null; // { names: [], games: [{p1, p2, s1, s2}] }
+function renderSs() {
+  const el = $('ss-area');
+  if (!el) return;
+  if (!ss) {
+    const all = [ME.name, ...players.map(p => p.name)];
+    el.innerHTML = `<div class="card">
+      <div class="muted" style="margin-bottom:6px">참가자 선택 (2명 이상)</div>
+      <div id="ss-players">` +
+      all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
+        <input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''}> ${n}${n === ME.name ? ' (나)' : ''}</label>`).join('') +
+      `</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <input type="text" id="ss-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')ssAdd()">
+        <button type="button" class="btn small outline" onclick="ssAdd()">+ 추가</button>
+      </div>
+      <button class="btn full" style="margin-top:8px" onclick="ssStart()">🎾 단식 대전 시작</button>
+    </div>`;
+    return;
+  }
+  const st = ssStandings();
+  const opt = (sel) => '<option value="">선수</option>' + ss.names.map(n => `<option ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+  el.innerHTML = `<div class="card">
+    <div class="row"><b>🎾 단식 대전 · ${ss.names.length}명</b>
+      <span>
+        <button class="btn small" onclick="ssSave()">☁️ 결과 저장</button>
+        <button class="btn small outline" onclick="if(confirm('단식 대전을 초기화할까요? 저장 안 한 점수는 사라져요')){ss=null;renderSs();}">초기화</button>
+      </span></div>
+  </div>` +
+  ss.games.map((g, gi) => {
+    const done = g.s1 !== null;
+    return `<div class="card" style="padding:9px 12px">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="badge ${done ? '' : 'gray'}">G${gi + 1}</span>
+        <select onchange="ssSetP(${gi},0,this.value)" style="flex:1;min-width:80px">${opt(g.p1)}</select>
+        <input type="number" id="ss-s1-${gi}" min="0" max="9" value="${g.s1 === null ? '' : g.s1}" style="width:42px" placeholder="0">
+        <b>:</b>
+        <input type="number" id="ss-s2-${gi}" min="0" max="9" value="${g.s2 === null ? '' : g.s2}" style="width:42px" placeholder="0">
+        <select onchange="ssSetP(${gi},1,this.value)" style="flex:1;min-width:80px">${opt(g.p2)}</select>
+        <button type="button" class="tag-btn" onclick="ssScore(${gi})">${done ? '수정' : '저장'}</button>
+      </div>
+    </div>`;
+  }).join('') +
+  `<button class="btn small outline full" style="margin-top:4px" onclick="ssAddGame()">+ 단식 게임 추가</button>` +
+  (st.some(r => r.w + r.l > 0) ? `<div class="card"><b>🏆 순위</b>
+    <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th><th>득실</th></tr></thead><tbody>` +
+    st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${r.name}</td><td>${r.w}</td><td>${r.l}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
+  `</tbody></table></div>` : '');
+}
+function ssAdd() {
+  const inp = $('ss-add');
+  const name = (inp.value || '').replace(/["'<>]/g, '').trim();
+  if (!name) return;
+  if ([...document.querySelectorAll('#ss-players input')].some(c => c.value === name)) { toast('이미 목록에 있어요'); inp.value = ''; return; }
+  const box = $('ss-players');
+  const label = document.createElement('label');
+  label.style.cssText = 'display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.value = name; cb.checked = true;
+  label.appendChild(cb);
+  label.appendChild(document.createTextNode(' ' + name));
+  box.appendChild(label);
+  inp.value = '';
+}
+function ssStart() {
+  const names = [...document.querySelectorAll('#ss-players input:checked')].map(c => c.value);
+  if (names.length < 2) { toast('⚠️ 단식 대전은 2명 이상이어야 해요'); return; }
+  ss = { names, games: [{ p1: null, p2: null, s1: null, s2: null }] };
+  renderSs();
+  toast('🎾 단식 대전 시작! 게임마다 두 선수와 점수를 넣으세요');
+}
+function ssAddGame() {
+  ss.games.push({ p1: null, p2: null, s1: null, s2: null });
+  renderSs();
+}
+function ssSetP(gi, slot, val) {
+  ss.games[gi][slot === 0 ? 'p1' : 'p2'] = val || null;
+}
+function ssScore(gi) {
+  const g = ss.games[gi];
+  if (!g.p1 || !g.p2) { toast('두 선수를 먼저 골라주세요'); return; }
+  if (g.p1 === g.p2) { toast('같은 선수끼리는 칠 수 없어요'); return; }
+  const s1 = parseInt($('ss-s1-' + gi).value), s2 = parseInt($('ss-s2-' + gi).value);
+  if (isNaN(s1) || isNaN(s2)) { toast('점수를 입력해 주세요'); return; }
+  if (s1 === s2) { toast('무승부는 없어요 — 승부를 정해주세요'); return; }
+  g.s1 = s1; g.s2 = s2;
+  renderSs();
+}
+function ssStandings() {
+  const stat = {};
+  ss.names.forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
+  ss.games.forEach(g => {
+    if (g.s1 === null || !g.p1 || !g.p2) return;
+    if (!stat[g.p1] || !stat[g.p2]) return;
+    stat[g.p1].gf += g.s1; stat[g.p1].ga += g.s2;
+    stat[g.p2].gf += g.s2; stat[g.p2].ga += g.s1;
+    if (g.s1 > g.s2) { stat[g.p1].w++; stat[g.p2].l++; } else { stat[g.p2].w++; stat[g.p1].l++; }
+  });
+  return Object.values(stat).sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+}
+async function ssSave() {
+  if (!ss) return;
+  if (typeof svLogged !== 'function' || !svLogged()) { toast('로그인하면 클럽 기록으로 저장할 수 있어요'); return; }
+  const played = ss.games.filter(g => g.s1 !== null);
+  if (!played.length) { toast('저장할 게임이 없어요'); return; }
+  const undone = ss.games.filter(g => g.s1 === null).length;
+  if (undone) { toast('아직 점수가 안 들어간 게임이 ' + undone + '개 있어요 — 입력하거나 초기화 후 저장하세요'); return; }
+  const idx = n => ss.names.indexOf(n);
+  try {
+    const { error } = await svClient().from('kdk_events').insert({
+      club: (typeof myClub === 'function' && myClub() && myClub().name) || '',
+      place: '',
+      note: ss.names.length + '명 · 단식 대전',
+      names: ss.names,
+      games: ss.games.map(g => ({ a: [idx(g.p1)], b: [idx(g.p2)], sa: g.s1, sb: g.s2 })),
+      results: ssStandings(),
+      created_by: kdkMyUid()
+    });
+    if (error) throw error;
+    toast('☁️ 단식 대전 결과 저장! 클럽 랭킹에 합산됐어요');
+    ss = null;
+    renderSs();
+    svLoadKdkHistory();
+  } catch (e) { toast('저장 실패: ' + ((e && e.message) || e)); }
+}
+document.addEventListener('DOMContentLoaded', renderSs);
+// 클럽 판독 카메라: 경기 시작 없이도 촬영 모드 + ✂️ 수동 저장으로 인아웃 판독
+function clubCamOpen() {
+  openLive();
+  toast('📹 촬영 모드를 켜두세요 — 시비 나면 ✂️ 방금 장면 저장 → 🚨 판독!');
+}
 let svKdkEvents = []; // 서버에 저장된 개인전 기록
 function kdkMyUid() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
 async function kdkSaveServer() { // ☁️ 완료된 개인전을 서버에 저장 → 클럽 멤버 전원에게 보임
@@ -5956,7 +6104,7 @@ function renderKdkHistory() {
       return { ...r, rank };
     });
     return `<div class="card">
-      <div class="row"><b>${(ev.note || '').includes('청백전') ? '⚔️ ' + ev.club + ' 청백전' : '🏘️ ' + ev.club + ' 개인전'}</b><span class="muted" style="font-size:12px">${[ev.date, ev.place].filter(Boolean).join(' · ')}${ev.mine ? ` <a onclick="kdkDelEvent('${ev.cid}')" style="cursor:pointer;font-weight:800">✕</a>` : ''}</span></div>
+      <div class="row"><b>${(ev.note || '').includes('청백전') ? '⚔️ ' + ev.club + ' 청백전' : (ev.note || '').includes('단식') ? '🎾 ' + ev.club + ' 단식 대전' : '🏘️ ' + ev.club + ' 개인전'}</b><span class="muted" style="font-size:12px">${[ev.date, ev.place].filter(Boolean).join(' · ')}${ev.mine ? ` <a onclick="kdkDelEvent('${ev.cid}')" style="cursor:pointer;font-weight:800">✕</a>` : ''}</span></div>
       <div class="muted" style="font-size:12px;margin-top:2px">${ev.note}</div>
       <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>` +
       rows.map(r => `<tr style="${r.name === ME.name || r.name === '정철' ? 'background:rgba(47,158,95,.12)' : ''}">
