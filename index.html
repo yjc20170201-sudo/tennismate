@@ -6545,7 +6545,7 @@ function aiFinish(t0, t1) {
     }
   }
   res.innerHTML = html;
-  aiStatus('완료 — 궤적이 영상 위에 표시됐어요');
+  aiStatus('완료 — ▶ 재생을 누르면 공 이동 경로가 혜성 꼬리처럼 따라 그려져요 (정지하면 전체 경로)');
   aiSyncCanvas(); aiDraw();
 }
 // ── 오버레이 그리기 ──────────────────────────
@@ -6592,7 +6592,51 @@ function aiDraw() {
     });
   }
 }
+// 재생 중 궤적 따라그리기 — 공 뒤로 혜성 꼬리(최근 1.2초, 점점 옅어짐), 정지하면 전체 경로
+let aiTrailRAF = null;
+function aiTrailDraw() {
+  if (typeof poseOn !== 'undefined' && poseOn) return; // 폼 분석 오버레이와 충돌 방지
+  const v = $('vj-video'), c = $('ai-canvas');
+  if (!v || !c || !aiTraj.length || !v.videoWidth) return;
+  aiSyncCanvas();
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const fit = aiFitRect(v.videoWidth, v.videoHeight, c.width, c.height);
+  if (!fit) return;
+  const P = (x, y) => [fit.x + x * fit.sc, fit.y + y * fit.sc];
+  const now = v.currentTime;
+  const TRAIL = 1.2;
+  const pts = aiTraj.filter(p => p.t <= now + 0.02);
+  for (let i = 1; i < pts.length; i++) {
+    const age = now - pts[i].t;
+    if (age > TRAIL) continue;
+    const a = Math.max(0.15, 1 - age / TRAIL);
+    ctx.strokeStyle = 'rgba(46,204,113,' + a.toFixed(2) + ')';
+    ctx.lineWidth = 2 + 3 * a;
+    const p1 = P(pts[i - 1].x, pts[i - 1].y), p2 = P(pts[i].x, pts[i].y);
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+  }
+  if (pts.length) {
+    const last = pts[pts.length - 1];
+    if (now - last.t < 0.5) { const q = P(last.x, last.y); ctx.fillStyle = '#ffe14d'; ctx.beginPath(); ctx.arc(q[0], q[1], 6, 0, 7); ctx.fill(); }
+  }
+  const bi = aiBounceIdx(aiTraj.map(p => p.y));
+  if (bi >= 0 && aiTraj[bi].t <= now) {
+    const b = P(aiTraj[bi].x, aiTraj[bi].y);
+    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(b[0], b[1], 9, 0, 7); ctx.stroke();
+  }
+}
+function aiTrailLoop() {
+  aiTrailDraw();
+  aiTrailRAF = requestAnimationFrame(aiTrailLoop);
+}
+function aiTrailStop() {
+  if (aiTrailRAF) { cancelAnimationFrame(aiTrailRAF); aiTrailRAF = null; }
+  if (aiTraj.length) { aiSyncCanvas(); aiDraw(); } // 정지 시 전체 경로 표시
+}
 function aiClear() {
+  aiTrailStop();
   aiTraj = []; aiCorners = []; aiH = null; aiPicking = false;
   const c = $('ai-canvas');
   if (c) { c.classList.remove('picking'); const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); }
@@ -6602,6 +6646,12 @@ function aiClear() {
 document.addEventListener('DOMContentLoaded', () => {
   const c = $('ai-canvas');
   if (c) c.addEventListener('click', aiCanvasClick);
+  const v = $('vj-video');
+  if (v) { // 궤적이 있으면 재생 중 자동으로 따라그리기
+    v.addEventListener('play', () => { if (aiTraj.length && !aiTrailRAF) aiTrailLoop(); });
+    v.addEventListener('pause', aiTrailStop);
+    v.addEventListener('ended', aiTrailStop);
+  }
 });
 
 // ===== 폼 분석 — 포즈 스켈레톤·각도 측정 (MoveNet, 베타) =====
