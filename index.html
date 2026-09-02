@@ -826,7 +826,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div class="section-title" style="margin-top:14px">🎮 클럽 미니게임 — 개인전 (KDK)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">번호 뽑고 정해진 조합으로 파트너를 바꿔가며 4게임씩 — 서부테니스장 보드의 대진표 그대로예요. 승 → 득실차 → 득점 순으로 개인 순위!</div>
     <div id="kdk-area"></div>
-    <div class="section-title" style="margin-top:14px">📜 지난 개인전 기록</div>
+    <div class="section-title" style="margin-top:14px">⚔️ 클럽 미니게임 — 청백전</div>
+    <div class="muted" style="margin:-4px 0 8px;font-size:12px">멤버를 청·백 두 팀으로 나눠 복식 여러 판 — 팀 합산 승수로 승부!</div>
+    <div id="cw-area"></div>
+    <div class="section-title" style="margin-top:14px">📜 지난 미니게임 기록</div>
     <div id="kdk-history"></div>
   </div>
 
@@ -5702,6 +5705,169 @@ function kdkStandings() {
   });
   return st.sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
 }
+// ===== 클럽 미니게임: 청백전 =====
+let cw = null; // { stage:'team'|'play', blue:[], white:[], games:[{bp:[n,n], wp:[n,n], sb, sw}] }
+function renderCw() {
+  const el = $('cw-area');
+  if (!el) return;
+  if (!cw) { // 참가자 선택
+    const all = [ME.name, ...players.map(p => p.name)];
+    el.innerHTML = `<div class="card">
+      <div class="muted" style="margin-bottom:6px">참가자 선택 (4명 이상) — 선택 순서대로 청·백 번갈아 배정돼요 (나중에 옮길 수 있어요)</div>
+      <div id="cw-players">` +
+      all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
+        <input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''}> ${n}${n === ME.name ? ' (나)' : ''}</label>`).join('') +
+      `</div>
+      <div class="row" style="gap:8px;margin-top:8px">
+        <input type="text" id="cw-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')cwAdd()">
+        <button type="button" class="btn small outline" onclick="cwAdd()">+ 추가</button>
+      </div>
+      <button class="btn full" style="margin-top:8px" onclick="cwSplit()">🔵⚪ 팀 나누기</button>
+    </div>`;
+    return;
+  }
+  if (cw.stage === 'team') { // 팀 배정 화면 — 이름 탭 = 반대팀으로 이동
+    const chip = (n, team) => `<button type="button" class="tag-btn" style="margin:2px;${team === 'b' ? 'background:#2d5fd0;color:#fff' : 'background:#eee;color:#333'}" onclick="cwMove('${n}')">${n}</button>`;
+    el.innerHTML = `<div class="card">
+      <div class="muted" style="font-size:12px">이름을 탭하면 반대팀으로 이동해요</div>
+      <div style="margin-top:8px"><b>🔵 청팀 (${cw.blue.length})</b><div>${cw.blue.map(n => chip(n, 'b')).join('') || '<span class="muted">없음</span>'}</div></div>
+      <div style="margin-top:8px"><b>⚪ 백팀 (${cw.white.length})</b><div>${cw.white.map(n => chip(n, 'w')).join('') || '<span class="muted">없음</span>'}</div></div>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn small outline" style="flex:1" onclick="cw=null;renderCw()">← 다시 선택</button>
+        <button class="btn small" style="flex:1" onclick="cwStart()">⚔️ 청백전 시작</button>
+      </div>
+    </div>`;
+    return;
+  }
+  // 진행 화면
+  const t = cwTotals();
+  const opt = (list, sel) => '<option value="">선수</option>' + list.map(n => `<option ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+  el.innerHTML = `<div class="card" style="text-align:center">
+    <div class="row"><b>⚔️ 청백전</b>
+      <span>
+        <button class="btn small" onclick="cwSave()">☁️ 결과 저장</button>
+        <button class="btn small outline" onclick="if(confirm('청백전을 초기화할까요? 저장 안 한 점수는 사라져요')){cw=null;renderCw();}">초기화</button>
+      </span></div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:8px">
+      <div><div style="font-size:13px;font-weight:800;color:#2d5fd0">🔵 청팀</div><div style="font-size:34px;font-weight:800">${t.bw}</div></div>
+      <div style="font-weight:800;color:var(--muted)">:</div>
+      <div><div style="font-size:13px;font-weight:800">⚪ 백팀</div><div style="font-size:34px;font-weight:800">${t.ww}</div></div>
+    </div>
+    <div class="muted" style="font-size:12px">게임 득실 청 ${t.bg} : ${t.wg} 백${t.bw !== t.ww ? ' · 현재 ' + (t.bw > t.ww ? '🔵 청팀' : '⚪ 백팀') + ' 리드!' : ''}</div>
+  </div>` +
+  cw.games.map((g, gi) => {
+    const done = g.sb !== null;
+    return `<div class="card" style="padding:9px 12px">
+      <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        <span class="badge ${done ? '' : 'gray'}">G${gi + 1}</span>
+        <select onchange="cwSetP(${gi},'bp',0,this.value)" style="flex:1;min-width:70px">${opt(cw.blue, g.bp[0])}</select>
+        <select onchange="cwSetP(${gi},'bp',1,this.value)" style="flex:1;min-width:70px">${opt(cw.blue, g.bp[1])}</select>
+        <input type="number" id="cw-sb-${gi}" min="0" max="9" value="${g.sb === null ? '' : g.sb}" style="width:40px" placeholder="0">
+        <b>:</b>
+        <input type="number" id="cw-sw-${gi}" min="0" max="9" value="${g.sw === null ? '' : g.sw}" style="width:40px" placeholder="0">
+        <select onchange="cwSetP(${gi},'wp',0,this.value)" style="flex:1;min-width:70px">${opt(cw.white, g.wp[0])}</select>
+        <select onchange="cwSetP(${gi},'wp',1,this.value)" style="flex:1;min-width:70px">${opt(cw.white, g.wp[1])}</select>
+        <button type="button" class="tag-btn" onclick="cwScore(${gi})">${done ? '수정' : '저장'}</button>
+      </div>
+    </div>`;
+  }).join('') +
+  `<button class="btn small outline full" style="margin-top:4px" onclick="cwAddGame()">+ 게임 추가 (🔵 두 명 vs ⚪ 두 명)</button>`;
+}
+function cwAdd() {
+  const inp = $('cw-add');
+  const name = (inp.value || '').replace(/["'<>]/g, '').trim();
+  if (!name) return;
+  if ([...document.querySelectorAll('#cw-players input')].some(c => c.value === name)) { toast('이미 목록에 있어요'); inp.value = ''; return; }
+  const box = $('cw-players');
+  const label = document.createElement('label');
+  label.style.cssText = 'display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer';
+  const cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.value = name; cb.checked = true;
+  label.appendChild(cb);
+  label.appendChild(document.createTextNode(' ' + name));
+  box.appendChild(label);
+  inp.value = '';
+}
+function cwSplit() {
+  const names = [...document.querySelectorAll('#cw-players input:checked')].map(c => c.value);
+  if (names.length < 4) { toast('⚠️ 청백전은 4명 이상이어야 해요'); return; }
+  cw = { stage: 'team', blue: names.filter((n, i) => i % 2 === 0), white: names.filter((n, i) => i % 2 === 1), games: [] };
+  renderCw();
+}
+function cwMove(name) {
+  if (!cw || cw.stage !== 'team') return;
+  if (cw.blue.includes(name)) { cw.blue = cw.blue.filter(n => n !== name); cw.white.push(name); }
+  else { cw.white = cw.white.filter(n => n !== name); cw.blue.push(name); }
+  renderCw();
+}
+function cwStart() {
+  if (cw.blue.length < 2 || cw.white.length < 2) { toast('⚠️ 각 팀에 2명 이상 있어야 해요'); return; }
+  cw.stage = 'play';
+  cw.games = [{ bp: [null, null], wp: [null, null], sb: null, sw: null }];
+  renderCw();
+  toast('⚔️ 청백전 시작! 게임마다 뛰는 선수와 점수를 넣으세요');
+}
+function cwAddGame() {
+  cw.games.push({ bp: [null, null], wp: [null, null], sb: null, sw: null });
+  renderCw();
+}
+function cwSetP(gi, side, slot, val) {
+  cw.games[gi][side][slot] = val || null;
+}
+function cwScore(gi) {
+  const g = cw.games[gi];
+  if (!g.bp[0] || !g.bp[1] || !g.wp[0] || !g.wp[1]) { toast('선수 4명을 먼저 골라주세요'); return; }
+  if (g.bp[0] === g.bp[1] || g.wp[0] === g.wp[1]) { toast('같은 선수를 두 번 고를 수 없어요'); return; }
+  const sb = parseInt($('cw-sb-' + gi).value), sw = parseInt($('cw-sw-' + gi).value);
+  if (isNaN(sb) || isNaN(sw)) { toast('점수를 입력해 주세요'); return; }
+  if (sb === sw) { toast('무승부는 없어요 — 승부를 정해주세요'); return; }
+  g.sb = sb; g.sw = sw;
+  renderCw();
+}
+function cwTotals() {
+  let bw = 0, ww = 0, bg = 0, wg = 0;
+  cw.games.forEach(g => {
+    if (g.sb === null) return;
+    bg += g.sb; wg += g.sw;
+    if (g.sb > g.sw) bw++; else ww++;
+  });
+  return { bw, ww, bg, wg };
+}
+async function cwSave() {
+  if (!cw || cw.stage !== 'play') return;
+  if (typeof svLogged !== 'function' || !svLogged()) { toast('로그인하면 클럽 기록으로 저장할 수 있어요'); return; }
+  const undone = cw.games.filter(g => g.sb === null).length;
+  if (undone) { toast('아직 점수가 안 들어간 게임이 ' + undone + '개 있어요'); return; }
+  if (!cw.games.length) { toast('저장할 게임이 없어요'); return; }
+  const t = cwTotals();
+  const names = [...cw.blue, ...cw.white];
+  const idx = n => names.indexOf(n);
+  const stat = {};
+  names.forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
+  cw.games.forEach(g => {
+    const bWin = g.sb > g.sw;
+    g.bp.forEach(n => { stat[n].gf += g.sb; stat[n].ga += g.sw; bWin ? stat[n].w++ : stat[n].l++; });
+    g.wp.forEach(n => { stat[n].gf += g.sw; stat[n].ga += g.sb; bWin ? stat[n].l++ : stat[n].w++; });
+  });
+  const winner = t.bw > t.ww ? '🔵 청팀 승' : t.ww > t.bw ? '⚪ 백팀 승' : '무승부';
+  try {
+    const { error } = await svClient().from('kdk_events').insert({
+      club: (typeof myClub === 'function' && myClub() && myClub().name) || '',
+      place: '',
+      note: '청백전 · 청 ' + t.bw + ':' + t.ww + ' 백 · ' + winner,
+      names,
+      games: cw.games.map(g => ({ a: g.bp.map(idx), b: g.wp.map(idx), sa: g.sb, sb: g.sw })),
+      results: Object.values(stat),
+      created_by: kdkMyUid()
+    });
+    if (error) throw error;
+    toast('☁️ 청백전 결과 저장! ' + winner + ' — 클럽 멤버 모두에게 보여요');
+    cw = null;
+    renderCw();
+    svLoadKdkHistory();
+  } catch (e) { toast('저장 실패: ' + ((e && e.message) || e)); }
+}
+document.addEventListener('DOMContentLoaded', renderCw);
 let svKdkEvents = []; // 서버에 저장된 개인전 기록
 function kdkMyUid() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
 async function kdkSaveServer() { // ☁️ 완료된 개인전을 서버에 저장 → 클럽 멤버 전원에게 보임
@@ -5782,7 +5948,7 @@ function renderKdkHistory() {
       return { ...r, rank };
     });
     return `<div class="card">
-      <div class="row"><b>🏘️ ${ev.club} 개인전</b><span class="muted" style="font-size:12px">${[ev.date, ev.place].filter(Boolean).join(' · ')}${ev.mine ? ` <a onclick="kdkDelEvent('${ev.cid}')" style="cursor:pointer;font-weight:800">✕</a>` : ''}</span></div>
+      <div class="row"><b>${(ev.note || '').includes('청백전') ? '⚔️ ' + ev.club + ' 청백전' : '🏘️ ' + ev.club + ' 개인전'}</b><span class="muted" style="font-size:12px">${[ev.date, ev.place].filter(Boolean).join(' · ')}${ev.mine ? ` <a onclick="kdkDelEvent('${ev.cid}')" style="cursor:pointer;font-weight:800">✕</a>` : ''}</span></div>
       <div class="muted" style="font-size:12px;margin-top:2px">${ev.note}</div>
       <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>` +
       rows.map(r => `<tr style="${r.name === ME.name || r.name === '정철' ? 'background:rgba(47,158,95,.12)' : ''}">
