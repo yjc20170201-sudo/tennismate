@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📟 테니스메이트 리모컨</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body { background: #10231a; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; }
+  /* 원형 워치 화면 대비: 가장자리 여백 */
+  #join { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; padding: 18%; text-align: center; }
+  #join input { width: 100%; max-width: 140px; font-size: 22px; text-align: center; padding: 8px; border-radius: 10px; border: none; text-transform: uppercase; }
+  #join button, .full-btn { border: none; border-radius: 14px; font-weight: 800; cursor: pointer; }
+  #join button { background: #2f9e5f; color: #fff; font-size: 16px; padding: 10px 22px; }
+  #play { display: none; flex-direction: column; height: 100%; padding: 6% 10%; gap: 6px; }
+  #score { text-align: center; font-size: 13px; line-height: 1.4; padding-top: 4%; }
+  #score b { font-size: 22px; }
+  .full-btn { flex: 1; font-size: 20px; color: #fff; }
+  #btn-us { background: #2f9e5f; }
+  #btn-them { background: #b03a3a; }
+  #foot { display: flex; gap: 6px; padding-bottom: 5%; }
+  #foot button { flex: 1; background: rgba(255,255,255,.14); color: #fff; border: none; border-radius: 10px; padding: 8px; font-size: 12px; }
+  #msg { font-size: 11px; text-align: center; opacity: .75; min-height: 14px; }
+</style>
+</head>
+<body>
+<div id="join">
+  <div style="font-size:26px">📟</div>
+  <div style="font-size:14px;font-weight:800">테니스메이트 리모컨</div>
+  <input id="code" maxlength="4" placeholder="코드 4자리" autocapitalize="characters">
+  <button onclick="joinRoom()">연결</button>
+  <div id="msg">점수판 폰의 "📟 리모컨 연결" 코드를 입력하세요</div>
+</div>
+<div id="play">
+  <div id="score"><span id="names">연결됨 — 점수판에서 경기를 시작하세요</span><br><b id="pts">— : —</b></div>
+  <button class="full-btn" id="btn-us" onclick="sendPoint(0)">🟢 우리 포인트</button>
+  <button class="full-btn" id="btn-them" onclick="sendPoint(1)">🔴 상대 포인트</button>
+  <div id="foot">
+    <button onclick="sendUndo()">↩️ 되돌리기</button>
+    <button onclick="location.reload()">연결 끊기</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+var SB_URL = 'https://ssibxgplavavsqemqrej.supabase.co';
+var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaWJ4Z3BsYXZhdnNxZW1xcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDkwNzAsImV4cCI6MjEwMzY4NTA3MH0.SU5gZ8lIT8qdQNF0t8EnYRpD_GA7QFF3KohOsNlvc6U';
+var chan = null;
+function joinRoom() {
+  var code = (document.getElementById('code').value || '').trim().toUpperCase();
+  if (code.length !== 4) { document.getElementById('msg').textContent = '코드 4자리를 입력하세요'; return; }
+  document.getElementById('msg').textContent = '연결 중…';
+  try {
+    var client = (window.__testClient) || window.supabase.createClient(SB_URL, SB_KEY);
+    chan = client.channel('score:' + code, { config: { broadcast: { self: false } } });
+    chan.on('broadcast', { event: 'state' }, function (p) { onState(p.payload); });
+    chan.subscribe(function (st) {
+      if (st === 'SUBSCRIBED') {
+        document.getElementById('join').style.display = 'none';
+        document.getElementById('play').style.display = 'flex';
+        chan.send({ type: 'broadcast', event: 'hello', payload: {} });
+      } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') {
+        document.getElementById('msg').textContent = '연결 실패 — 인터넷을 확인하고 다시 시도하세요';
+      }
+    });
+  } catch (e) { document.getElementById('msg').textContent = '오류: ' + (e.message || e); }
+}
+function onState(p) {
+  if (!p) return;
+  document.getElementById('names').textContent = p.n0 + ' vs ' + p.n1 + (p.sets ? ' · 세트 ' + p.sets : '') + (p.done ? ' · 🏁 종료' : '');
+  document.getElementById('pts').textContent = p.d0 + ' : ' + p.d1;
+  document.getElementById('btn-us').textContent = '🟢 ' + p.n0;
+  document.getElementById('btn-them').textContent = '🔴 ' + p.n1;
+}
+function sendPoint(side) {
+  if (!chan) return;
+  chan.send({ type: 'broadcast', event: 'point', payload: { side: side } });
+  if (navigator.vibrate) navigator.vibrate(25);
+}
+function sendUndo() {
+  if (!chan) return;
+  chan.send({ type: 'broadcast', event: 'undo', payload: {} });
+  if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
+}
+document.getElementById('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinRoom(); });
+</script>
+</body>
+</html>
