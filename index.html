@@ -823,6 +823,9 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <button class="btn full" onclick="svCreateClub()">🏘️ 클럽 등록</button>
     </div>
     <div id="club-list"></div>
+    <div class="section-title" style="margin-top:14px">🏆 클럽 랭킹 — 누적 포인트</div>
+    <div class="muted" style="margin:-4px 0 8px;font-size:12px">개인전·청백전 결과가 자동 합산돼요. <b>참가 +10pt · 게임 승리 +10pt</b> (동점이면 승수 → 득실차)</div>
+    <div id="club-rank"></div>
     <div class="section-title" style="margin-top:14px">🎮 클럽 미니게임 — 개인전 (KDK)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">번호 뽑고 정해진 조합으로 파트너를 바꿔가며 4게임씩 — 서부테니스장 보드의 대진표 그대로예요. 승 → 득실차 → 득점 순으로 개인 순위!</div>
     <div id="kdk-area"></div>
@@ -5914,6 +5917,7 @@ async function svLoadKdkHistory() {
       note: ev.note || '', results: ev.results || [], mine: ev.created_by === me
     }));
     renderKdkHistory();
+    renderClubRank();
   } catch (e) { /* 서버 기록은 보조 */ }
 }
 async function kdkDelEvent(cid) {
@@ -5962,6 +5966,44 @@ function renderKdkHistory() {
   }).join('');
 }
 document.addEventListener('DOMContentLoaded', renderKdkHistory);
+// ===== 클럽 누적 포인트 랭킹 — 미니게임(개인전·청백전) 결과 합산 =====
+function clubRankData() {
+  const events = [...svKdkEvents, ...CLUB_KDK_HISTORY];
+  const agg = {};
+  events.forEach(ev => (ev.results || []).forEach(r => {
+    if (!r || !r.name) return;
+    const a = agg[r.name] || (agg[r.name] = { name: r.name, pts: 0, w: 0, l: 0, gd: 0, ev: 0 });
+    a.ev++;
+    a.w += r.w || 0;
+    a.l += r.l || 0;
+    a.gd += (r.gf || 0) - (r.ga || 0);
+    a.pts += 10 + (r.w || 0) * 10; // 참가 +10, 승당 +10
+  }));
+  return Object.values(agg).sort((x, y) => y.pts - x.pts || y.w - x.w || y.gd - x.gd);
+}
+function renderClubRank() {
+  const el = $('club-rank');
+  if (!el) return;
+  const list = clubRankData();
+  if (!list.length) { el.innerHTML = '<div class="empty">아직 기록이 없어요 — 미니게임을 치고 ☁️ 저장하면 여기 순위가 쌓여요!</div>'; return; }
+  let lastPts = null, lastRank = 0;
+  const rows = list.map((r, i) => {
+    const rank = r.pts === lastPts ? lastRank : i + 1;
+    lastPts = r.pts; lastRank = rank;
+    return { ...r, rank };
+  });
+  el.innerHTML = `<div class="card"><table style="width:100%;font-size:12.5px">
+    <thead><tr><th>순위</th><th style="text-align:left">이름</th><th>포인트</th><th>전적</th><th>참가</th></tr></thead><tbody>` +
+    rows.map(r => `<tr style="${r.name === ME.name || r.name === '정철' ? 'background:rgba(47,158,95,.12)' : ''}">
+      <td class="${r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : ''}">${r.rank}</td>
+      <td style="text-align:left">${r.rank === 1 ? '👑 ' : ''}${r.name}</td>
+      <td><b>${r.pts.toLocaleString()}pt</b></td>
+      <td class="muted">${r.w}승 ${r.l}패</td>
+      <td class="muted">${r.ev}회</td></tr>`).join('') +
+  `</tbody></table>
+  <div class="muted" style="font-size:11.5px;margin-top:6px">누적 ${[...svKdkEvents, ...CLUB_KDK_HISTORY].length}개 미니게임 반영 · 새 결과를 ☁️ 저장하면 자동 갱신</div></div>`;
+}
+document.addEventListener('DOMContentLoaded', renderClubRank);
 function renderClubList() {
   const q = ($('club-q').value || '').trim().toLowerCase();
   const region = $('club-region').value;
