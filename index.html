@@ -2409,34 +2409,53 @@ function onAuthChange(session, profile) {
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
 }
-async function svImportPlayers() { // 서버 가입자를 로컬 선수 목록에 합류 — 라이브 스코어·기록·대회·지도에서 실제 멤버 선택 가능
+let realModeOn = false;
+function enterRealMode(pf) { // 실전 모드: 데모 전적을 서버 실데이터로 교체 (로그인 세션당 1회)
+  if (realModeOn) return;
+  realModeOn = true;
+  history = [];
+  ptsLog = [];
+  if (pf) {
+    myStats = {
+      matches: pf.matches || 0, wins: pf.wins || 0,
+      pts: pf.elo_pts == null ? 1000 : pf.elo_pts,
+      monthPts: 0, seasonPts: 0,
+      sPts: pf.singles_pts == null ? 1000 : pf.singles_pts,
+      dPts: pf.doubles_pts == null ? 1000 : pf.doubles_pts,
+      sMatches: pf.singles_matches || 0, sWins: pf.singles_wins || 0,
+      dMatches: pf.doubles_matches || 0, dWins: pf.doubles_wins || 0
+    };
+  }
+}
+async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선수를 전부 빼고 실제 가입자만 표시
   if (typeof svLogged !== 'function' || !svLogged()) return;
   try {
     const { data } = await svClient().from('profiles')
-      .select('id, nickname, ntrp, region, play_style, elo_pts, singles_pts, doubles_pts, matches, wins')
+      .select('id, nickname, ntrp, region, play_style, elo_pts, singles_pts, doubles_pts, singles_matches, singles_wins, doubles_matches, doubles_wins, matches, wins')
       .is('deleted_at', null).limit(100);
     if (!data) return;
     const myNick = (TMAuth.profile && TMAuth.profile.nickname) || null;
-    let added = 0;
-    data.forEach(pr => {
-      if (!pr.nickname || pr.nickname === myNick || pr.nickname === ME.name) return;
-      if (players.some(p => p.name === pr.nickname)) return;
-      players.push({
-        id: 1000 + players.length, cloud: true, uid: pr.id,
-        name: pr.nickname, ntrp: parseFloat(pr.ntrp) || 3.0, region: pr.region || '',
-        style: pr.play_style || '미입력', matches: pr.matches || 0, wins: pr.wins || 0,
-        pts: pr.elo_pts == null ? 1000 : pr.elo_pts,
-        sPts: pr.singles_pts == null ? 1000 : pr.singles_pts,
-        dPts: pr.doubles_pts == null ? 1000 : pr.doubles_pts,
-        sMatches: 0, sWins: 0, dMatches: 0, dWins: 0,
-        monthPts: 0, seasonPts: 0, manner: null, mannerN: 0, emoji: '☁️', tags: {}
-      });
-      added++;
+    const seen = new Set();
+    const real = data.filter(pr => {
+      if (!pr.nickname || pr.nickname === myNick || pr.nickname === ME.name || seen.has(pr.nickname)) return false;
+      seen.add(pr.nickname);
+      return true;
     });
-    if (added) {
-      try { renderAll(); } catch (e) {}
-      toast('☁️ 서버 멤버 ' + added + '명을 선수 목록에 불러왔어요');
-    }
+    enterRealMode(TMAuth.profile); // 데모 전적 제거 + 내 서버 스탯 반영
+    players.length = 0;            // 데모 선수 전원 제거
+    real.forEach((pr, i) => players.push({
+      id: 1000 + i, cloud: true, uid: pr.id,
+      name: pr.nickname, ntrp: parseFloat(pr.ntrp) || 3.0, region: pr.region || '',
+      style: pr.play_style || '미입력', matches: pr.matches || 0, wins: pr.wins || 0,
+      pts: pr.elo_pts == null ? 1000 : pr.elo_pts,
+      sPts: pr.singles_pts == null ? 1000 : pr.singles_pts,
+      dPts: pr.doubles_pts == null ? 1000 : pr.doubles_pts,
+      sMatches: pr.singles_matches || 0, sWins: pr.singles_wins || 0,
+      dMatches: pr.doubles_matches || 0, dWins: pr.doubles_wins || 0,
+      monthPts: 0, seasonPts: 0, manner: null, mannerN: 0, emoji: '☁️', tags: {}
+    }));
+    try { renderAll(); } catch (e) {}
+    toast(real.length ? '👥 실전 모드 — 가입 멤버 ' + real.length + '명만 표시해요' : '👥 실전 모드 — 아직 다른 가입 멤버가 없어요. 초대해 보세요!');
   } catch (e) { /* 서버 목록은 보조 — 실패해도 데모 목록으로 동작 */ }
 }
 function applyServerProfile(p) { // 서버 프로필 → ME 동기화 + 전체 화면 갱신
@@ -4233,6 +4252,10 @@ function renderLive() {
   const body = $('live-body');
   if (lvRC && lvRC.role === 'remote') { lvRCRenderRemote(body); return; }
   if (!live) {
+    if (!players.length) {
+      body.innerHTML = '<div class="empty">아직 함께할 가입 멤버가 없어요.<br>친구를 초대하면 여기서 상대로 고를 수 있어요! 🎾</div>';
+      return;
+    }
     body.innerHTML = `<div class="muted">포인트 단위 원탭 스코어링 — 게임·세트·듀스·타이브레이크를 자동으로 계산하고, 경기가 끝나면 기록·랭킹에 자동 저장돼요. (3세트 2선승)</div>
       <label>경기 방식</label>
       <select id="lv-type" onchange="lvTypeChange()">
@@ -7341,6 +7364,7 @@ function onRecType() {
 function saveMatch() {
   const type = $('rec-type').value;
   const opp = players.find(p => p.id === parseInt($('rec-opp').value));
+  if (!opp) { toast('상대를 선택할 수 없어요 — 가입한 멤버가 필요해요'); return; }
   let partner = null, opp2 = null;
   if (type === 'd') {
     partner = players.find(p => p.id === parseInt($('rec-partner').value));
