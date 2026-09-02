@@ -5621,11 +5621,12 @@ function renderKdk() {
   if (!el) return;
   if (!kdk) { // 참가자 선택 화면
     const all = [ME.name, ...players.map(p => p.name)];
+    kdkOrder = [ME.name]; // 체크하는 순서 = 번호 (제비뽑기 순서대로 체크!)
     el.innerHTML = `<div class="card">
-      <div class="muted" style="margin-bottom:6px">참가자 선택 (5~12명) — 번호는 선택 순서대로 배정돼요</div>
+      <div class="muted" style="margin-bottom:6px">참가자 선택 (5~12명) — <b>체크하는 순서대로 번호</b>가 붙어요. 제비뽑기 결과 순서대로 눌러주세요!</div>
       <div id="kdk-players">` +
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
-        <input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''} onchange="kdkCount()"> ${n}${n === ME.name ? ' (나)' : ''}</label>`).join('') +
+        <span class="kdk-num" style="min-width:16px;display:inline-block;text-align:center;font-weight:800;color:#2f9e5f"></span><input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''} onchange="kdkToggle(this)"> ${n}${n === ME.name ? ' (나)' : ''}</label>`).join('') +
       `</div>
       <div class="row" style="gap:8px;margin-top:8px">
         <input type="text" id="kdk-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')kdkAdd()">
@@ -5638,6 +5639,7 @@ function renderKdk() {
       <div class="muted" id="kdk-count" style="margin-top:8px"></div>
       <button class="btn full" style="margin-top:8px" onclick="kdkStart()">🎮 개인전 시작</button>
     </div>`;
+    kdkNumSync();
     kdkCount();
     return;
   }
@@ -5670,6 +5672,22 @@ function renderKdk() {
   `</tbody></table>
   <div class="muted" style="font-size:11.5px;margin-top:6px">순위 기준: 승 → 득실차 → 득점 (보드 방식 그대로)</div></div>`;
 }
+let kdkOrder = []; // 체크 순서 = 번호 순서
+function kdkToggle(cb) {
+  if (cb.checked) { if (!kdkOrder.includes(cb.value)) kdkOrder.push(cb.value); }
+  else kdkOrder = kdkOrder.filter(n => n !== cb.value);
+  kdkNumSync();
+  kdkCount();
+}
+function kdkNumSync() { // 각 이름 옆에 배정된 번호(1~9, A~C) 표시
+  document.querySelectorAll('#kdk-players label').forEach(lb => {
+    const cb = lb.querySelector('input');
+    const num = lb.querySelector('.kdk-num');
+    if (!cb || !num) return;
+    const i = kdkOrder.indexOf(cb.value);
+    num.textContent = (cb.checked && i >= 0) ? kdkLabel(i) : '';
+  });
+}
 function kdkCount() {
   const n = document.querySelectorAll('#kdk-players input:checked').length;
   const c = $('kdk-count');
@@ -5686,15 +5704,22 @@ function kdkAdd() {
   const label = document.createElement('label');
   label.style.cssText = 'display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer';
   const cb = document.createElement('input');
-  cb.type = 'checkbox'; cb.value = name; cb.checked = true; cb.onchange = kdkCount;
+  cb.type = 'checkbox'; cb.value = name; cb.checked = true; cb.onchange = function () { kdkToggle(cb); };
+  const num = document.createElement('span');
+  num.className = 'kdk-num';
+  num.style.cssText = 'min-width:16px;display:inline-block;text-align:center;font-weight:800;color:#2f9e5f';
+  label.appendChild(num);
   label.appendChild(cb);
   label.appendChild(document.createTextNode(' ' + name));
   box.appendChild(label);
   inp.value = '';
+  kdkOrder.push(name);
+  kdkNumSync();
   kdkCount();
 }
 function kdkStart() {
-  const names = [...document.querySelectorAll('#kdk-players input:checked')].map(c => c.value);
+  const checked = new Set([...document.querySelectorAll('#kdk-players input:checked')].map(c => c.value));
+  const names = kdkOrder.filter(n => checked.has(n)); // 체크한 순서 그대로 = 번호 순서
   if (names.length < 5 || names.length > 12) { toast('⚠️ 개인전은 5~12명이어야 해요'); return; }
   const key = names.length === 12 ? ($('kdk-court') ? $('kdk-court').value : '12-2') : names.length;
   const table = KDK_TABLES[key];
