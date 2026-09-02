@@ -2576,6 +2576,10 @@ async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선�
       monthPts: 0, seasonPts: 0, manner: null, mannerN: 0, emoji: '☁️', tags: {}
     }));
     try { renderAll(); } catch (e) {}
+    // 미니게임 참가자 목록도 실제 멤버로 갱신 (진행 중인 판은 건드리지 않음)
+    try { if (typeof kdk !== 'undefined' && !kdk) renderKdk(); } catch (e) {}
+    try { if (typeof cw !== 'undefined' && !cw) renderCw(); } catch (e) {}
+    try { renderKdkHistory(); } catch (e) {}
     toast(real.length ? '👥 실전 모드 — 가입 멤버 ' + real.length + '명만 표시해요' : '👥 실전 모드 — 아직 다른 가입 멤버가 없어요. 초대해 보세요!');
   } catch (e) { /* 서버 목록은 보조 — 실패해도 데모 목록으로 동작 */ }
 }
