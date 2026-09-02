@@ -986,13 +986,17 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div class="vj-mark" id="vj-t2">바운드 —</div>
         </div>
         <div id="vj-result"></div>
-        <div class="vj-sub">🤖 AI 판독 (베타) — 궤적 추적 · 바운스 감지 · 인아웃 참고 의견</div>
-        <div class="muted" style="font-size:12px">공을 AI가 프레임마다 찾아 궤적을 그리고, 가장 낮은 지점을 바운스로 추정해요. 📐 코트 보정(복식 코트 네 귀퉁이 탭)까지 하면 인아웃 참고 의견도 나와요. <b>공식 판정이 아니에요</b> — 빠르거나 작고 흐릿한 공은 놓칠 수 있어요. 애매하면 슬로모로 직접 확인!</div>
-        <div class="vj-ctrl" style="margin-top:6px">
-          <button type="button" class="btn small outline" style="flex:1" id="ai-calib-btn" onclick="aiCalibStart()">📐 코트 보정</button>
-          <button type="button" class="btn small" style="flex:1" id="ai-run-btn" onclick="aiAnalyze()">🤖 AI 궤적 분석</button>
-          <button type="button" class="tag-btn" onclick="aiClear()">지우기</button>
-        </div>
+        <div class="vj-sub">🤖 AI 공 추적 (베타)</div>
+        <div class="muted" style="font-size:12px"><b>바운드 순간에 영상을 멈추고</b> 아래 버튼을 누르세요. 그 앞뒤 구간에서 공을 찾아 궤적을 그리고 자동으로 슬로우 재생해요. <b>공식 판정이 아니에요</b> — 못 찾으면 그냥 0.25× 슬로우로 직접 보시면 됩니다.</div>
+        <button type="button" class="btn full" style="margin-top:8px" id="ai-run-btn" onclick="aiAnalyze()">🤖 이 장면 공 추적</button>
+        <details style="margin-top:6px">
+          <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
+          <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
+          <div class="vj-ctrl" style="margin-top:0">
+            <button type="button" class="btn small outline" style="flex:1" id="ai-calib-btn" onclick="aiCalibStart()">📐 코트 보정</button>
+            <button type="button" class="tag-btn" onclick="aiClear()">지우기</button>
+          </div>
+        </details>
         <div id="ai-status" class="muted" style="font-size:12px;margin-top:6px"></div>
         <div id="ai-result" style="margin-top:6px"></div>
         <div class="vj-sub">🦴 폼 분석 (베타) — 스윙 자세를 AI가 관절로 봐요</div>
@@ -6876,7 +6880,14 @@ async function svImport(ev) {
 // ===== AI 판독 — 궤적 추적·바운스·인아웃 참고 의견 (v0.41, 베타) =====
 // COCO-SSD(브라우저 온디바이스) — 서버 업로드 없음. 참고 의견일 뿐 공식 판정이 아님을 UI에 명시.
 let aiModel = null, aiTraj = [], aiCorners = [], aiPicking = false, aiH = null, aiBusy = false;
-const AI_STEP = 0.1, AI_BACK = 2.5, AI_FWD = 1.5, AI_MIN_SCORE = 0.2;
+const AI_STEP = 0.08, AI_BACK = 1.8, AI_FWD = 1.0, AI_MIN_SCORE = 0.2;
+// 테니스공 추적 파라미터 — 범용 물체인식 모델은 작고 빠른 테니스공을 거의 못 잡아서,
+// 연속 프레임 차이(움직임) + 공 색(밝은 노랑·연두) + 궤적 연속성으로 직접 찾는다.
+const AI_TW = 320;          // 분석용 축소 폭 (속도)
+const AI_DIFF_MIN = 42;     // 움직임으로 인정할 최소 픽셀 변화량
+const AI_BRIGHT_MIN = 70;   // 공은 어두운 배경보다 밝다
+const AI_GB_MIN = 14;       // G가 B보다 이만큼 크면 노랑·연두 계열
+const AI_BLOB_MIN = 2, AI_BLOB_MAX = 260; // 공 크기 후보 (축소 해상도 기준 픽셀 수)
 const AI_COURT_W = 10.97, AI_COURT_L = 23.77, AI_BALL_R = 0.033; // ITF 복식 코트(m)·공 반지름
 function aiStatus(t) { const el = $('ai-status'); if (el) el.textContent = t; }
 // ── 순수 계산 (테스트 가능) ──────────────────────────
@@ -6971,29 +6982,98 @@ function aiCanvasClick(ev) {
   aiDraw();
 }
 // ── 분석 ──────────────────────────
+function aiFindBall(prev, cur, w, h, predict) { // 프레임 한 쌍에서 공 후보 찾기
+  const mask = new Uint8Array(w * h);
+  for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+    const r = cur[p], g = cur[p + 1], b = cur[p + 2];
+    const d = Math.abs(r - prev[p]) + Math.abs(g - prev[p + 1]) + Math.abs(b - prev[p + 2]);
+    if (d < AI_DIFF_MIN) continue;                 // 안 움직인 픽셀
+    if ((r + g + b) / 3 < AI_BRIGHT_MIN) continue; // 너무 어두움
+    if (g < b + AI_GB_MIN) continue;               // 노랑·연두 아님
+    mask[i] = 1;
+  }
+  // 연결된 덩어리(blob) 찾기 — 공 크기만 후보로
+  const seen = new Uint8Array(w * h), stack = [], blobs = [];
+  for (let i = 0; i < w * h; i++) {
+    if (!mask[i] || seen[i]) continue;
+    stack.length = 0; stack.push(i); seen[i] = 1;
+    let n = 0, sx = 0, sy = 0, minX = w, maxX = 0, minY = h, maxY = 0;
+    while (stack.length) {
+      const q = stack.pop(), qx = q % w, qy = (q / w) | 0;
+      n++; sx += qx; sy += qy;
+      if (qx < minX) minX = qx; if (qx > maxX) maxX = qx;
+      if (qy < minY) minY = qy; if (qy > maxY) maxY = qy;
+      if (qx > 0 && mask[q - 1] && !seen[q - 1]) { seen[q - 1] = 1; stack.push(q - 1); }
+      if (qx < w - 1 && mask[q + 1] && !seen[q + 1]) { seen[q + 1] = 1; stack.push(q + 1); }
+      if (qy > 0 && mask[q - w] && !seen[q - w]) { seen[q - w] = 1; stack.push(q - w); }
+      if (qy < h - 1 && mask[q + w] && !seen[q + w]) { seen[q + w] = 1; stack.push(q + w); }
+    }
+    if (n < AI_BLOB_MIN || n > AI_BLOB_MAX) continue;
+    const bw = maxX - minX + 1, bh = maxY - minY + 1;
+    if (bw > bh * 4 || bh > bw * 4) continue; // 공은 대체로 동글동글 (라켓·팔 배제)
+    blobs.push({ x: sx / n, y: sy / n, n });
+  }
+  if (!blobs.length) return null;
+  // 점수: 작을수록(공다움) + 예측 위치에 가까울수록
+  let best = null;
+  blobs.forEach(bl => {
+    let sc = 1 / (1 + Math.abs(bl.n - 14) / 14);
+    if (predict) {
+      const dist = Math.hypot(bl.x - predict.x, bl.y - predict.y);
+      sc += Math.max(0, 1.6 - dist / 26);
+    }
+    if (!best || sc > best.sc) best = { x: bl.x, y: bl.y, n: bl.n, sc };
+  });
+  return best;
+}
 async function aiAnalyze() {
   const v = $('vj-video');
-  if (!v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
+  if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   if (aiBusy) return; aiBusy = true;
   $('ai-run-btn').disabled = true;
   try {
-    const model = await aiLoadModel();
     v.pause();
+    aiTrailStop();
     const t0 = Math.max(0, v.currentTime - AI_BACK);
     const t1 = Math.min(v.duration || v.currentTime + AI_FWD, v.currentTime + AI_FWD);
     aiTraj = [];
+    const tw = AI_TW, th = Math.max(1, Math.round(AI_TW * v.videoHeight / v.videoWidth));
+    const cv = document.createElement('canvas');
+    cv.width = tw; cv.height = th;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
     const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
-    let n = 0, total = Math.max(1, Math.round((t1 - t0) / AI_STEP));
+    const sx = v.videoWidth / tw, sy = v.videoHeight / th;
+    let prev = null, n = 0;
+    const total = Math.max(1, Math.round((t1 - t0) / AI_STEP));
     for (let t = t0; t <= t1 + 1e-6; t += AI_STEP) {
       await seekTo(t);
-      const dets = await model.detect(v, 5, AI_MIN_SCORE);
-      const ball = dets.filter(d => d.class === 'sports ball').sort((a, b) => b.score - a.score)[0];
-      if (ball) aiTraj.push({ t, x: ball.bbox[0] + ball.bbox[2] / 2, y: ball.bbox[1] + ball.bbox[3] / 2, s: ball.score });
+      cx.drawImage(v, 0, 0, tw, th);
+      const cur = cx.getImageData(0, 0, tw, th).data;
+      if (prev) {
+        // 직전 두 점으로 다음 위치 예측 (궤적 연속성)
+        let predict = null;
+        const L = aiTraj.length;
+        if (L >= 2) {
+          const a = aiTraj[L - 2], b = aiTraj[L - 1];
+          predict = { x: (2 * b.x - a.x) / sx, y: (2 * b.y - a.y) / sy };
+        } else if (L === 1) {
+          predict = { x: aiTraj[0].x / sx, y: aiTraj[0].y / sy };
+        }
+        const c = aiFindBall(prev, cur, tw, th, predict);
+        if (c) aiTraj.push({ t, x: c.x * sx, y: c.y * sy, s: Math.min(1, c.sc / 2) });
+      }
+      prev = cur;
       n++;
-      aiStatus(`🔍 분석 중… ${n}/${total} 프레임 · 공 탐지 ${aiTraj.length}회`);
+      aiStatus('🔍 공 찾는 중… ' + n + '/' + total + ' · 발견 ' + aiTraj.length + '회');
       aiSyncCanvas(); aiDraw();
     }
     aiFinish(t0, t1);
+    if (aiTraj.length >= 3) { // 찾았으면 바로 슬로우 재생 (궤적이 따라 그려짐)
+      v.currentTime = t0;
+      v.playbackRate = 0.25;
+      document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
+      v.play();
+    }
   } catch (e) {
     aiStatus('분석 실패: ' + (e.message || e));
   } finally {
@@ -7003,7 +7083,7 @@ async function aiAnalyze() {
 function aiFinish(t0, t1) {
   const res = $('ai-result');
   if (aiTraj.length < 3) {
-    aiStatus(`탐지된 공이 ${aiTraj.length}회뿐이라 궤적을 만들 수 없어요 — 공이 크게 나오는 구간(바운스 근처)으로 이동해 다시 시도하거나, 슬로모 촬영본을 써보세요`);
+    aiStatus('공을 못 찾았어요 (' + aiTraj.length + '회) — 이럴 땐 0.25× 슬로우와 ◀▶ 프레임 버튼으로 직접 보는 게 제일 정확해요. 다시 시도하려면 공이 크게 보이는 순간에 멈추고 눌러주세요.');
     res.innerHTML = ''; aiDraw(); return;
   }
   const bi = aiBounceIdx(aiTraj.map(p => p.y));
