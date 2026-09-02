@@ -988,7 +988,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div id="vj-result"></div>
         <div class="vj-sub">🤖 AI 공 추적 (베타)</div>
         <div class="muted" style="font-size:12px"><b>바운드 순간에 영상을 멈추고</b> 아래 버튼을 누르세요. 그 앞뒤 구간에서 공을 찾아 궤적을 그리고 자동으로 슬로우 재생해요. <b>공식 판정이 아니에요</b> — 못 찾으면 그냥 0.25× 슬로우로 직접 보시면 됩니다.</div>
-        <button type="button" class="btn full" style="margin-top:8px" id="ai-run-btn" onclick="aiAnalyze()">🤖 이 장면 공 추적</button>
+        <button type="button" class="btn full" style="margin-top:8px" id="ai-run-btn" onclick="aiAnalyze()">🤖 이 장면 공 추적 (빠름)</button>
+        <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">🎯 정밀 추적 — 딥러닝 TrackNet (첫 실행 10MB · 느리지만 강력)</button>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
@@ -7120,6 +7121,51 @@ async function aiAnalyze() {
     aiStatus('분석 실패: ' + (e.message || e));
   } finally {
     aiBusy = false; $('ai-run-btn').disabled = false;
+  }
+}
+async function aiAnalyzeDeep() { // 🎯 TrackNet 딥러닝 추적 (테니스공 전용 학습 모델)
+  const v = $('vj-video');
+  if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
+  if (aiBusy) return; aiBusy = true;
+  const btn = $('ai-deep-btn'); if (btn) btn.disabled = true;
+  try {
+    v.pause();
+    aiTrailStop();
+    aiStatus('🎯 딥러닝 모델 준비 중… (첫 실행은 10MB 내려받아요)');
+    if (!window.TrackNet) {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'tracknet.js';
+        s.onload = res; s.onerror = () => rej(new Error('tracknet.js 로드 실패'));
+        document.head.appendChild(s);
+      });
+    }
+    await TrackNet.load('');
+    const t0 = Math.max(0, v.currentTime - 1.2);
+    const t1 = Math.min(v.duration || v.currentTime + 0.8, v.currentTime + 0.8);
+    aiTraj = [];
+    const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
+    const total = Math.max(2, Math.round((t1 - t0) / 0.1));
+    const tStart = performance.now();
+    for (let k = 0; k <= total; k++) {
+      const t = t0 + k * 0.1;
+      await seekTo(t);
+      const d = await TrackNet.detect(v);
+      if (d) aiTraj.push({ t, x: d.x, y: d.y, s: d.conf });
+      aiStatus('🎯 딥러닝 추적 ' + (k + 1) + '/' + (total + 1) + ' · 공 발견 ' + aiTraj.length + '회 · ' + Math.round((performance.now() - tStart) / 1000) + '초 경과');
+      aiSyncCanvas(); aiDraw();
+    }
+    aiFinish(t0, t1);
+    if (aiTraj.length >= 4) {
+      v.currentTime = Math.max(t0, aiTraj[0].t - 0.2);
+      v.playbackRate = 0.25;
+      document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
+      v.play();
+    }
+  } catch (e) {
+    aiStatus('정밀 추적 실패: ' + (e.message || e));
+  } finally {
+    aiBusy = false; if (btn) btn.disabled = false;
   }
 }
 function aiFinish(t0, t1) {
