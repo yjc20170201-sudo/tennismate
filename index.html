@@ -538,6 +538,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 </head>
 <body>
 <!-- 카카오톡 인앱 브라우저 감지 배너: 카메라·공유가 제한되므로 외부 브라우저로 유도 -->
+<button id="back-to-live" onclick="backToLive()" style="display:none;position:fixed;bottom:76px;left:50%;transform:translateX(-50%);z-index:99;background:#1b5e20;color:#fff;border:none;border-radius:24px;padding:12px 22px;font-size:15px;font-weight:800;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer">🎾 경기로 돌아가기</button>
 <div id="kakao-warn" style="display:none;background:#4a3800;color:#ffe08a;padding:10px 14px;font-size:13px;line-height:1.5">
   ⚠️ <b>카카오톡 브라우저</b>로 열려 있어요 — 카메라 촬영·클립 공유가 제한됩니다.
   <button onclick="openExternalBrowser()" style="margin-left:6px;padding:4px 10px;border:none;border-radius:8px;background:#ffd45e;color:#3a2c00;font-weight:800;cursor:pointer">크롬으로 열기</button>
@@ -1415,6 +1416,17 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       </div>
       <div id="lvcam-clips" style="margin-top:6px"></div>
       <video id="lvcam-player" controls playsinline style="display:none;width:100%;border-radius:10px;background:#000;margin-top:6px"></video>
+      <div id="lvcam-ctrl" style="display:none;margin-top:4px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="muted" style="font-size:11.5px">배속</span>
+          <button type="button" class="tag-btn" onclick="lvCamRate(0.1)">0.1×</button>
+          <button type="button" class="tag-btn" onclick="lvCamRate(0.25)">0.25×</button>
+          <button type="button" class="tag-btn" onclick="lvCamRate(0.5)">0.5×</button>
+          <button type="button" class="tag-btn" onclick="lvCamRate(1)">1×</button>
+          <button type="button" class="tag-btn" onclick="lvCamStep(-1)">◀ 프레임</button>
+          <button type="button" class="tag-btn" onclick="lvCamStep(1)">프레임 ▶</button>
+        </div>
+      </div>
     </div>
     <div id="live-body"></div>
   </div>
@@ -4026,10 +4038,11 @@ function lvCamRenderClips() {
   if (!box) return;
   const clips = lvCam ? lvCam.clips : [];
   if (!clips.length) { box.innerHTML = ''; return; }
-  box.innerHTML = '<div class="muted" style="font-size:12px;margin-bottom:3px">🎬 랠리 클립 ' + clips.length + '개</div>' +
+  box.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px"><span class="muted" style="font-size:12px">🎬 랠리 클립 ' + clips.length + '개</span><button type="button" class="tag-btn" style="background:#c0392b;color:#fff" onclick="lvCamChallenge()">🚨 마지막 랠리 판독</button></div>' +
     clips.map((c, i) => `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-top:1px solid rgba(127,127,127,.15)">
       <button type="button" class="tag-btn" onclick="lvCamPlay(${i})">▶</button>
       <span style="flex:1;font-size:12.5px">${c.label} <span class="muted">· ${c.dur}초 · ${c.at}</span></span>
+      <button type="button" class="tag-btn" onclick="lvCamToJudge(${i})" title="AI 궤적·정밀 판독으로 열기">🤖</button>
       <button type="button" class="tag-btn" onclick="lvCamShare(${i})" title="카톡·텔레그램으로 공유">📤</button>
       <a class="tag-btn" href="${clips[i].url}" download="랠리_${i + 1}.webm">💾</a>
       <button type="button" class="tag-btn" onclick="lvCamDel(${i})">✕</button>
@@ -4040,7 +4053,48 @@ function lvCamPlay(i) {
   if (!lvCam || !lvCam.clips[i]) return;
   pl.src = lvCam.clips[i].url;
   pl.style.display = '';
+  $('lvcam-ctrl').style.display = 'block';
   pl.play();
+}
+function lvCamRate(r) {
+  const pl = $('lvcam-player');
+  if (pl) { pl.playbackRate = r; if (pl.paused) pl.play(); }
+}
+function lvCamStep(dir) {
+  const pl = $('lvcam-player');
+  if (!pl) return;
+  pl.pause();
+  pl.currentTime = Math.max(0, pl.currentTime + dir / 30);
+}
+function lvCamChallenge() { // 🚨 시비 순간: 마지막 클립을 그 자리에서 0.25배속 재생
+  if (!lvCam || !lvCam.clips.length) { toast('저장된 랠리 클립이 없어요'); return; }
+  lvCamPlay(lvCam.clips.length - 1);
+  lvCamRate(0.25);
+  toast('🚨 마지막 랠리를 슬로우로 재생해요 — 프레임 버튼으로 정밀 확인!');
+}
+function lvCamToJudge(i) { // 🤖 클립을 비디오 판독 센터로 (AI 궤적·인아웃) — 경기 상태는 유지
+  if (!lvCam || !lvCam.clips[i]) return;
+  const c = lvCam.clips[i];
+  if (vjUrl) URL.revokeObjectURL(vjUrl);
+  vjUrl = URL.createObjectURL(c.blob);
+  const v = $('vj-video');
+  v.src = vjUrl; v.playbackRate = 0.25;
+  document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
+  vjT1 = vjT2 = null; vjCalls = [];
+  $('vj-player').style.display = 'block';
+  vjRenderMarks(); vjRenderCalls(); $('vj-result').innerHTML = '';
+  aiClear();
+  closeModal('live'); // 경기 데이터(live)는 그대로 살아 있음
+  const rankBtn = document.querySelector("nav button[onclick*=\"showTab('rank'\"]");
+  if (rankBtn) showTab('rank', rankBtn);
+  if (live && !live.done) $('back-to-live').style.display = 'block';
+  setTimeout(() => { const p = $('vj-player'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+  toast('🤖 판독 센터로 가져왔어요 — AI 궤적 분석·인아웃 판정을 써보세요');
+}
+function backToLive() {
+  $('back-to-live').style.display = 'none';
+  openModal('live');
+  renderLive();
 }
 function lvCamDel(i) {
   if (!lvCam || !lvCam.clips[i]) return;
@@ -4264,6 +4318,7 @@ function finishLive(myS, opS) {
   renderLive();
 }
 function closeLive() {
+  const bl = $('back-to-live'); if (bl) bl.style.display = 'none';
   if (lvRC && lvRC.role === 'host') lvRCStop(true);
   if (lvCam && lvCam.stream) lvCamStop();
   if (!live) { closeModal('live'); return; }
