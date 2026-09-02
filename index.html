@@ -4105,13 +4105,21 @@ function lvCamDel(i) {
 async function lvCamShare(i) { // 📤 폰 공유 시트로 카톡·텔레그램 등에 바로 전송 (서버 미경유)
   if (!lvCam || !lvCam.clips[i]) return;
   const c = lvCam.clips[i];
-  const ext = (c.blob.type || '').includes('mp4') ? 'mp4' : 'webm';
-  const file = new File([c.blob], `랠리_${i + 1}.${ext}`, { type: c.blob.type || 'video/webm' });
-  if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: '테니스메이트 랠리 클립', text: '🎾 ' + c.label }); }
-    catch (e) { /* 공유 시트에서 취소한 경우 — 조용히 무시 */ }
-  } else {
-    toast('이 브라우저는 바로 공유가 안 돼요 — 💾로 저장한 뒤 카톡에서 첨부해 주세요');
+  try {
+    if (!navigator.share) {
+      toast('이 브라우저엔 공유 기능이 없어요 — 💾로 저장한 뒤 카톡에서 첨부해 주세요');
+      return;
+    }
+    const ext = (c.blob.type || '').includes('mp4') ? 'mp4' : 'webm';
+    const file = new File([c.blob], `랠리_${i + 1}.${ext}`, { type: c.blob.type || 'video/webm' });
+    if (navigator.canShare && !navigator.canShare({ files: [file] })) {
+      toast('이 브라우저는 영상 파일 공유가 안 돼요 — 💾로 저장한 뒤 카톡에서 첨부해 주세요');
+      return;
+    }
+    await navigator.share({ files: [file], title: '테니스메이트 랠리 클립', text: '🎾 ' + c.label });
+  } catch (e) {
+    if (e && e.name === 'AbortError') return; // 공유 시트를 그냥 닫은 경우
+    toast('공유 실패 (' + ((e && e.name) || '오류') + ': ' + ((e && e.message) || e) + ') — 💾 저장 후 카톡 첨부로 해주세요');
   }
 }
 function lvCamStop() {
