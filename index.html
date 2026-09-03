@@ -1084,6 +1084,37 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         </div>
       </div>
     </div>
+    <div class="section-title">📡 클럽캠 — 공기계 실시간 중계 (베타)</div>
+    <div class="card">
+      <div class="muted" style="font-size:12px">남는 폰(공기계)을 펜스에 걸어 <b>클럽 전용 캠</b>으로 쓰세요. ① 공기계: 같은 계정으로 로그인 → <b>📡 클럽캠 시작</b> → 코드가 떠요 ② 내 폰: 코드 입력 → <b>👀 보기</b>로 라이브 확인, 시비 나면 <b>✂️</b> — 직전 20초가 판독 센터에 자동으로 열려요 ③ 영상은 공기계 안에 1분 단위로 계속 쌓이고(서버 업로드 없음), 끝나면 💾 전체 저장 → AI 학습데이터로! <b>데이터 사용량은 시간당 50~100MB</b> 정도예요.</div>
+      <div id="cc-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
+      <div id="cc-main" style="display:none">
+        <button type="button" class="btn small full" id="cc-start-btn" style="margin-top:8px" onclick="ccToggle()">📡 이 폰을 클럽캠으로 (공기계에서 누르세요)</button>
+        <div class="vj-ctrl" style="margin-top:6px">
+          <input id="cc-code-in" placeholder="캠 코드 4자리" maxlength="4" style="flex:1;text-transform:uppercase">
+          <button type="button" class="btn small outline" id="cc-watch-btn" onclick="cvWatch()">👀 보기</button>
+        </div>
+        <div id="cc-cam-wrap" style="display:none">
+          <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
+          <div style="position:relative;margin-top:8px">
+            <video id="cc-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
+            <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
+          </div>
+          <button type="button" class="tag-btn" style="margin-top:4px" onclick="courtGuideToggle('cc-cam')">📐 설치 가이드 접기/펴기</button>
+          <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
+        </div>
+        <div id="cc-view-wrap" style="display:none">
+          <div class="vj-ctrl" style="margin-top:8px">
+            <div class="vj-mark set" id="cc-view-info" style="flex:1">캠 —</div>
+            <button type="button" class="tag-btn" onclick="cvStop()">연결 끊기</button>
+          </div>
+          <img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:120px;display:block;margin-top:6px" alt="클럽캠 라이브">
+          <div id="cc-view-status" class="muted" style="font-size:12px;margin-top:6px">캠 화면을 기다리는 중…</div>
+          <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
+        </div>
+        <button type="button" class="btn small outline full" style="margin-top:8px" onclick="ccSaveAll()">💾 캠 영상 전체 저장 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 학습데이터용</button>
+      </div>
+    </div>
     <div class="section-title">🧠 AI 코치 (준비 중)</div>
     <div class="card">
       <div class="muted">🦴 폼 측정치와 🏷️ 포인트 태그가 쌓이면, AI가 사람 코치처럼 <b>스윙 교정 + 상대 공략 리포트</b>를 써주는 기능이에요. API 비용이 들어 베타 동안은 잠겨 있어요.</div>
@@ -1776,7 +1807,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.44';
+const APP_VERSION = 'v0.45';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2500,6 +2531,7 @@ function onAuthChange(session, profile) {
   mrRenderGate(); // v0.40: 로그인 상태에 따라 매치 룸 열기/닫기
   svRenderGate(); // v0.43: 서버 경기 카드
   if (!session && mrChan) mrLeave(true); // 로그아웃 시 방 정리
+  if (!session) { if (ccChan) ccStop(true); if (cvChan) cvStop(true); } // 클럽캠 정리
   if (!session) return;
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
@@ -7873,6 +7905,7 @@ function mrRenderGate() {
   const g = $('mr-gate'), m = $('mr-main');
   if (g) g.style.display = on ? 'none' : 'block';
   if (m) m.style.display = on ? 'block' : 'none';
+  ccRenderGate(); // 📡 클럽캠 게이트도 함께
 }
 function mrStatus(t) { const el = $('mr-status'); if (el) el.textContent = t; }
 function mrRoomInfo() {
@@ -8023,6 +8056,275 @@ async function mrTryOpen() {
   } catch (e) {
     mrStatus('상대 클립 다운로드 실패: ' + (e.message || e));
   }
+}
+
+// ===== 클럽캠 — 공기계 실시간 중계 (v0.45, 베타) =====
+// 캠(공기계): 카메라 → 1.5초마다 라이브 썸네일 broadcast + 1분 단위 자체 재생 가능 세그먼트를 IndexedDB에 저장
+// 뷰어(내 폰): 썸네일 라이브 보기 + ✂️ 요청 → 캠이 직전 ~20초를 storage 'clips'(cam/코드/)에 올리면 판독 센터로 자동 오픈
+const CC_SEG = 60;  // 세그먼트 길이(초)
+const CC_CUT = 20;  // ✂️ 클립 길이(초)
+let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
+let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
+let cvChan = null, cvCode = null;
+
+function ccRenderGate() {
+  const on = serverMode() && TMAuth.isLoggedIn;
+  const g = $('cc-gate'), m = $('cc-main');
+  if (g) g.style.display = on ? 'none' : 'block';
+  if (m) m.style.display = on ? 'block' : 'none';
+  if (on && !ccRenderGate._init) { // 지난 세션에 쌓아둔 영상 개수 표시
+    ccRenderGate._init = true;
+    ccOpenDb().then(db => { ccDb = db; return ccAllSegs(); }).then(segs => {
+      ccSegN = segs.length;
+      ccSegBytes = segs.reduce((a, x) => a + (x.blob ? x.blob.size : 0), 0);
+      ccRenderSegInfo();
+    }).catch(() => {});
+  }
+}
+function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; }
+function ccRenderSegInfo() {
+  const el = $('cc-seg-n'), mb = $('cc-seg-mb');
+  if (el) el.textContent = ccSegN;
+  if (mb) mb.textContent = Math.round(ccSegBytes / 1048576);
+}
+
+// --- 폰 내부 저장(IndexedDB) — 서버로는 ✂️ 클립만 올라감 ---
+function ccOpenDb() {
+  return new Promise((res, rej) => {
+    const rq = indexedDB.open('tm-clubcam', 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore('segs', { keyPath: 'at' });
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function ccPutSeg(at, blob) {
+  return new Promise((res, rej) => {
+    const tx = ccDb.transaction('segs', 'readwrite');
+    tx.objectStore('segs').put({ at, blob });
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+function ccAllSegs() {
+  return new Promise((res, rej) => {
+    const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAll();
+    rq.onsuccess = () => res(rq.result || []);
+    rq.onerror = () => rej(rq.error);
+  });
+}
+function ccClearSegs() {
+  return new Promise((res, rej) => {
+    const tx = ccDb.transaction('segs', 'readwrite');
+    tx.objectStore('segs').clear();
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function ccToggle() {
+  if (ccChan) { ccStop(); return; }
+  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
+  try {
+    ccStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
+    });
+  } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e)); return; }
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  const code = mrGenCode();
+  const chan = TMAuth.client.channel('cam:' + code, { config: { broadcast: { self: false } } });
+  chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
+  chan.on('broadcast', { event: 'hello' }, () => ccFrame());
+  try {
+    await new Promise((res, rej) => chan.subscribe(st => {
+      if (st === 'SUBSCRIBED') res();
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
+    }));
+  } catch (e) {
+    ccStream.getTracks().forEach(t => t.stop()); ccStream = null;
+    toast('중계 연결 실패: ' + (e.message || e)); return;
+  }
+  ccChan = chan; ccCode = code;
+  const v = $('cc-cam'); v.srcObject = ccStream; v.play().catch(() => {});
+  courtGuideInit('cc-cam'); // 📐 설치 가이드
+  ccStartRec();
+  try { if (navigator.wakeLock) ccWakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  ccTimers.push(setInterval(ccFrame, 1500));
+  ccTimers.push(setInterval(ccFlush, CC_SEG * 1000));
+  $('cc-cam-wrap').style.display = 'block';
+  $('cc-view-wrap').style.display = 'none';
+  $('cc-cam-info').textContent = '📡 캠 코드 ' + code + ' — 내 폰에서 이 코드로 👀 보기';
+  $('cc-start-btn').textContent = '⏹ 클럽캠 끄기';
+  ccStatus('🔴 녹화+중계 중 — 영상은 이 폰에 ' + CC_SEG + '초 단위로 쌓여요 (서버 업로드 없음). 화면은 켜둔 채 두세요');
+  toast('📡 클럽캠 시작! 캠 코드 ' + code);
+}
+
+function ccStartRec() {
+  ccChunks = [];
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : '';
+  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined);
+  ccRec.ondataavailable = e => { if (e.data && e.data.size) ccChunks.push({ blob: e.data, at: Date.now() }); };
+  ccRec.start(1000); // 1초 단위 청크
+}
+async function ccStopRec() {
+  if (!ccRec || ccRec.state === 'inactive') return;
+  const done = new Promise(res => { ccRec.onstop = res; });
+  ccRec.requestData(); ccRec.stop();
+  await done;
+}
+async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 폰에 저장, 청크 반환 (호출자가 재시작)
+  await ccStopRec();
+  const chunks = ccChunks;
+  if (chunks.length > 1 && ccDb) {
+    try {
+      const blob = new Blob(chunks.map(c => c.blob), { type: 'video/webm' });
+      await ccPutSeg(Date.now(), blob);
+      ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
+    } catch (e) {}
+  }
+  return chunks;
+}
+async function ccFlush() { // 1분마다: 자체 재생 가능한 세그먼트로 끊어 저장
+  if (ccBusy || !ccStream) return; ccBusy = true;
+  try { await ccSealSeg(); } catch (e) {}
+  ccBusy = false;
+  if (ccStream) ccStartRec();
+}
+async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨)
+  if (ccBusy || !ccStream || !ccChan) return; ccBusy = true;
+  ccStatus('✂️ 클립 잘라서 올리는 중…');
+  try {
+    const chunks = await ccSealSeg();
+    const cutoff = Date.now() - CC_CUT * 1000;
+    const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
+    if (cut.length < 2) throw new Error('버퍼에 영상이 없어요');
+    const blob = new Blob(cut.map(c => c.blob), { type: 'video/webm' });
+    const at = Date.now();
+    const path = 'cam/' + ccCode + '/' + at + '.webm';
+    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: 'video/webm', upsert: true });
+    if (error) throw error;
+    ccChan.send({ type: 'broadcast', event: 'camclip', payload: { path, at } });
+    ccStatus('✂️ 클립 전송 완료 (' + Math.round(blob.size / 1024) + 'KB) — 🔴 녹화+중계 계속');
+  } catch (e) {
+    if (ccChan) ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: e.message || '업로드 실패' } });
+    ccStatus('클립 처리 실패: ' + (e.message || e));
+  } finally {
+    ccBusy = false;
+    if (ccStream) ccStartRec();
+  }
+}
+function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
+  if (!ccChan || !ccStream) return;
+  const v = $('cc-cam');
+  if (!v || !v.videoWidth) return;
+  const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
+  const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
+  cv.width = W; cv.height = H;
+  cv.getContext('2d').drawImage(v, 0, 0, W, H);
+  const d = cv.toDataURL('image/jpeg', 0.5);
+  if (d.length > 200000) return; // Realtime 페이로드 안전선
+  ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
+}
+async function ccStop(silent) {
+  ccTimers.forEach(clearInterval); ccTimers = [];
+  const stream = ccStream; ccStream = null; // seal 후 자동 재시작 방지
+  try { await ccSealSeg(); } catch (e) {}
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  const v = $('cc-cam'); if (v) v.srcObject = null;
+  if (ccWakeLock) { try { await ccWakeLock.release(); } catch (e) {} ccWakeLock = null; }
+  if (ccChan) { try { await ccChan.unsubscribe(); } catch (e) {} ccChan = null; }
+  ccRec = null; ccChunks = []; ccCode = null;
+  const w = $('cc-cam-wrap'); if (w) w.style.display = 'none';
+  const b = $('cc-start-btn'); if (b) b.textContent = '📡 이 폰을 클럽캠으로 (공기계에서 누르세요)';
+  if (!silent) toast('클럽캠을 껐어요 — 💾 전체 저장으로 오늘 영상을 내려받으세요');
+}
+async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (→ PC로 옮겨 학습데이터)
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
+  const segs = await ccAllSegs().catch(() => []);
+  if (!segs.length) { toast('저장된 캠 영상이 없어요'); return; }
+  toast('💾 ' + segs.length + '개 파일 저장 — 여러 파일 다운로드를 물으면 허용해 주세요!');
+  const pad = x => String(x).padStart(2, '0');
+  for (const seg of segs) {
+    const d = new Date(seg.at);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(seg.blob);
+    a.download = '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.webm';
+    document.body.appendChild(a); a.click(); a.remove();
+    await new Promise(r => setTimeout(r, 600));
+    URL.revokeObjectURL(a.href);
+  }
+  if (confirm('저장이 끝났으면 폰 안의 캠 영상을 지울까요? (용량 확보)')) {
+    await ccClearSegs().catch(() => {});
+    ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo();
+    toast('🧹 정리 완료');
+  }
+}
+
+// --- 뷰어(내 폰) ---
+async function cvWatch() {
+  const code = ($('cc-code-in').value || '').trim().toUpperCase();
+  if (code.length !== 4) { toast('캠 코드 4자리를 입력해 주세요'); return; }
+  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  if (cvChan) await cvStop(true);
+  const chan = TMAuth.client.channel('cam:' + code, { config: { broadcast: { self: false } } });
+  chan.on('broadcast', { event: 'frame' }, p => cvFrame(p.payload));
+  chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
+  try {
+    await new Promise((res, rej) => chan.subscribe(st => {
+      if (st === 'SUBSCRIBED') res();
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
+    }));
+  } catch (e) { toast('캠 연결 실패: ' + (e.message || e)); return; }
+  cvChan = chan; cvCode = code;
+  chan.send({ type: 'broadcast', event: 'hello', payload: {} });
+  $('cc-view-wrap').style.display = 'block';
+  $('cc-view-info').textContent = '👀 캠 ' + code + ' 시청 중';
+  $('cc-view-status').textContent = '캠 화면을 기다리는 중… (공기계에서 📡 켜져 있어야 해요)';
+  toast('👀 캠 ' + code + ' 연결!');
+}
+function cvFrame(p) {
+  if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
+  const img = $('cc-live'); if (img) img.src = p.d;
+  const st = $('cc-view-status');
+  if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
+}
+function cvCut() {
+  if (!cvChan) { toast('먼저 캠에 연결해 주세요'); return; }
+  cvChan.send({ type: 'broadcast', event: 'cut', payload: { at: Date.now() } });
+  const st = $('cc-view-status');
+  if (st) st.textContent = '✂️ 요청 보냄 — 캠이 클립을 올리면 자동으로 열려요 (몇 초 걸려요)';
+}
+async function cvClip(p) {
+  if (!p) return;
+  const st = $('cc-view-status');
+  if (p.err) { if (st) st.textContent = '캠 쪽 실패: ' + p.err; return; }
+  if (st) st.textContent = '⬇️ 클립 내려받는 중…';
+  try {
+    const { data, error } = await TMAuth.client.storage.from('clips').download(p.path);
+    if (error) throw error;
+    vjLoadBlob(data, '✂️ 클럽캠 클립 도착 — 슬로우·🤖 AI로 판독하세요');
+    if (st) st.textContent = '⚖️ 클립이 아래 판독 센터에 열렸어요';
+  } catch (e) {
+    if (st) st.textContent = '클립 다운로드 실패: ' + (e.message || e);
+  }
+}
+async function cvStop(silent) {
+  if (cvChan) { try { await cvChan.unsubscribe(); } catch (e) {} cvChan = null; }
+  cvCode = null;
+  const w = $('cc-view-wrap'); if (w) w.style.display = 'none';
+  if (!silent) toast('캠 연결을 끊었어요');
+}
+function vjLoadBlob(blob, msg) { // 받은 클립을 판독 센터에 바로 열기 (vjLoad의 블롭 버전)
+  if (vjUrl) URL.revokeObjectURL(vjUrl);
+  vjUrl = URL.createObjectURL(blob);
+  const v = $('vj-video');
+  v.src = vjUrl; v.playbackRate = 1;
+  document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '1'));
+  vjT1 = vjT2 = null; vjCalls = [];
+  $('vj-player').style.display = 'block';
+  vjRenderMarks(); vjRenderCalls(); $('vj-result').innerHTML = '';
+  aiClear();
+  $('vj-player').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast(msg || '🎬 영상을 불러왔어요');
 }
 
 // ===== 플레이 시간표 (v0.32) =====
