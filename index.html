@@ -989,6 +989,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div class="vj-sub">🤖 AI 공 추적 (베타)</div>
         <div class="muted" style="font-size:12px"><b>바운드 순간에 영상을 멈추고</b> 아래 버튼을 누르세요. 그 앞뒤 구간에서 공을 찾아 궤적을 그리고 자동으로 슬로우 재생해요. <b>공식 판정이 아니에요</b> — 못 찾으면 그냥 0.25× 슬로우로 직접 보시면 됩니다.</div>
         <button type="button" class="btn full" style="margin-top:8px" id="ai-run-btn" onclick="aiAnalyze()">🤖 이 장면 공 추적 (빠름)</button>
+        <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">📼 클립 전체 자동 판독 — 모든 바운스 찾기</button>
+        <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">🎯 정밀 추적 — 딥러닝 TrackNet (첫 실행 10MB · 느리지만 강력)</button>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
@@ -6969,6 +6971,53 @@ function aiMapPt(H, x, y) { // 이미지 px → 코트 m
   const w = H[6] * x + H[7] * y + H[8];
   return [(H[0] * x + H[1] * y + H[2]) / w, (H[3] * x + H[4] * y + H[5]) / w];
 }
+// ── 바운스 보간: 샘플 사이에 숨은 진짜 착지점을 포물선 교차로 계산 ──
+// 하강 궤적 y(t)=at²+bt+c (2차 피팅)와 반등 초기 직선 y(t)=mt+c₂의 교차 시각 t* → x는 선형 외삽
+function aiFitQuad(pts) { // 최소제곱 2차 피팅 [a,b,c]
+  const n = pts.length;
+  let st = 0, st2 = 0, st3 = 0, st4 = 0, sy = 0, sty = 0, st2y = 0;
+  const t0 = pts[0].t;
+  pts.forEach(p => {
+    const t = p.t - t0;
+    st += t; st2 += t * t; st3 += t * t * t; st4 += t * t * t * t;
+    sy += p.y; sty += t * p.y; st2y += t * t * p.y;
+  });
+  const A = [[st4, st3, st2], [st3, st2, st], [st2, st, n]];
+  const B = [st2y, sty, sy];
+  const sol = aiSolve(A, B);
+  return sol ? { a: sol[0], b: sol[1], c: sol[2], t0 } : null;
+}
+function aiRefineBounce(traj, bi) {
+  const pre = traj.slice(Math.max(0, bi - 5), bi + 1);
+  const post = traj.slice(bi + 1, Math.min(traj.length, bi + 4)); // 바운스 샘플 제외 — 순수 반등 구간만
+  if (pre.length < 3 || post.length < 2) return null;
+  const q = aiFitQuad(pre);
+  if (!q || Math.abs(q.a) < 1e-6) return null;
+  // 반등 직선 (바운스 이후 두 점)
+  const p1 = post[0], p2 = post[1];
+  if (p2.t <= p1.t) return null;
+  const m = (p2.y - p1.y) / (p2.t - p1.t);
+  const c2 = p1.y - m * p1.t;
+  // a(t-t0)² + b(t-t0) + c = m t + c₂  → 근 찾기 (t 기준으로 전개)
+  const t0 = q.t0;
+  const A2 = q.a, B2 = q.b - 2 * q.a * t0 * -1 * -1; // 전개: a t² + (b - 2a t0) t + (a t0² - b t0 + c)
+  const bb = q.b - 2 * q.a * t0;
+  const cc = q.a * t0 * t0 - q.b * t0 + q.c;
+  const qa = A2, qb = bb - m, qc = cc - c2;
+  const disc = qb * qb - 4 * qa * qc;
+  if (disc < 0) return null;
+  const r1 = (-qb + Math.sqrt(disc)) / (2 * qa), r2 = (-qb - Math.sqrt(disc)) / (2 * qa);
+  const lo = pre[pre.length - 2].t - 0.02, hi = (post[1] ? post[1].t : post[0].t) + 0.02;
+  let tStar = null;
+  [r1, r2].forEach(rt => { if (rt >= lo && rt <= hi && (tStar === null || Math.abs(rt - traj[bi].t) < Math.abs(tStar - traj[bi].t))) tStar = rt; });
+  if (tStar === null) return null;
+  // x: 하강 마지막 3점의 선형 추세로 t*까지 외삽
+  const xp = pre.slice(-3);
+  const mx = (xp[xp.length - 1].x - xp[0].x) / ((xp[xp.length - 1].t - xp[0].t) || 1e-3);
+  const xStar = xp[xp.length - 1].x + mx * (tStar - xp[xp.length - 1].t);
+  const yStar = q.a * (tStar - t0) * (tStar - t0) + q.b * (tStar - t0) + q.c;
+  return { t: tStar, x: xStar, y: yStar };
+}
 function aiBounceIdx(ys) { // 화면 y(아래로 증가)의 최대점 = 바운스 추정
   if (!ys || ys.length < 3) return -1;
   let bi = 0;
@@ -7005,14 +7054,38 @@ function aiCalibStart() {
   aiSyncCanvas(); aiDraw();
   aiStatus('📐 복식 코트 네 귀퉁이를 순서대로 탭하세요: ① 왼쪽 위 → ② 오른쪽 위 → ③ 오른쪽 아래 → ④ 왼쪽 아래 (화면에 보이는 대로)');
 }
+function aiSnapToLine(v, x, y) { // 탭 지점 주변에서 흰 코트 라인 픽셀들의 무게중심으로 스냅
+  try {
+    const R = Math.max(10, Math.round(v.videoWidth * 0.018)); // 탐색 반경
+    const cv = aiSnapToLine._cv || (aiSnapToLine._cv = document.createElement('canvas'));
+    const S = R * 2 + 1;
+    cv.width = S; cv.height = S;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(v, x - R, y - R, S, S, 0, 0, S, S);
+    const d = cx.getImageData(0, 0, S, S).data;
+    let sx = 0, sy = 0, n = 0;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const p = (j * S + i) * 4;
+      const r0 = d[p], g0 = d[p + 1], b0 = d[p + 2];
+      const mx = Math.max(r0, g0, b0), mn = Math.min(r0, g0, b0);
+      if (mn > 150 && mx - mn < 55) { sx += i; sy += j; n++; } // 밝고 무채색 = 흰 라인
+    }
+    if (n < 6 || n > S * S * 0.5) return null; // 라인이 없거나 화면이 온통 밝으면 스냅 안 함
+    const nx = x - R + sx / n, ny = y - R + sy / n;
+    if (Math.hypot(nx - x, ny - y) > R) return null;
+    return [nx, ny];
+  } catch (e) { return null; }
+}
 function aiCanvasClick(ev) {
   if (!aiPicking) return;
   const c = $('ai-canvas'), v = $('vj-video');
   const r = c.getBoundingClientRect();
   const fit = aiFitRect(v.videoWidth, v.videoHeight, r.width, r.height);
   if (!fit) return;
-  const px = (ev.clientX - r.left - fit.x) / fit.sc, py = (ev.clientY - r.top - fit.y) / fit.sc;
+  let px = (ev.clientX - r.left - fit.x) / fit.sc, py = (ev.clientY - r.top - fit.y) / fit.sc;
   if (px < 0 || py < 0 || px > v.videoWidth || py > v.videoHeight) return;
+  const snapped = aiSnapToLine(v, px, py); // 근처 흰 라인에 자동 흡착 (보정 정밀도 ↑)
+  if (snapped) { px = snapped[0]; py = snapped[1]; }
   aiCorners.push([px, py]);
   if (aiCorners.length === 4) {
     // 화면 좌표 → 코트 m: ①(0,0) ②(W,0) ③(W,L) ④(0,L)
@@ -7101,6 +7174,7 @@ function aiBuildTracks(frames) { // frames: [{t, cands: [...]}] → 최적 트�
       tracks.push({ pts: [{ t: f.t, x: c.x, y: c.y, s: c.sc }], vx: 0, vy: 0, miss: 0, turns: 0, dead: false });
     });
   });
+  const scored = [];
   let best = null, bestScore = -1;
   tracks.forEach(tr => {
     if (tr.pts.length < 4) return;
@@ -7110,8 +7184,76 @@ function aiBuildTracks(frames) { // frames: [{t, cands: [...]}] → 최적 트�
     // 길이 + 실제 이동거리 크게, 제자리 왕복(turns)은 크게 감점 → 공은 span이 큼
     const score = tr.pts.length * 2 + span * 0.35 + path * 0.05 - tr.turns * 6;
     if (score > bestScore) { bestScore = score; best = tr; }
+    if (score > 12) scored.push({ tr, score });
   });
+  aiBuildTracks._all = scored.sort((a, b) => b.score - a.score).map(s => s.tr); // 전체 스캔용
   return best && best.pts.length >= 4 ? best : null;
+}
+let aiScanHits = []; // 클립 스캔 결과 [{t, x, y, traj, call}]
+async function aiScanClip() { // 📼 클립 전체를 훑어 모든 바운스를 자동 목록화
+  const v = $('vj-video');
+  if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
+  if (aiBusy) return; aiBusy = true;
+  const btn = $('ai-scan-btn'); if (btn) btn.disabled = true;
+  try {
+    v.pause(); aiTrailStop();
+    const end = Math.min(v.duration || 0, 30); // 최대 30초
+    const tw = AI_TW, th = Math.max(1, Math.round(AI_TW * v.videoHeight / v.videoWidth));
+    const cv = document.createElement('canvas');
+    cv.width = tw; cv.height = th;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
+    const frames = [];
+    let dPrev = null, dCur = null;
+    const total = Math.max(2, Math.round(end / AI_STEP));
+    for (let k = 0; k <= total; k++) { // 스트리밍: 프레임 3장만 유지 (메모리 절약)
+      await seekTo(k * AI_STEP);
+      cx.drawImage(v, 0, 0, tw, th);
+      const dNext = cx.getImageData(0, 0, tw, th).data;
+      if (dPrev && dCur) {
+        const r = aiExtractCands(dPrev, dCur, dNext, tw, th);
+        frames.push({ t: (k - 1) * AI_STEP, cands: r.cands });
+      }
+      dPrev = dCur; dCur = dNext;
+      if (k % 10 === 0) aiStatus('📼 클립 스캔 ' + Math.round(k / total * 100) + '%…');
+    }
+    aiBuildTracks(frames);
+    const all = aiBuildTracks._all || [];
+    const sx = v.videoWidth / tw, sy = v.videoHeight / th;
+    aiScanHits = [];
+    all.slice(0, 8).forEach(tr => {
+      const pts = tr.pts.map(p => ({ t: p.t, x: p.x * sx, y: p.y * sy, s: Math.min(1, p.s) }));
+      const bi = aiBounceIdx(pts.map(p => p.y));
+      if (bi < 2 || bi > pts.length - 2) return;
+      const rb = aiRefineBounce(pts, bi) || pts[bi];
+      let call = null;
+      if (aiH) { const m = aiMapPt(aiH, rb.x, rb.y); call = aiVerdict(m[0], m[1]); }
+      aiScanHits.push({ t: rb.t, x: rb.x, y: rb.y, traj: pts, call });
+    });
+    aiScanHits.sort((a, b) => a.t - b.t);
+    const box = $('ai-scan-list');
+    if (!aiScanHits.length) {
+      aiStatus('바운스를 못 찾았어요 — 폰 고정 촬영본인지 확인하고, 특정 순간은 🤖 버튼으로 시도해 보세요');
+      if (box) box.innerHTML = '';
+    } else {
+      aiStatus('📼 스캔 완료 — 바운스 ' + aiScanHits.length + '개 발견! 탭하면 그 순간으로 이동해요');
+      if (box) box.innerHTML = aiScanHits.map((h, i) =>
+        '<button type="button" class="tag-btn" style="margin:2px" onclick="aiGoHit(' + i + ')">' +
+        '🟡 ' + h.t.toFixed(1) + 's' + (h.call ? (h.call.call === 'IN' ? ' 🟢IN' : ' 🔴OUT') + (h.call.close ? '?' : '') : '') + '</button>').join('');
+    }
+  } catch (e) { aiStatus('스캔 실패: ' + (e.message || e)); }
+  finally { aiBusy = false; if (btn) btn.disabled = false; }
+}
+function aiGoHit(i) {
+  const h = aiScanHits[i];
+  if (!h) return;
+  aiTraj = h.traj;
+  const v = $('vj-video');
+  v.currentTime = Math.max(0, h.t - 0.5);
+  v.playbackRate = 0.25;
+  document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
+  aiFinish(h.traj[0].t, h.traj[h.traj.length - 1].t);
+  v.play();
 }
 async function aiAnalyze() {
   const v = $('vj-video');
@@ -7323,10 +7465,12 @@ function aiFinish(t0, t1) {
     html += `<div class="ai-verdict unsure" style="margin-top:6px">바운스 미확정</div><div class="muted" style="font-size:12px;margin-top:4px">구간 안에서 공이 가장 낮아지는 지점을 못 찾았어요 — 바운스 순간 근처로 이동해 다시 분석해 보세요</div>`;
   } else {
     const b = aiTraj[bi];
-    const v = $('vj-video'); v.currentTime = b.t; // 바운스 프레임으로 이동
-    html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스 추정: ${b.t.toFixed(2)}초 (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
+    const rb = aiRefineBounce(aiTraj, bi) || b; // 보간 성공 시 정밀 착지점 사용
+    const refined = rb !== b;
+    const v = $('vj-video'); v.currentTime = rb.t; // 바운스 순간으로 이동
+    html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
     if (aiH) {
-      const [cx, cy] = aiMapPt(aiH, b.x, b.y);
+      const [cx, cy] = aiMapPt(aiH, rb.x, rb.y);
       const vd = aiVerdict(cx, cy);
       const cls = vd.close ? 'unsure' : (vd.call === 'IN' ? 'in' : 'out');
       html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}">🤖 AI 의견: ${vd.call}${vd.close ? ' (아슬아슬)' : ''}</span> <span class="muted" style="font-size:12px">라인에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}</span></div>`;
