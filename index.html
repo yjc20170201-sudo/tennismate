@@ -1008,6 +1008,12 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         </div>
         <div id="pose-status" class="muted" style="font-size:12px;margin-top:6px"></div>
         <div id="pose-result" style="margin-top:6px"></div>
+        <div class="vj-sub">🏃 코트 커버리지 (베타)</div>
+        <div class="muted" style="font-size:12px">영상 속 선수의 이동 범위를 코트 지도로 그려요. 📐 코트 보정을 해두면 <b>실제 미터 단위 이동거리</b>까지 나와요. (화면에 크게 나온 선수 1명 기준)</div>
+        <button type="button" class="btn small full" style="margin-top:6px" id="cov-btn" onclick="covAnalyze()">🏃 커버리지 분석 (영상 전체)</button>
+        <div id="cov-status" class="muted" style="font-size:12px;margin-top:6px"></div>
+        <canvas id="cov-canvas" style="display:none;width:100%;max-width:330px;border-radius:10px;margin-top:6px"></canvas>
+        <div id="cov-result" class="muted" style="font-size:12.5px;margin-top:4px"></div>
       </div>
       <div class="vj-sub" style="margin-top:16px">⚖️ 비디오 챌린지 — 2영상 나란히 보기</div>
       <div class="muted" style="font-size:12px">양쪽 베이스라인 뒤에서 각자 폰으로 찍었다면 두 영상을 나란히 돌려보세요. 각 영상에서 같은 순간(타구)을 찾아 싱크를 맞추면 재생·프레임 이동이 함께 움직여요. 판정은 공이 떨어진 쪽에 가까운 영상을 기준으로!</div>
@@ -7168,6 +7174,107 @@ async function aiAnalyzeDeep() { // 🎯 TrackNet 딥러닝 추적 (테니스공
     aiBusy = false; if (btn) btn.disabled = false;
   }
 }
+// ── 🌀 스핀 추정: 바운스 전 낙하각 + 바운스 반발률 (2D 궤적 물리 참고치) ──
+function aiSpin(traj, bi) {
+  if (bi < 3 || bi > traj.length - 3) return null;
+  const pre = traj.slice(Math.max(0, bi - 6), bi + 1);
+  const post = traj.slice(bi, Math.min(traj.length, bi + 4));
+  if (pre.length < 4 || post.length < 3) return null;
+  const p1 = pre[pre.length - 2], p2 = pre[pre.length - 1];
+  const dtIn = (p2.t - p1.t) || 1e-3;
+  const vin = { vx: (p2.x - p1.x) / dtIn, vy: (p2.y - p1.y) / dtIn }; // y 아래 방향 +
+  const q1 = post[0], q2 = post[post.length - 1];
+  const dtOut = (q2.t - q1.t) || 1e-3;
+  const vout = { vx: (q2.x - q1.x) / dtOut, vy: (q2.y - q1.y) / dtOut };
+  if (vin.vy <= 0) return null; // 내려오는 공이 아니면 판정 불가
+  const angleIn = Math.atan2(vin.vy, Math.abs(vin.vx) || 1) * 180 / Math.PI;
+  const rebound = Math.abs(vout.vy / vin.vy);
+  let label, why;
+  if (angleIn < 18 && rebound < 0.55) { label = '슬라이스성'; why = '완만하게 깔려 와서 낮게 깔림'; }
+  else if (angleIn > 32 && rebound > 0.45) { label = '탑스핀성'; why = '가파르게 꽂혀서 높게 튀어오름'; }
+  else { label = '플랫성'; why = '낙하각·반발이 중간 범위'; }
+  return { label, angleIn: Math.round(angleIn), rebound: Math.round(rebound * 100), why };
+}
+// ── 🏃 코트 커버리지: 관절 AI로 발 위치 샘플링 → 코트 지도 + 이동거리 ──
+let covBusy = false;
+function covStatus(t) { const el = $('cov-status'); if (el) el.textContent = t; }
+async function covAnalyze() {
+  const v = $('vj-video');
+  if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
+  if (covBusy) return; covBusy = true;
+  const btn = $('cov-btn'); if (btn) btn.disabled = true;
+  try {
+    v.pause();
+    covStatus('🧠 관절 AI 준비 중…');
+    await poseLoad();
+    const end = Math.min(v.duration || 0, 90); // 최대 90초
+    const step = 0.35;
+    const pts = [];
+    const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
+    for (let t = 0; t <= end; t += step) {
+      await seekTo(t);
+      const poses = await poseDet.estimatePoses(v);
+      const kp = poses && poses[0] ? poses[0].keypoints : null;
+      if (kp) {
+        const la = kp[15], ra = kp[16], lh = kp[11], rh = kp[12];
+        let px = null, py = null;
+        if (la && ra && la.score > 0.3 && ra.score > 0.3) { px = (la.x + ra.x) / 2; py = (la.y + ra.y) / 2; }
+        else if (lh && rh && lh.score > 0.3 && rh.score > 0.3) { px = (lh.x + rh.x) / 2; py = (lh.y + rh.y) / 2; }
+        if (px != null) {
+          if (aiH && aiCorners.length === 4) { const m = aiMapPt(aiH, px, py); pts.push({ x: m[0], y: m[1], m: true }); }
+          else pts.push({ x: px / v.videoWidth, y: py / v.videoHeight, m: false });
+        }
+      }
+      covStatus('🏃 분석 ' + Math.round(t / (end || 1) * 100) + '% · 위치 표본 ' + pts.length + '개');
+    }
+    covRender(pts);
+  } catch (e) { covStatus('실패: ' + (e.message || e)); }
+  finally { covBusy = false; if (btn) btn.disabled = false; }
+}
+function covRender(pts) {
+  const c = $('cov-canvas'), res = $('cov-result');
+  if (!c) return;
+  if (pts.length < 4) { covStatus('선수 위치를 충분히 못 찾았어요 — 몸 전체가 나오는 영상으로 시도해 보세요'); return; }
+  const metric = pts[0].m;
+  c.style.display = 'block';
+  const ctx = c.getContext('2d');
+  if (metric) { // 실제 코트 도면 (가로로 눕힘: 가로=길이 23.77m, 세로=폭 10.97m)
+    c.width = 330; c.height = Math.round(330 * AI_COURT_W / AI_COURT_L);
+    const sc = 330 / AI_COURT_L;
+    ctx.fillStyle = '#1e5a35'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(1, 1, c.width - 2, c.height - 2);
+    const NX = AI_COURT_L / 2 * sc; // 네트
+    ctx.beginPath(); ctx.moveTo(NX, 0); ctx.lineTo(NX, c.height); ctx.stroke();
+    [AI_COURT_L / 2 - 6.4, AI_COURT_L / 2 + 6.4].forEach(sx => { // 서비스라인
+      ctx.beginPath(); ctx.moveTo(sx * sc, 1.37 * sc); ctx.lineTo(sx * sc, (AI_COURT_W - 1.37) * sc); ctx.stroke();
+    });
+    ctx.beginPath(); ctx.moveTo((AI_COURT_L / 2 - 6.4) * sc, c.height / 2); ctx.lineTo((AI_COURT_L / 2 + 6.4) * sc, c.height / 2); ctx.stroke();
+    [1.37, AI_COURT_W - 1.37].forEach(yy => { // 단식 라인
+      ctx.beginPath(); ctx.moveTo(0, yy * sc); ctx.lineTo(c.width, yy * sc); ctx.stroke();
+    });
+    ctx.fillStyle = 'rgba(234,255,110,.22)';
+    pts.forEach(p => { ctx.beginPath(); ctx.arc(p.y * sc, p.x * sc, 7, 0, 7); ctx.fill(); });
+    // 이동거리 (순간이동 오탐 8m 초과는 제외)
+    let dist = 0, left = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const d = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+      if (d < 8) dist += d;
+    }
+    pts.forEach(p => { if (p.x < AI_COURT_L / 2) left++; });
+    res.innerHTML = '🏃 <b>이동거리 약 ' + dist.toFixed(0) + 'm</b> · 표본 ' + pts.length + '개 · 코트 좌/우 체류 ' + Math.round(left / pts.length * 100) + '% / ' + (100 - Math.round(left / pts.length * 100)) + '%';
+  } else { // 보정 없음: 화면 좌표 지도
+    c.width = 330; c.height = 186;
+    ctx.fillStyle = '#223a2c'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.strokeRect(1, 1, c.width - 2, c.height - 2);
+    ctx.fillStyle = 'rgba(234,255,110,.22)';
+    pts.forEach(p => { ctx.beginPath(); ctx.arc(p.x * c.width, p.y * c.height, 7, 0, 7); ctx.fill(); });
+    let left = 0;
+    pts.forEach(p => { if (p.x < 0.5) left++; });
+    res.innerHTML = '표본 ' + pts.length + '개 · 화면 좌/우 ' + Math.round(left / pts.length * 100) + '% / ' + (100 - Math.round(left / pts.length * 100)) + '% — 📐 코트 보정을 하면 실제 코트 도면과 미터 거리로 나와요';
+  }
+  covStatus('완료!');
+}
 function aiFinish(t0, t1) {
   const res = $('ai-result');
   if (aiTraj.length < 4) {
@@ -7191,6 +7298,11 @@ function aiFinish(t0, t1) {
     } else {
       html += `<div class="muted" style="font-size:12px;margin-top:4px">📐 코트 보정을 하면 인아웃 참고 의견까지 나와요</div>`;
     }
+  }
+  const spBi = aiBounceIdx(aiTraj.map(p => p.y));
+  if (spBi >= 0) {
+    const sp = aiSpin(aiTraj, spBi);
+    if (sp) html += `<div style="margin-top:6px"><span class="badge orange">🌀 ${sp.label} 추정</span> <span class="muted" style="font-size:12px">낙하각 ${sp.angleIn}° · 바운스 반발 ${sp.rebound}% — ${sp.why} <b>(1대 카메라 참고치)</b></span></div>`;
   }
   res.innerHTML = html;
   aiStatus('완료 — ▶ 재생을 누르면 공 이동 경로가 혜성 꼬리처럼 따라 그려져요 (정지하면 전체 경로)');
