@@ -1843,7 +1843,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.49';
+const APP_VERSION = 'v0.50';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8074,10 +8074,22 @@ async function mrCam() {
   $('mr-cam-btn').textContent = '⏹ 카메라 끄기';
   mrStatus('🔴 버퍼 녹화 중 — 최근 ' + MR_KEEP + '초 유지, 챌린지 시 마지막 ' + MR_CLIP + '초를 잘라 올려요');
 }
+// 녹화 포맷 선택 — 크롬/안드로이드 = webm, 아이폰 사파리 = mp4 (v0.50: webm 고정이던 것을 실제 지원 포맷으로)
+function recPick(withAudio) {
+  const list = withAudio
+    ? ['video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4;codecs=avc1,mp4a', 'video/mp4']
+    : ['video/webm;codecs=vp8', 'video/webm', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const m = list.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+  const type = m.startsWith('video/mp4') ? 'video/mp4' : m ? 'video/webm' : '';
+  return { mime: m, type: type || 'video/mp4', ext: type === 'video/webm' ? 'webm' : 'mp4' };
+}
+let mrFmt = recPick(true), ccFmt = recPick(false);
 function mrStartRec() {
   mrChunks = [];
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' : '';
+  mrFmt = recPick(true);
+  const mime = mrFmt.mime;
   mrRec = new MediaRecorder(mrStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined);
+  if (mrRec.mimeType) mrFmt.type = mrRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', mrFmt.ext = mrFmt.type === 'video/mp4' ? 'mp4' : 'webm';
   mrRec.ondataavailable = e => {
     if (e.data && e.data.size) {
       mrChunks.push({ blob: e.data, at: Date.now() });
@@ -8105,11 +8117,11 @@ async function mrOnChallenge(p) {
     const endMs = Date.now();
     const cut = mrChunks.length ? mrChunks.filter((c, i) => i === 0 || c.at >= p.at - MR_CLIP * 1000) : [];
     if (cut.length < 2) { mrStatus('버퍼에 영상이 없어요 — 카메라가 켜져 있었나요?'); mrBusy = false; if (mrStream) mrStartRec(); return; }
-    const blob = new Blob(cut.map(c => c.blob), { type: 'video/webm' });
+    const blob = new Blob(cut.map(c => c.blob), { type: mrFmt.type });
     const uid = TMAuth.session.user.id;
-    const path = `rooms/${mrCode}/${p.at}-${uid.slice(0, 8)}.webm`;
+    const path = `rooms/${mrCode}/${p.at}-${uid.slice(0, 8)}.${mrFmt.ext}`;
     mrStatus('⬆️ 내 클립 업로드 중… (' + Math.round(blob.size / 1024) + 'KB)');
-    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: 'video/webm', upsert: true });
+    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: mrFmt.type, upsert: true });
     if (error) throw error;
     const mine = { path, endMs, uid };
     mrClips.mine = { ...mine, blob };
@@ -8245,7 +8257,7 @@ async function ccToggle() {
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
     ccStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false
     });
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e)); return; }
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
@@ -8281,8 +8293,10 @@ async function ccToggle() {
 
 function ccStartRec() {
   ccChunks = [];
-  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : '';
+  ccFmt = recPick(false);
+  const mime = ccFmt.mime;
   ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined);
+  if (ccRec.mimeType) ccFmt.type = ccRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', ccFmt.ext = ccFmt.type === 'video/mp4' ? 'mp4' : 'webm';
   ccRec.ondataavailable = e => { if (e.data && e.data.size) ccChunks.push({ blob: e.data, at: Date.now() }); };
   ccRec.start(1000); // 1초 단위 청크
 }
@@ -8297,7 +8311,7 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
   const chunks = ccChunks;
   if (chunks.length > 1 && ccDb) {
     try {
-      const blob = new Blob(chunks.map(c => c.blob), { type: 'video/webm' });
+      const blob = new Blob(chunks.map(c => c.blob), { type: ccFmt.type });
       await ccPutSeg(Date.now(), blob);
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
       await ccPrune();
@@ -8319,10 +8333,10 @@ async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
     const cutoff = Date.now() - CC_CUT * 1000;
     const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
     if (cut.length < 2) throw new Error('버퍼에 영상이 없어요');
-    const blob = new Blob(cut.map(c => c.blob), { type: 'video/webm' });
+    const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
     const at = Date.now();
-    const path = 'cam/' + ccCode + '/' + at + '.webm';
-    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: 'video/webm', upsert: true });
+    const path = 'cam/' + ccCode + '/' + at + '.' + ccFmt.ext;
+    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: ccFmt.type, upsert: true });
     if (error) throw error;
     ccChan.send({ type: 'broadcast', event: 'camclip', payload: { path, at } });
     ccStatus('✂️ 클립 전송 완료 (' + Math.round(blob.size / 1024) + 'KB) — 🔴 녹화+중계 계속');
@@ -8371,7 +8385,7 @@ async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (�
     const d = new Date(seg.at);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(seg.blob);
-    a.download = '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.webm';
+    a.download = '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + (seg.blob && seg.blob.type && seg.blob.type.includes('mp4') ? '.mp4' : '.webm');
     document.body.appendChild(a); a.click(); a.remove();
     await new Promise(r => setTimeout(r, 600));
     URL.revokeObjectURL(a.href);
