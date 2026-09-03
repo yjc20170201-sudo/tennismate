@@ -996,7 +996,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
           <div class="vj-ctrl" style="margin-top:0">
-            <button type="button" class="btn small outline" style="flex:1" id="ai-calib-btn" onclick="aiCalibStart()">📐 코트 보정</button>
+            <button type="button" class="btn small" style="flex:1" id="ai-auto-btn" onclick="aiAutoCalib()">✨ 자동 보정</button>
+            <button type="button" class="btn small outline" style="flex:1" id="ai-calib-btn" onclick="aiCalibStart()">📐 수동 보정</button>
             <button type="button" class="tag-btn" onclick="aiClear()">지우기</button>
           </div>
         </details>
@@ -7053,6 +7054,129 @@ function aiCalibStart() {
   const c = $('ai-canvas'); c.classList.add('picking');
   aiSyncCanvas(); aiDraw();
   aiStatus('📐 복식 코트 네 귀퉁이를 순서대로 탭하세요: ① 왼쪽 위 → ② 오른쪽 위 → ③ 오른쪽 아래 → ④ 왼쪽 아래 (화면에 보이는 대로)');
+}
+// ── ✨ 코트 자동 보정: 흰 라인 → 허프 직선 → 사이드라인×베이스라인 교차 4점 ──
+function aiLineMask(d, w, h) { // 흰 코트 라인 픽셀 (밝은 무채색 + 주변보다 밝음)
+  const pts = [];
+  const bright = (i) => (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 3;
+  for (let y = 2; y < h - 2; y++) for (let x = 2; x < w - 2; x++) {
+    const p = (y * w + x) * 4;
+    const r = d[p], g = d[p + 1], b = d[p + 2];
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mn < 135 || mx - mn > 65) continue; // 흰색 계열만
+    const me = (r + g + b) / 3;
+    // 라인은 주변(수직/수평 ±3px)보다 밝다 — 큰 흰 벽·하늘 제거
+    if (me - bright(y * w + x - 3) > 25 || me - bright(y * w + x + 3) > 25 ||
+        me - bright((y - 3) * w + x) > 25 || me - bright((y + 3) * w + x) > 25) {
+      pts.push([x, y]);
+    }
+  }
+  return pts;
+}
+function aiHough(pts, w, h) { // 표준 허프 변환 → 강한 직선들 [{th(rad), rho, votes}]
+  const TH = 180;
+  const diag = Math.ceil(Math.hypot(w, h));
+  const RB = 2; // rho 해상도(px)
+  const RN = Math.ceil(diag * 2 / RB);
+  const acc = new Int32Array(TH * RN);
+  const cosT = [], sinT = [];
+  for (let t = 0; t < TH; t++) { const a = t * Math.PI / TH; cosT.push(Math.cos(a)); sinT.push(Math.sin(a)); }
+  const step = pts.length > 16000 ? Math.ceil(pts.length / 16000) : 1;
+  for (let i = 0; i < pts.length; i += step) {
+    const [x, y] = pts[i];
+    for (let t = 0; t < TH; t++) {
+      const rho = x * cosT[t] + y * sinT[t];
+      const ri = Math.round((rho + diag) / RB);
+      if (ri >= 0 && ri < RN) acc[t * RN + ri]++;
+    }
+  }
+  // 피크 추출 (비최대 억제: ±6° ±8rho)
+  const lines = [];
+  const minVotes = Math.max(18, Math.floor(pts.length / step * 0.02));
+  for (let iter = 0; iter < 14; iter++) {
+    let bi = -1, bv = minVotes;
+    for (let i = 0; i < acc.length; i++) if (acc[i] > bv) { bv = acc[i]; bi = i; }
+    if (bi < 0) break;
+    const t0 = (bi / RN) | 0, r0 = bi % RN;
+    lines.push({ th: t0 * Math.PI / TH, rho: r0 * RB - diag, votes: bv, tdeg: t0 });
+    for (let dt = -6; dt <= 6; dt++) for (let dr = -8; dr <= 8; dr++) {
+      const tt = (t0 + dt + TH) % TH, rr = r0 + dr;
+      if (rr >= 0 && rr < RN) acc[tt * RN + rr] = 0;
+    }
+  }
+  return lines;
+}
+function aiLineX(l, y) { return Math.abs(Math.cos(l.th)) < 1e-6 ? null : (l.rho - y * Math.sin(l.th)) / Math.cos(l.th); }
+function aiIntersect(l1, l2) {
+  const a1 = Math.cos(l1.th), b1 = Math.sin(l1.th), a2 = Math.cos(l2.th), b2 = Math.sin(l2.th);
+  const det = a1 * b2 - a2 * b1;
+  if (Math.abs(det) < 1e-8) return null;
+  return [(l1.rho * b2 - l2.rho * b1) / det, (a1 * l2.rho - a2 * l1.rho) / det];
+}
+function aiDetectCourt(d, w, h) { // → [farL, farR, nearR, nearL] 코너 4개 | null
+  const pts = aiLineMask(d, w, h);
+  if (pts.length < 80) return null;
+  const lines = aiHough(pts, w, h);
+  // 화면 기준 분류: 수평(75~105°) = 베이스/서비스라인, 그 외 기울어진 것 = 사이드라인
+  const H = lines.filter(l => l.tdeg >= 75 && l.tdeg <= 105);
+  const S = lines.filter(l => l.tdeg < 70 || l.tdeg > 110);
+  if (H.length < 2 || S.length < 2) return null;
+  const midY = h * 0.55;
+  // 좌/우 사이드라인: 화면 중간 높이에서 가장 왼쪽/오른쪽 (복식 라인이 바깥)
+  const withX = S.map(l => ({ l, x: aiLineX(l, midY) })).filter(o => o.x !== null && o.x > -w * 0.5 && o.x < w * 1.5);
+  if (withX.length < 2) return null;
+  withX.sort((a, b) => a.x - b.x);
+  const left = withX[0].l, right = withX[withX.length - 1].l;
+  if (withX[withX.length - 1].x - withX[0].x < w * 0.25) return null;
+  // 수평선 후보: 좌우 사이드라인 사이 구간에 실제 라인 픽셀이 충분한 것만
+  const valid = [];
+  H.forEach(l => {
+    const yc = Math.abs(Math.sin(l.th)) < 1e-6 ? null : (l.rho - (w / 2) * Math.cos(l.th)) / Math.sin(l.th);
+    if (yc === null || yc < 2 || yc > h - 2) return;
+    const xa = aiLineX(left, yc), xb = aiLineX(right, yc);
+    if (xa === null || xb === null || xb - xa < w * 0.12) return;
+    let support = 0;
+    const step = Math.max(1, Math.floor(pts.length / 8000));
+    for (let i = 0; i < pts.length; i += step) {
+      const [x, y] = pts[i];
+      if (x < xa - 4 || x > xb + 4) continue;
+      if (Math.abs(x * Math.cos(l.th) + y * Math.sin(l.th) - l.rho) < 3) support++;
+    }
+    if (support * step > (xb - xa) * 0.22) valid.push({ l, yc });
+  });
+  if (valid.length < 2) return null;
+  valid.sort((a, b) => a.yc - b.yc);
+  const far = valid[0].l, near = valid[valid.length - 1].l;
+  const c1 = aiIntersect(far, left), c2 = aiIntersect(far, right);
+  const c3 = aiIntersect(near, right), c4 = aiIntersect(near, left);
+  if (!c1 || !c2 || !c3 || !c4) return null;
+  // 검증: 원근 구도 (아래가 넓고, 충분한 높이)
+  const topW = c2[0] - c1[0], botW = c3[0] - c4[0];
+  const hgt = ((c3[1] + c4[1]) - (c1[1] + c2[1])) / 2;
+  if (botW < w * 0.3 || topW <= 0 || topW > botW * 1.05 || hgt < h * 0.2) return null;
+  return [c1, c2, c3, c4];
+}
+async function aiAutoCalib() {
+  const v = $('vj-video');
+  if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
+  aiStatus('✨ 코트 라인 찾는 중…');
+  await new Promise(r => setTimeout(r, 30)); // 상태 표시 갱신
+  try {
+    const w2 = 480, h2 = Math.max(1, Math.round(480 * v.videoHeight / v.videoWidth));
+    const cv = document.createElement('canvas');
+    cv.width = w2; cv.height = h2;
+    const cx = cv.getContext('2d', { willReadFrequently: true });
+    cx.drawImage(v, 0, 0, w2, h2);
+    const q = aiDetectCourt(cx.getImageData(0, 0, w2, h2).data, w2, h2);
+    if (!q) { aiStatus('자동 인식 실패 — 코트 전체와 라인이 선명히 보이는 프레임에서 다시 시도하거나, 📐 수동 보정을 써주세요'); return; }
+    const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
+    aiCorners = q.map(c => [c[0] * sx, c[1] * sy]);
+    aiH = aiHomography(aiCorners, [[0, 0], [AI_COURT_W, 0], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]]);
+    aiPicking = false;
+    const c = $('ai-canvas'); if (c) c.classList.remove('picking');
+    aiStatus(aiH ? '✨ 자동 보정 완료! 주황 윤곽이 코트와 맞는지 확인하세요 — 어긋나면 지우고 📐 수동 보정' : '보정 계산 실패 — 📐 수동 보정을 써주세요');
+    aiSyncCanvas(); aiDraw();
+  } catch (e) { aiStatus('자동 보정 오류: ' + (e.message || e)); }
 }
 function aiSnapToLine(v, x, y) { // 탭 지점 주변에서 흰 코트 라인 픽셀들의 무게중심으로 스냅
   try {
