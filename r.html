@@ -28,7 +28,7 @@
 <div id="join">
   <div style="font-size:26px">📟</div>
   <div style="font-size:14px;font-weight:800">테니스메이트 리모컨</div>
-  <input id="code" maxlength="4" placeholder="코드 4자리" autocapitalize="characters">
+  <input id="code" maxlength="6" placeholder="코드 6자리" autocapitalize="characters">
   <button onclick="joinRoom()">연결</button>
   <div id="msg">점수판 폰의 "📟 리모컨 연결" 코드를 입력하세요</div>
 </div>
@@ -48,7 +48,7 @@ var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 var chan = null;
 function joinRoom() {
   var code = (document.getElementById('code').value || '').trim().toUpperCase();
-  if (code.length !== 4) { document.getElementById('msg').textContent = '코드 4자리를 입력하세요'; return; }
+  if (code.length !== 6) { document.getElementById('msg').textContent = '코드 6자리를 입력하세요'; return; }
   document.getElementById('msg').textContent = '연결 중…';
   try {
     var client = (window.__testClient) || window.supabase.createClient(SB_URL, SB_KEY);

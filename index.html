@@ -596,6 +596,14 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div class="stat"><div class="num" id="st-wins">0</div><div class="lbl">승리</div></div>
       <div class="stat"><div class="num" id="st-rank">-</div><div class="lbl">내 랭킹</div></div>
     </div>
+    <div class="card" id="home-quick" style="margin-bottom:10px">
+      <div class="muted" style="font-size:12px;margin-bottom:6px">클럽 운영 바로가기</div>
+      <div class="row" style="gap:6px">
+        <button class="btn small" style="flex:1" onclick="goSection('club', 'kdk-sec')">🎮 미니게임</button>
+        <button class="btn small" style="flex:1" onclick="goSection('rank', 'vj-sec')">📹 판독 센터</button>
+        <button class="btn small outline" style="flex:1" onclick="goSection('rank', 'cc-code-in')">📡 클럽캠</button>
+      </div>
+    </div>
     <div class="row" style="margin-bottom:2px">
       <b style="font-size:14px">🏠 내 홈</b>
       <button class="btn small outline" onclick="openHomeEdit()">⚙️ 홈 화면 편집</button>
@@ -723,6 +731,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     </div>
     <div class="muted" style="margin:-6px 0 10px">💚 매칭률은 실력 유사도·지역·매너·활동량을 반영해요. ⭐ 즐겨찾기는 맨 위 고정, 🎴 명함 열람, ⏰ 뱃지는 나와 시간표가 겹치는 파트너!</div>
     <div id="partner-list"></div>
+    <div hidden id="lesson-block"><!-- v0.47: 실제 코치 연동 없음 — 베타 동안 숨김 -->
     <div class="section-title">🎓 레슨/코치 찾기</div>
     <div class="filters">
       <select id="c-region" onchange="renderCoaches()">
@@ -737,6 +746,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div id="coach-list"></div>
     <div class="section-title">📚 내 레슨</div>
     <div id="lesson-list"></div>
+    </div>
     <div class="section-title">📥 받은 신청</div>
     <div id="received-list"></div>
     <div class="section-title">📤 보낸 신청</div>
@@ -748,6 +758,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div class="section-title">🏝️ 제주 공공 테니스장 (실제)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">출처: 제주 공공체육시설 예약통합시스템(psf.kr)·서귀포시청. <b>예약은 공식 예약처에서</b> — 앱은 정보와 연결만 해드려요.</div>
     <div id="jeju-court-list"></div>
+    <div hidden id="court-demo-block"><!-- v0.47: 데모 예약·체크인·양도·빈자리 알림 — 실제 예약처 연동 전까지 숨김 -->
     <div class="section-title" style="margin-top:14px">🏟️ 코트 예약 <span class="badge gray">데모</span></div>
     <div class="card">
       <div class="row" style="margin-bottom:10px">
@@ -779,6 +790,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <button class="btn full" onclick="addSlotAlert()">🔔 알림 등록</button>
     </div>
     <div id="alert-list"></div>
+    </div>
   </div>
 
   <!-- ============ 지도 (v0.13) ============ -->
@@ -824,12 +836,12 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     </div>
     <div id="club-list"></div>
     <div class="section-title" style="margin-top:14px">🏆 클럽 랭킹 — 누적 포인트</div>
-    <div class="muted" style="margin:-4px 0 8px;font-size:12px">개인전·청백전 결과가 자동 합산돼요. <b>참가 +10pt · 게임 승리 +10pt</b> (동점이면 승수 → 득실차)</div>
+    <div class="muted" style="margin:-4px 0 8px;font-size:12px">개인전·청백전·단식 대전 결과가 자동 합산돼요. <b>참가 +10pt · 게임 승리 +10pt</b> (동점이면 승수 → 득실차)</div>
     <div id="club-rank"></div>
     <div class="card" style="margin-top:8px">
       <div class="row">
-        <span class="muted" style="font-size:12.5px;flex:1">🎥 클럽 경기 중 <b>인아웃 시비</b>가 나면 — 촬영 모드를 켜두고 시비 순간 ✂️ 저장 → 🚨 슬로우·AI 판독</span>
-        <button class="btn small" onclick="clubCamOpen()">📹 판독 카메라</button>
+        <span class="muted" style="font-size:12.5px;flex:1">🎥 클럽 경기 중 <b>인아웃 시비</b>가 나면 — 라이브 점수판의 촬영 모드를 켜두고 시비 순간 ✂️ 저장 → 🚨 슬로우·AI 판독</span>
+        <button class="btn small" onclick="clubCamOpen()">📹 촬영 모드 켜기</button>
       </div>
     </div>
     <div class="card" id="namecfg-card" style="margin-top:14px">
@@ -840,7 +852,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <textarea id="namecfg-map" rows="4" style="width:100%;font-size:13px;box-sizing:border-box" placeholder="럭키=정철&#10;알카=도희" oninput="nameCfgEdit()"></textarea>
       <div class="muted" id="namecfg-status" style="font-size:12px;margin-top:4px"></div>
     </div>
-    <div class="section-title" style="margin-top:14px">🎮 클럽 미니게임 — 개인전 (KDK)</div>
+    <div class="section-title" id="kdk-sec" style="margin-top:14px">🎮 클럽 미니게임 — 개인전 (KDK)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">번호 뽑고 정해진 조합으로 파트너를 바꿔가며 4게임씩 — 서부테니스장 보드의 대진표 그대로예요. 승 → 득실차 → 득점 순으로 개인 순위!</div>
     <div id="kdk-area"></div>
     <div class="section-title" style="margin-top:14px">⚔️ 클럽 미니게임 — 청백전</div>
@@ -954,7 +966,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div id="sv-import-res" class="muted" style="font-size:12px;margin-top:6px"></div>
       </div>
     </div>
-    <div class="section-title">📹 비디오 판독 센터</div>
+    <div class="section-title" id="vj-sec">📹 비디오 판독 센터</div>
     <div class="card">
       <div class="muted">폰으로 찍은 경기 영상을 불러와 슬로모션·프레임 단위로 <b>인아웃 판독</b>을 하고, 두 지점을 찍어 <b>서브 구속</b>을 측정해보세요. 영상은 내 기기에서만 재생되고 어디에도 업로드·저장되지 않아요. 🤖 AI 자동 판정·궤적 추적은 백엔드 도입 후 제공 예정!</div>
       <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">🎬 영상 불러오기 / 촬영
@@ -1008,6 +1020,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <button type="button" class="btn small outline" style="flex:1" id="ai-calib-btn" onclick="aiCalibStart()">📐 수동 보정</button>
             <button type="button" class="tag-btn" onclick="aiClear()">지우기</button>
           </div>
+          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="ai-singles" onchange="aiSingles = this.checked; aiStatus(aiSingles ? '단식 판정 — 사이드라인을 1.37m 안쪽으로 봐요' : '복식 판정 — 바깥 사이드라인 기준')"> 단식 경기 (사이드라인 안쪽 기준)</label>
+          <div class="muted" style="font-size:11px;margin-top:4px">판정 기준: 라인 폭 5cm + 공 지름 6.7cm 반영 — 공이 라인 바깥 가장자리에 조금이라도 걸치면 IN</div>
         </details>
         <div id="ai-status" class="muted" style="font-size:12px;margin-top:6px"></div>
         <div id="ai-result" style="margin-top:6px"></div>
@@ -1071,7 +1085,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div id="mr-main" style="display:none">
         <div class="vj-ctrl">
           <button type="button" class="btn small" onclick="mrCreate()">➕ 방 만들기</button>
-          <input id="mr-code-in" placeholder="초대 코드" maxlength="4" style="flex:1;text-transform:uppercase">
+          <input id="mr-code-in" placeholder="초대 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase">
           <button type="button" class="btn small outline" onclick="mrJoin()">입장</button>
         </div>
         <div id="mr-room" style="display:none">
@@ -1099,7 +1113,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div id="cc-main" style="display:none">
         <button type="button" class="btn small full" id="cc-start-btn" style="margin-top:8px" onclick="ccToggle()">📡 이 폰을 클럽캠으로 (공기계에서 누르세요)</button>
         <div class="vj-ctrl" style="margin-top:6px">
-          <input id="cc-code-in" placeholder="캠 코드 4자리" maxlength="4" style="flex:1;text-transform:uppercase">
+          <input id="cc-code-in" placeholder="캠 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase">
           <button type="button" class="btn small outline" id="cc-watch-btn" onclick="cvWatch()">👀 보기</button>
         </div>
         <div id="cc-cam-wrap" style="display:none">
@@ -1123,11 +1137,13 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn small outline full" style="margin-top:8px" onclick="ccSaveAll()">💾 캠 영상 전체 저장 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 학습데이터용</button>
       </div>
     </div>
+    <div hidden id="aicoach-block"><!-- v0.47: 잠긴 기능은 메뉴에서 숨김 (AI_COACH_ENABLED로 재개) -->
     <div class="section-title">🧠 AI 코치 (준비 중)</div>
     <div class="card">
       <div class="muted">🦴 폼 측정치와 🏷️ 포인트 태그가 쌓이면, AI가 사람 코치처럼 <b>스윙 교정 + 상대 공략 리포트</b>를 써주는 기능이에요. API 비용이 들어 베타 동안은 잠겨 있어요.</div>
       <div id="coach-data" class="muted" style="font-size:12.5px;margin-top:8px">모인 데이터가 아직 없어요 — 위의 🦴 폼 분석과 라이브 스코어보드의 🏷️ 포인트 태그를 써보세요.</div>
       <button class="btn full" disabled style="margin-top:10px;opacity:.55">🔒 AI 코칭 리포트 생성 — 베타 후 오픈</button>
+    </div>
     </div>
     <div class="section-title">🤜🤛 라이벌 & 상대 전적</div>
     <div class="muted" style="margin:-4px 0 10px">경기를 기록한 상대와의 맞대결 전적이에요. 카드를 탭하면 상세 전적이 열려요.</div>
@@ -1609,9 +1625,9 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 <div class="toast" id="toast"></div>
 <script>
 /* ===== v0.38 · 서버 로그인 준비 (Phase 2 · B1) =====
-   B0(계정 준비)가 끝나면 아래 TM_CONFIG에 Supabase 발급값을 넣는 순간 로그인 흐름이 켜져요.
-   지금은 null이라 TMAuth와 로그인 UI는 전부 잠들어 있고, 앱은 기존 데모 모드 그대로 동작해요.
-   예시 (B0 완료 후):
+   TM_CONFIG에 Supabase 발급값이 들어 있으면 서버 모드(로그인·서버 저장)가 켜져요. 2026-08-31부터 서울 프로젝트 값이 들어가 있어 서버 모드 ON.
+   null로 바꾸면 TMAuth와 로그인 UI가 잠들고 앱은 데모 모드로만 동작해요.
+   형식:
    window.TM_CONFIG = {
      supabaseUrl: 'https://xxxx.supabase.co',   // 공개 가능 값
      supabaseAnonKey: '...anon key...',          // 공개 가능 값
@@ -1815,7 +1831,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.46';
+const APP_VERSION = 'v0.47';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2270,35 +2286,42 @@ let ptsLog = [
 const HOME_SECTIONS = [
   { key: 'upcoming', label: '📅 다가오는 일정' },
   { key: 'pcard', label: '🎴 플레이어 카드' },
-  { key: 'insights', label: '🤖 AI 코칭 인사이트' },
-  { key: 'mental', label: '🧠 멘탈 게임' },
+  { key: 'insights', label: '🤖 AI 코칭 인사이트', off: true },
+  { key: 'mental', label: '🧠 멘탈 게임', off: true },
   { key: 'trend', label: '📉 포인트 추이' },
   { key: 'map', label: '🗺️ 지역 정복' },
-  { key: 'gear', label: '🎒 내 장비' },
-  { key: 'practice', label: '🏋️ 연습 일지' },
-  { key: 'drills', label: '📚 드릴 라이브러리' },
-  { key: 'challenges', label: '🎯 월간 챌린지' },
-  { key: 'recap', label: '📈 월간 리캡' },
-  { key: 'wrapped', label: '🗓️ 시즌 Wrapped' },
+  { key: 'gear', label: '🎒 내 장비', off: true },
+  { key: 'practice', label: '🏋️ 연습 일지', off: true },
+  { key: 'drills', label: '📚 드릴 라이브러리', off: true },
+  { key: 'challenges', label: '🎯 월간 챌린지', off: true },
+  { key: 'recap', label: '📈 월간 리캡', off: true },
+  { key: 'wrapped', label: '🗓️ 시즌 Wrapped', off: true },
   { key: 'feed', label: '📣 활동 피드' },
   { key: 'stats', label: '📊 내 경기 통계' },
-  { key: 'level', label: '📐 레벨 자동 보정' },
-  { key: 'rematch', label: '🔁 리매치 제안' },
-  { key: 'badges', label: '🎖️ 뱃지' },
-  { key: 'partners', label: '🔥 추천 파트너' },
+  { key: 'level', label: '📐 레벨 자동 보정', off: true },
+  { key: 'rematch', label: '🔁 리매치 제안', off: true },
+  { key: 'badges', label: '🎖️ 뱃지', off: true },
+  { key: 'partners', label: '🔥 추천 파트너', off: true },
   { key: 'data', label: '⚙️ 데이터 관리' },
 ];
-let homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: true }));
+let homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: !s.off })); // off: 베타 기본 숨김 (⚙️ 홈 화면 편집에서 켤 수 있음)
 
 // ===== 유틸 =====
 const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); // 사용자 입력 → HTML 안전
+function goSection(tab, id) { // 홈 바로가기: 탭 전환 후 해당 섹션으로 스크롤
+  const btn = document.querySelector("nav button[onclick*=\"showTab('" + tab + "'\"]");
+  showTab(tab, btn || document.createElement('button'));
+  setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+}
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 function todayStr(offset = 0) {
   const d = new Date(); d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10);
+  const p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); // 로컬(KST) 기준 — toISOString은 새벽 0~9시에 전날이 됨
 }
 const DAYNAMES = ['일','월','화','수','목','금','토'];
 function dateObj(s) { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); }
@@ -2327,11 +2350,11 @@ function toggleDark() { setDark(!darkMode); }
 let onboarded = false;
 let obStep = 0;
 const OB_FEATURES = [
-  { ico: '🤝', t: '파트너 매칭 & 오픈 매치', d: '실력·지역·매너를 반영한 매칭률로 딱 맞는 상대를 찾아요.' },
-  { ico: '🏟️', t: '코트 예약 & 양도', d: '주간 캘린더로 예약하고, 일정이 바뀌면 양도 게시판에 내놓아요.' },
-  { ico: '🎾', t: '경기 기록 & 라이브 스코어', d: '포인트 단위 스코어링, ELO 랭킹, 월간 챌린지까지 자동으로.' },
-  { ico: '🗺️', t: '지역 정복 지도', d: '동네 랭킹 1위가 되어 우리 동네를 내 색으로 칠해보세요.' },
-  { ico: '💬', t: '클럽 & 커뮤니티', d: '클럽 래더·대항전, 소모임·번개 모임, 자유글·Q&A·용품 후기로 함께 성장해요.' },
+  { ico: '🎮', t: '클럽 미니게임 기록', d: 'KDK 개인전·청백전·단식 대전을 앱에서 진행하면 결과가 클럽 랭킹에 자동으로 쌓여요.' },
+  { ico: '📹', t: 'AI 인아웃 판독', d: '폰으로 찍은 영상에서 공을 추적해 바운스 위치와 IN/OUT 참고 의견을 보여줘요. 시비가 나면 슬로우로 함께 확인.' },
+  { ico: '🏆', t: '경기 기록 & ELO 랭킹', d: '상대가 승인해야 랭킹에 반영되는 서버 ELO. 단식·복식을 따로 집계해요.' },
+  { ico: '🗺️', t: '지역 정복 지도', d: '제주 14구역 — 동네 랭킹 1위가 되어 우리 동네를 내 색으로 칠해보세요. 지역 대회의 밑그림이에요.' },
+  { ico: '🤝', t: '파트너 매칭 & 클럽', d: '실력·지역이 맞는 상대를 찾고, 클럽에 가입해 정기 모임과 대항전에 참여해요.' },
 ];
 function openOnboard() {
   obStep = 0;
@@ -2574,7 +2597,7 @@ async function svCreateClub() {
   const name = ($('cb-name').value || '').trim();
   if (!name) { toast('클럽 이름을 입력해 주세요'); return; }
   try {
-    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const myUid = svMyId(); if (!myUid) { toast('먼저 로그인해 주세요'); return; }
     const { error } = await svClient().from('clubs').insert({
       name, region: $('cb-region').value || '', emoji: ($('cb-emoji').value || '🎾').trim() || '🎾',
       level: ($('cb-level').value || '').trim(), descr: ($('cb-desc').value || '').trim(), owner_id: myUid
@@ -2590,7 +2613,7 @@ async function svCreateClub() {
 }
 async function svJoinClub(c) {
   try {
-    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const myUid = svMyId(); if (!myUid) { toast('먼저 로그인해 주세요'); return; }
     const { error } = await svClient().from('club_members').insert({ club_id: c.cid, user_id: myUid });
     if (error) throw error;
     toast('🏘️ ' + c.name + '에 가입했어요!');
@@ -2599,7 +2622,7 @@ async function svJoinClub(c) {
 }
 async function svLeaveClub(c) {
   try {
-    const myUid = window.__svTestClient ? '00000000-test' : TMAuth.session.user.id;
+    const myUid = svMyId(); if (!myUid) { toast('먼저 로그인해 주세요'); return; }
     const { error } = await svClient().from('club_members').delete().eq('club_id', c.cid).eq('user_id', myUid);
     if (error) throw error;
     toast(c.name + '에서 탈퇴했어요');
@@ -2612,6 +2635,10 @@ function enterRealMode(pf) { // 실전 모드: 데모 전적을 서버 실데이
   realModeOn = true;
   history = [];
   ptsLog = [];
+  // v0.47: 데모 전용 데이터도 전부 비움 — 가짜 코치·피드·신청·모임·양도가 실사용자에게 보이지 않게
+  coaches = []; lessons = []; feed = []; openMatches = []; received = []; sent = [];
+  meetings = []; interMatches = []; transfers = []; slotAlerts = []; subRequests = [];
+  groups = []; posts = []; socialEvents = []; checkins = []; courtReviews = [];
   if (pf) {
     myStats = {
       matches: pf.matches || 0, wins: pf.wins || 0,
@@ -3218,8 +3245,8 @@ function renderBoard() {
     return `<div class="card">
       <div class="row" style="align-items:flex-start">
         <div style="flex:1;min-width:0">
-          <h3>${p.title} ${p.cat === 'Q&A' && p.solved ? '<span class="badge">✅ 해결됨</span>' : ''} ${p.mine ? '<span class="badge">내 글</span>' : ''}</h3>
-          <div class="muted">${cIco} ${p.cat} · ${p.who}${p.mine ? ' (나)' : ''} · ${fmtMD(p.date)}</div>
+          <h3>${esc(p.title)} ${p.cat === 'Q&A' && p.solved ? '<span class="badge">✅ 해결됨</span>' : ''} ${p.mine ? '<span class="badge">내 글</span>' : ''}</h3>
+          <div class="muted">${cIco} ${p.cat} · ${esc(p.who)}${p.mine ? ' (나)' : ''} · ${fmtMD(p.date)}</div>
         </div>
         ${p.mine ? `<div style="display:flex;gap:6px;flex-shrink:0">
           <button class="btn small outline" onclick="openPostModal(${p.id})">수정</button>
@@ -3408,7 +3435,7 @@ function useGear() { // 경기 기록 시 주력 라켓의 스트링 사용 카�
 function normalizeLayout() {
   const valid = HOME_SECTIONS.map(s => s.key);
   homeLayout = homeLayout.filter(l => l && valid.includes(l.key));
-  valid.forEach(k => { if (!homeLayout.some(l => l.key === k)) homeLayout.push({ key: k, on: true }); });
+  valid.forEach(k => { if (!homeLayout.some(l => l.key === k)) homeLayout.push({ key: k, on: !HOME_SECTIONS.find(s => s.key === k).off }); });
 }
 function applyHomeLayout() {
   normalizeLayout();
@@ -3444,7 +3471,7 @@ function toggleSection(i) {
   renderHomeEdit(); applyHomeLayout();
 }
 function resetHomeLayout() {
-  homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: true }));
+  homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: !s.off })); // off: 베타 기본 숨김 (⚙️ 홈 화면 편집에서 켤 수 있음)
   renderHomeEdit(); applyHomeLayout();
   toast('홈 화면을 기본 구성으로 되돌렸어요');
 }
@@ -4155,7 +4182,7 @@ function lvRCHostToggle() {
 }
 function lvRCRemoteJoin() {
   const c = ($('lvrc-code-in').value || '').trim().toUpperCase();
-  if (c.length !== 4) { toast('리모컨 코드 4자리를 입력해 주세요'); return; }
+  if (c.length !== 6) { toast('리모컨 코드 6자리를 입력해 주세요'); return; }
   lvRCJoin(c, 'remote').catch(e => toast('입장 실패: ' + (e.message || e)));
 }
 function lvRCPoint(side) {
@@ -4513,7 +4540,7 @@ function renderLive() {
       <button class="btn full" onclick="startLive()">▶️ 경기 시작</button>
       <div class="dline" style="margin-top:10px">📟 아니면, 다른 폰의 점수판에 <b>리모컨으로 참여</b> — 코트에 안 가도 여기서 탭!</div>
       <div class="row" style="gap:8px">
-        <input id="lvrc-code-in" placeholder="리모컨 코드 4자리" maxlength="4" style="flex:1;text-transform:uppercase">
+        <input id="lvrc-code-in" placeholder="리모컨 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase">
         <button class="btn small outline" onclick="lvRCRemoteJoin()">입장</button>
       </div>`;
     if ($('lv-partner') && players.length >= 4) { $('lv-partner').value = '2'; $('lv-opp2').value = '4'; }
@@ -5547,7 +5574,7 @@ function addSlotAlert() {
   slotAlerts.push({ id: nextAlertId++, courtId, date });
   toast('🔔 빈자리 알림을 등록했어요! 매물이 나오면 바로 알려드릴게요');
   renderAlerts();
-  setTimeout(() => simulateVacancy(courtId, date), 4000); // 데모: 잠시 후 양도 매물 자동 등장
+  if (!serverMode()) setTimeout(() => simulateVacancy(courtId, date), 4000); // 데모 모드에서만: 잠시 후 양도 매물 자동 등장
 }
 function simulateVacancy(courtId, date) {
   if (!slotAlerts.some(a => a.courtId === courtId && a.date === date)) return; // 해제됨
@@ -6858,7 +6885,7 @@ function svRenderSlots() {
 }
 function svClient() { return window.__svTestClient || TMAuth.client; }
 function svLogged() { return !!window.__svTestClient || (serverMode() && TMAuth.isLoggedIn); }
-function svMyId() { return window.__svTestClient ? '00000000-test' : TMAuth.session.user.id; }
+function svMyId() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
 function svParseSets(str) { // "6-4, 3-6, 7-5" → {sets, winner(1|2)} | null — 순수 함수
   if (!str) return null;
   const parts = String(str).split(',').map(t => t.trim()).filter(Boolean);
@@ -7010,17 +7037,19 @@ async function svImport(ev) {
 }
 
 // ===== AI 판독 — 궤적 추적·바운스·인아웃 참고 의견 (v0.41, 베타) =====
-// COCO-SSD(브라우저 온디바이스) — 서버 업로드 없음. 참고 의견일 뿐 공식 판정이 아님을 UI에 명시.
-let aiModel = null, aiTraj = [], aiCorners = [], aiPicking = false, aiH = null, aiBusy = false;
-const AI_STEP = 0.08, AI_BACK = 1.8, AI_FWD = 1.0, AI_MIN_SCORE = 0.2;
+// 자체 공 추적(프레임 차분+트랙 연결) + TrackNet — 전부 온디바이스, 서버 업로드 없음. 참고 의견일 뿐 공식 판정이 아님을 UI에 명시.
+let aiTraj = [], aiCorners = [], aiPicking = false, aiH = null, aiBusy = false;
+const AI_STEP = 0.08, AI_BACK = 1.8, AI_FWD = 1.0;
 // 테니스공 추적 파라미터 — 범용 물체인식 모델은 작고 빠른 테니스공을 거의 못 잡아서,
 // 연속 프레임 차이(움직임) + 공 색(밝은 노랑·연두) + 궤적 연속성으로 직접 찾는다.
 const AI_TW = 320;          // 분석용 축소 폭 (속도)
 const AI_DIFF_MIN = 42;     // 움직임으로 인정할 최소 픽셀 변화량
-const AI_BRIGHT_MIN = 70;   // 공은 어두운 배경보다 밝다
-const AI_GB_MIN = 14;       // G가 B보다 이만큼 크면 노랑·연두 계열
-const AI_BLOB_MIN = 2, AI_BLOB_MAX = 260; // 공 크기 후보 (축소 해상도 기준 픽셀 수)
+// (밝기·색·크기 임계값은 aiExtractCands 안에 직접 있음 — v0.47에서 미사용 상수 정리)
 const AI_COURT_W = 10.97, AI_COURT_L = 23.77, AI_BALL_R = 0.033; // ITF 복식 코트(m)·공 반지름
+const AI_LINE_W = 0.05, AI_SINGLES_IN = 1.37; // 라인 폭 5cm · 단식 사이드라인은 복식 라인에서 1.37m 안쪽
+// 보정점(자동 인식·수동 탭 흡착 모두)은 라인 "중심"이므로, 코트 좌표 (0,0)~(W,L)도 라인 중심 기준.
+// 규정: 공이 라인 바깥 가장자리에 조금이라도 닿으면 IN → 중심선에서 (라인 반폭 + 공 반지름) 바깥까지 IN.
+let aiSingles = false; // 단식 판정 모드 (사이드라인만 바뀜)
 function aiStatus(t) { const el = $('ai-status'); if (el) el.textContent = t; }
 // ── 순수 계산 (테스트 가능) ──────────────────────────
 function aiFitRect(vw, vh, bw, bh) { // object-fit:contain — 비디오 원본이 박스 안에 놓이는 영역
@@ -7111,26 +7140,16 @@ function aiBounceIdx(ys) { // 화면 y(아래로 증가)의 최대점 = 바운�
   for (let i = 1; i < ys.length; i++) if (ys[i] > ys[bi]) bi = i;
   return (bi === 0 || bi === ys.length - 1) ? -1 : bi; // 구간 끝이면 바운스가 구간 밖 — 판정 불가
 }
-function aiVerdict(cx, cy) { // 코트 좌표(m) → 판정 {call, distCm}
-  const dx = Math.min(cx, AI_COURT_W - cx), dy = Math.min(cy, AI_COURT_L - cy);
-  const d = Math.min(dx, dy); // 가장 가까운 라인까지 부호 거리 (안쪽 +)
-  const inCourt = d >= -AI_BALL_R; // 공이 라인에 걸치면 IN
-  return { call: inCourt ? 'IN' : 'OUT', distCm: Math.round(Math.abs(d) * 100), close: Math.abs(d) < 0.05 };
+function aiVerdict(cx, cy, singles) { // 코트 좌표(m, 라인 중심 기준) → 판정 {call, distCm, close}
+  if (singles === undefined) singles = aiSingles;
+  const inset = singles ? AI_SINGLES_IN : 0;
+  const dx = Math.min(cx - inset, AI_COURT_W - inset - cx), dy = Math.min(cy, AI_COURT_L - cy);
+  const dCenter = Math.min(dx, dy);       // 가장 가까운 라인 "중심"까지 부호 거리 (안쪽 +)
+  const dEdge = dCenter + AI_LINE_W / 2;  // 라인 "바깥 가장자리" 기준 거리 (안쪽 +)
+  const inCourt = dEdge >= -AI_BALL_R;    // 공 가장자리가 라인 바깥 가장자리에 닿으면 IN
+  return { call: inCourt ? 'IN' : 'OUT', distCm: Math.round(Math.abs(dEdge) * 100), close: Math.abs(dEdge) < 0.05, singles };
 }
-// ── 모델 로드 (버튼 누를 때만 — 평소 네트워크 요청 없음) ──
-async function aiLoadModel() {
-  if (aiModel) return aiModel;
-  aiStatus('🧠 AI 모델 내려받는 중… (처음 한 번, 10~20초)');
-  const load = src => new Promise((res, rej) => {
-    const sc = document.createElement('script');
-    sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error('스크립트 로드 실패: ' + src));
-    document.head.appendChild(sc);
-  });
-  if (!window.tf) await load('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4/dist/tf.min.js');
-  if (!window.cocoSsd) await load('https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2/dist/coco-ssd.min.js');
-  aiModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-  return aiModel;
-}
+// (COCO-SSD 로더는 v0.47에서 제거 — 공 추적 v3·TrackNet으로 대체됨)
 // ── 코트 보정 ──────────────────────────
 function aiCalibStart() {
   const v = $('vj-video');
@@ -7446,7 +7465,7 @@ async function aiScanClip() { // 📼 클립 전체를 훑어 모든 바운스�
       aiStatus('바운스를 못 찾았어요 — 폰 고정 촬영본인지 확인하고, 특정 순간은 🤖 버튼으로 시도해 보세요');
       if (box) box.innerHTML = '';
     } else {
-      aiStatus('📼 스캔 완료 — 바운스 ' + aiScanHits.length + '개 발견! 탭하면 그 순간으로 이동해요');
+      aiStatus('📼 스캔 완료 — 바운스 ' + aiScanHits.length + '개 발견! 탭하면 그 순간으로 이동해요' + (aiH ? '' : ' · 📐 코트 보정을 하면 IN/OUT 의견까지 붙어요'));
       if (box) box.innerHTML = aiScanHits.map((h, i) =>
         '<button type="button" class="tag-btn" style="margin:2px" onclick="aiGoHit(' + i + ')">' +
         '🟡 ' + h.t.toFixed(1) + 's' + (h.call ? (h.call.call === 'IN' ? ' 🟢IN' : ' 🔴OUT') + (h.call.close ? '?' : '') : '') + '</button>').join('');
@@ -7945,9 +7964,9 @@ let mrCode = null, mrChan = null, mrStream = null, mrRec = null;
 let mrChunks = [];               // {blob, at(적재 시각 ms)} — 최근 MR_KEEP초만 유지
 let mrBusy = false, mrClips = null, mrWakeLock = null, mrPeers = 1;
 const MR_KEEP = 90, MR_CLIP = 20; // 버퍼 90초 · 챌린지 클립 20초
-function mrGenCode() { // 헷갈리는 글자(0/O/1/I) 제외 4자리 — 순수 함수
+function mrGenCode() { // 헷갈리는 글자(0/O/1/I) 제외 6자리 — 순수 함수 (v0.47: 4→6, 채널 추측 방지)
   const cs = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let r = '';
-  for (let i = 0; i < 4; i++) r += cs[Math.floor(Math.random() * cs.length)];
+  for (let i = 0; i < 6; i++) r += cs[Math.floor(Math.random() * cs.length)];
   return r;
 }
 function mrSyncPos(atMs, clipEndMs, durSec) { // 챌린지 시각의 클립 내 위치(초) — 순수 함수 (테스트 가능)
@@ -7971,7 +7990,7 @@ async function mrEnter(code) {
   if (mrChan) await mrLeave(true);
   mrCode = code; mrClips = null;
   const nick = (TMAuth.profile && TMAuth.profile.nickname) || ME.name;
-  mrChan = TMAuth.client.channel('room:' + code, { config: { presence: { key: nick }, broadcast: { self: true } } });
+  mrChan = TMAuth.client.channel('room:' + code, { config: { private: true, presence: { key: nick }, broadcast: { self: true } } }); // private: 로그인 사용자만 (007)
   mrChan.on('broadcast', { event: 'challenge' }, p => mrOnChallenge(p.payload));
   mrChan.on('broadcast', { event: 'clip' }, p => mrOnClip(p.payload));
   mrChan.on('presence', { event: 'sync' }, () => {
@@ -7987,7 +8006,7 @@ async function mrEnter(code) {
 function mrCreate() { mrEnter(mrGenCode()).catch(e => toast('방 만들기 실패: ' + (e.message || e))); }
 function mrJoin() {
   const c = ($('mr-code-in').value || '').trim().toUpperCase();
-  if (c.length !== 4) { toast('초대 코드 4자리를 입력해 주세요'); return; }
+  if (c.length !== 6) { toast('초대 코드 6자리를 입력해 주세요'); return; }
   mrEnter(c).catch(e => toast('입장 실패: ' + (e.message || e)));
 }
 async function mrLeave(silent) {
@@ -8117,6 +8136,7 @@ async function mrTryOpen() {
 // 뷰어(내 폰): 썸네일 라이브 보기 + ✂️ 요청 → 캠이 직전 ~20초를 storage 'clips'(cam/코드/)에 올리면 판독 센터로 자동 오픈
 const CC_SEG = 60;  // 세그먼트 길이(초)
 const CC_CUT = 20;  // ✂️ 클립 길이(초)
+const CC_MAX_SEGS = 120; // 폰에 보관할 최대 세그먼트 수(≈2시간·약 2GB) — 넘치면 오래된 것부터 삭제
 let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
 let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
 let cvChan = null, cvCode = null;
@@ -8158,6 +8178,21 @@ function ccPutSeg(at, blob) {
     tx.oncomplete = res; tx.onerror = () => rej(tx.error);
   });
 }
+async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS 이내 유지 (무한 증가 방지)
+  if (!ccDb) return;
+  const keys = await new Promise((res, rej) => {
+    const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAllKeys();
+    rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
+  });
+  if (keys.length <= CC_MAX_SEGS) return;
+  const drop = keys.sort((a, b) => a - b).slice(0, keys.length - CC_MAX_SEGS);
+  await new Promise((res, rej) => {
+    const tx = ccDb.transaction('segs', 'readwrite'); const st = tx.objectStore('segs');
+    drop.forEach(k => st.delete(k));
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+  ccStatus('🧹 오래된 구간 ' + drop.length + '개를 지웠어요 (최근 ' + CC_MAX_SEGS + '분만 보관)');
+}
 function ccAllSegs() {
   return new Promise((res, rej) => {
     const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAll();
@@ -8184,7 +8219,7 @@ async function ccToggle() {
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e)); return; }
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   const code = mrGenCode();
-  const chan = TMAuth.client.channel('cam:' + code, { config: { broadcast: { self: false } } });
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
   try {
@@ -8232,7 +8267,8 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
       const blob = new Blob(chunks.map(c => c.blob), { type: 'video/webm' });
       await ccPutSeg(Date.now(), blob);
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
-    } catch (e) {}
+      await ccPrune();
+    } catch (e) { ccStatus('⚠️ 폰 저장 공간 부족 — 이 구간은 저장되지 않았어요. 💾 전체 저장 후 비우거나 공간을 확보하세요 (' + ((e && e.message) || e) + ')'); }
   }
   return chunks;
 }
@@ -8316,10 +8352,10 @@ async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (�
 // --- 뷰어(내 폰) ---
 async function cvWatch() {
   const code = ($('cc-code-in').value || '').trim().toUpperCase();
-  if (code.length !== 4) { toast('캠 코드 4자리를 입력해 주세요'); return; }
+  if (code.length !== 6) { toast('캠 코드 6자리를 입력해 주세요'); return; }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   if (cvChan) await cvStop(true);
-  const chan = TMAuth.client.channel('cam:' + code, { config: { broadcast: { self: false } } });
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'frame' }, p => cvFrame(p.payload));
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   try {
@@ -8431,8 +8467,8 @@ function partnerCard(p) {
     <div style="display:flex;gap:12px;align-items:center">
       <div class="avatar">${p.emoji}</div>
       <div>
-        <h3>${p.name} <span class="badge">NTRP ${p.ntrp.toFixed(1)}</span> <span class="match-pct">💚 ${matchScore(p)}%</span></h3>
-        <div class="muted">${p.region} · ${p.style} · 승률 ${wr}% · 😊 매너 ${(p.manner || 4.0).toFixed(1)}</div>
+        <h3>${esc(p.name)} <span class="badge">NTRP ${p.ntrp.toFixed(1)}</span> <span class="match-pct">💚 ${matchScore(p)}%</span></h3>
+        <div class="muted">${esc(p.region)} · ${esc(p.style)} · 승률 ${wr}% · 😊 매너 ${(p.manner || 4.0).toFixed(1)}</div>
         ${top.length ? `<div class="skill-chips">${top.map(([t, n]) => `<span class="chip">${t} ×${n}</span>`).join('')}</div>` : ''}
         <div style="margin-top:4px">${ov.length ? `<span class="avail-badge">⏰ ${availLabel(ov[0])}${ov.length > 1 ? ` 외 ${ov.length - 1}칸` : ''} 겹침</span>` : `<span class="avail-badge off">⏰ 겹치는 시간 없음</span>`}</div>
       </div>
@@ -9187,7 +9223,7 @@ function init() {
   applyHomeLayout(); // v0.15: 홈 섹션 순서/표시 적용
   seedGroupHist(); archiveGroupOccs(); // v0.31: 데모 소모임 지난 회차 시드 + 지난 회차 자동 적립
   prunePrep(); // v0.36: 지난 일정의 준비 체크 상태 정리
-  addNotif('🎾 테니스메이트 v0.38 — ☁️ 서버 로그인 준비가 끝났어요! 지금은 그대로 데모 모드로 동작하고, 서버(B0) 준비가 끝나는 순간 이메일·카카오·구글 로그인과 서버 프로필 저장이 켜집니다');
+  addNotif('🎾 테니스메이트 ' + APP_VERSION + ' — 홈 상단 바로가기에서 🎮 미니게임·📹 판독 센터로 바로 가요. 인아웃 판정에 라인 폭 5cm가 반영됐고, 단식 판정 옵션이 생겼어요');
   renderAll();
   // v0.29: 지난 시즌이 이미 끝난 상태면 자동 정산 (승격·강등 반영 + 새 시즌 개막)
   if (divLeague && divLeague.end && dateObj(divLeague.end) < dateObj(todayStr())) finalizeSeason(true);
