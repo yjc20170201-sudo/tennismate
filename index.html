@@ -1161,8 +1161,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <option value="service">보정 기준: 먼 귀퉁이 + 가까운 서비스라인 (가까운 쪽이 잘릴 때)</option>
             </select>
             <select id="cc-aspect" style="flex:0 0 auto" onchange="ccAspectChange(this.value)">
-              <option value="4:3">화각 넓게 4:3</option>
-              <option value="16:9">16:9</option>
+              <option value="16:9">화각 16:9 (기본)</option>
+              <option value="4:3">4:3 넓게 (실험 — 검으면 자동 복귀)</option>
             </select>
           </div>
           <button type="button" class="btn small full" id="cl-toggle-btn" style="margin-top:6px;background:#1b5e20" onclick="clToggle()">🤖 라이브 판정 켜기</button>
@@ -1880,7 +1880,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.55';
+const APP_VERSION = 'v0.56';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8217,10 +8217,10 @@ async function mrTryOpen() {
 const CC_SEG = 60;  // 세그먼트 길이(초)
 const CC_CUT = 20;  // ✂️ 클립 길이(초)
 // 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
-function ccAspect() { try { return localStorage.getItem('tm-ccaspect') === '16:9' ? '16:9' : '4:3'; } catch (e) { return '4:3'; } }
+function ccAspect() { try { return localStorage.getItem('tm-ccaspect') === '4:3' ? '4:3' : '16:9'; } catch (e) { return '16:9'; } } // v0.56: 기본 16:9 (iOS 16에서 4:3이 검은 화면 보고됨)
 function ccCamConstraints() {
   const wide = ccAspect() === '4:3';
-  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: wide ? 960 : 720 }, aspectRatio: { ideal: wide ? 4 / 3 : 16 / 9 }, frameRate: { ideal: 60 } }, audio: false };
+  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: wide ? 960 : 720 }, frameRate: { ideal: 60 } }, audio: false };
 }
 function ccAspectChange(v) {
   try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
@@ -8473,7 +8473,11 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccDiag();
   if (v && v.paused) v.play().catch(() => {}); // iOS: 재생이 풀리면 다시
   if (!v || !v.videoWidth) { // 프레임이 안 들어옴 — 6초(4회) 넘으면 카메라 재획득
-    if (++ccNoFrame >= 4 && !ccReacq) { ccNoFrame = 0; ccReacquire('noframe'); }
+    if (++ccNoFrame >= 4 && !ccReacq) {
+      ccNoFrame = 0;
+      if (ccAspect() === '4:3') { try { localStorage.setItem('tm-ccaspect', '16:9'); } catch (e) {} const a = $('cc-aspect'); if (a) a.value = '16:9'; toast('4:3 화각에서 화면이 안 와서 16:9로 되돌렸어요'); }
+      ccReacquire('noframe');
+    }
     return;
   }
   ccNoFrame = 0;
