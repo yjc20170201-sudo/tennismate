@@ -1883,7 +1883,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.58';
+const APP_VERSION = 'v0.59';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8249,6 +8249,16 @@ function ccRenderGate() {
   }
 }
 function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
+function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
+  const v = $('cc-cam'); if (!v || !stream) return;
+  try {
+    v.muted = true; v.defaultMuted = true; v.playsInline = true; v.autoplay = true;
+    v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('autoplay', '');
+    if (v.srcObject) { v.srcObject = null; try { v.load(); } catch (e) {} }
+    v.srcObject = stream;
+    const p = v.play(); if (p && p.catch) p.catch(() => {});
+  } catch (e) {}
+}
 let ccFull = false;
 let ccStageHome = null; // 전체 화면 전 원래 자리 {parent, next}
 function ccFullToggle() { // ⛶ 전체 화면 캠 모드 — 카메라가 화면 전체, 하단에 최소 컨트롤
@@ -8313,7 +8323,7 @@ async function ccReacquire(why) {
     ccShowTap(false);
     if (old) old.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     ccStream = fresh; ccBindTracks();
-    const v = $('cc-cam'); if (v) { v.srcObject = fresh; v.play().catch(() => {}); }
+    ccBindVideo(fresh);
     ccStartRec();
     ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
     ccReacqFail = 0;
@@ -8427,7 +8437,8 @@ async function ccToggle() {
     toast('중계 연결 실패: ' + (e.message || e)); return;
   }
   ccChan = chan; ccCode = code;
-  const v = $('cc-cam'); v.srcObject = ccStream; v.play().catch(() => {});
+  $('cc-cam-wrap').style.display = 'block'; $('cc-view-wrap').style.display = 'none'; // 보이는 상태에서 붙여야 iOS가 로드함 (v0.59)
+  const v = $('cc-cam'); ccBindVideo(ccStream);
   courtGuideInit('cc-cam'); // 📐 설치 가이드
   clUiReset(); // 🤖 라이브 판정: 저장된 보정이 이 카메라 해상도와 맞으면 복원
   v.addEventListener('loadedmetadata', () => clRestoreCal(), { once: true });
@@ -8509,7 +8520,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
     ' · 트랙 ' + (t ? t.readyState + (t.muted ? '/muted' : '') + (t.enabled ? '' : '/off') : '없음') +
     ' · 영상 ' + (v ? v.videoWidth + '×' + v.videoHeight : '-') +
     ' · ' + (v ? (v.paused ? '정지' : '재생') + ' rs' + v.readyState : '') +
-    ' · 녹화 ' + (ccRec ? ccRec.state : '-') +
+    ' · 녹화 ' + (ccRec ? ccRec.state : '-') + (v && v.srcObject ? '' : ' · src없음') +
     (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '');
 }
 function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
@@ -8517,17 +8528,21 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   const v = $('cc-cam');
   ccDiag();
   if (v && v.paused) v.play().catch(() => {}); // iOS: 재생이 풀리면 다시
-  if (!v || !v.videoWidth) { // 프레임이 안 들어옴 — 6초(4회) 넘으면 카메라 재획득
-    if (++ccNoFrame >= 4 && !ccReacq) {
+  if (!v || !v.videoWidth) { // 프레임이 안 들어옴 — 3초마다: 다시 붙이기 ×3 → 재획득 → 새로고침
+    if (++ccNoFrame >= 2 && !ccReacq) {
       ccNoFrame = 0;
-      if (ccAspect() === '4:3') { try { localStorage.setItem('tm-ccaspect', '16:9'); } catch (e) {} const a = $('cc-aspect'); if (a) a.value = '16:9'; toast('4:3 화각에서 화면이 안 와서 16:9로 되돌렸어요'); }
       ccNoFrameRounds = (ccNoFrameRounds || 0) + 1;
-      if (ccNoFrameRounds >= 2) { ccNoFrameRounds = 0; ccMaybeAutoReload('프레임 없음'); return; }
+      if (ccNoFrameRounds <= 3 && ccStream && ccStream.getVideoTracks()[0] && ccStream.getVideoTracks()[0].readyState === 'live') {
+        ccBindVideo(ccStream); ccStatus('🔁 화면에 카메라 다시 붙이는 중 (' + ccNoFrameRounds + '/3) — 카메라·녹화는 살아 있어요'); return;
+      }
+      if (ccAspect() === '4:3') { try { localStorage.setItem('tm-ccaspect', '16:9'); } catch (e) {} const a = $('cc-aspect'); if (a) a.value = '16:9'; toast('4:3 화각에서 화면이 안 와서 16:9로 되돌렸어요'); }
+      if (ccNoFrameRounds >= 6) { ccNoFrameRounds = 0; ccMaybeAutoReload('프레임 없음'); return; }
       ccReacquire('noframe');
     }
     return;
   }
-  ccNoFrame = 0;
+  ccNoFrame = 0; ccNoFrameRounds = 0;
+  if (!ccFrame._ok) { ccFrame._ok = true; try { sessionStorage.setItem('tm-cc-reloads', '0'); } catch (e) {} }
   const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
   const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
   cv.width = W; cv.height = H;
