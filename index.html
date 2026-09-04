@@ -1137,6 +1137,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
+          <div id="cc-diag" class="muted" style="font-size:11px;margin-top:2px;font-family:ui-monospace,monospace"></div>
         </div>
         <div id="cc-view-wrap" style="display:none">
           <div class="vj-ctrl" style="margin-top:8px">
@@ -1846,7 +1847,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.51';
+const APP_VERSION = 'v0.52';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8385,10 +8386,28 @@ async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
     if (ccStream) ccStartRec();
   }
 }
+let ccNoFrame = 0;
+function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서 알려줄 수 있게 한 줄로
+  const el = $('cc-diag'); if (!el) return;
+  const v = $('cc-cam');
+  const t = ccStream && ccStream.getVideoTracks()[0];
+  el.textContent = (typeof APP_VERSION !== 'undefined' ? APP_VERSION : '') +
+    ' · 트랙 ' + (t ? t.readyState + (t.muted ? '/muted' : '') + (t.enabled ? '' : '/off') : '없음') +
+    ' · 영상 ' + (v ? v.videoWidth + '×' + v.videoHeight : '-') +
+    ' · ' + (v ? (v.paused ? '정지' : '재생') + ' rs' + v.readyState : '') +
+    ' · 녹화 ' + (ccRec ? ccRec.state : '-') +
+    (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '');
+}
 function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   if (!ccChan || !ccStream) return;
   const v = $('cc-cam');
-  if (!v || !v.videoWidth) return;
+  ccDiag();
+  if (v && v.paused) v.play().catch(() => {}); // iOS: 재생이 풀리면 다시
+  if (!v || !v.videoWidth) { // 프레임이 안 들어옴 — 6초(4회) 넘으면 카메라 재획득
+    if (++ccNoFrame >= 4 && !ccReacq) { ccNoFrame = 0; ccReacquire('noframe'); }
+    return;
+  }
+  ccNoFrame = 0;
   const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
   const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
   cv.width = W; cv.height = H;
