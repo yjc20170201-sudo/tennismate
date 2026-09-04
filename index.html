@@ -1186,7 +1186,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div id="cc-call-feed" style="margin-top:4px"></div>
           <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
         </div>
-        <button type="button" class="btn small outline full" style="margin-top:8px" onclick="ccSaveAll()">💾 캠 영상 전체 저장 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 학습데이터용</button>
+        <div class="row" style="gap:6px;margin-top:8px">
+          <button type="button" class="btn small outline" style="flex:1" onclick="ccSaveAll()">💾 캠 영상 전체 저장 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB)</button>
+          <button type="button" class="btn small outline" style="flex:0 0 auto;color:#c0392b;border-color:#c0392b" onclick="ccClearAll()">🗑️ 지우기</button>
+        </div>
       </div>
     </div>
     <div hidden id="aicoach-block"><!-- v0.47: 잠긴 기능은 메뉴에서 숨김 (AI_COACH_ENABLED로 재개) -->
@@ -1883,7 +1886,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.59';
+const APP_VERSION = 'v0.60';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8565,6 +8568,17 @@ async function ccStop(silent) {
   const w = $('cc-cam-wrap'); if (w) w.style.display = 'none';
   const b = $('cc-start-btn'); if (b) b.textContent = '📡 이 폰을 클럽캠으로 (공기계에서 누르세요)';
   if (!silent) toast('클럽캠을 껐어요 — 💾 전체 저장으로 오늘 영상을 내려받으세요');
+}
+async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 (의미 없는 녹화분 정리 — v0.60)
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
+  const n = ccSegN, mb = Math.round(ccSegBytes / 1048576);
+  if (!confirm('폰에 저장된 캠 영상 ' + n + '개(' + mb + 'MB)를 전부 지울까요?\n되돌릴 수 없어요. (학습용으로 쓸 영상이면 먼저 💾 저장)')) return;
+  try {
+    await ccClearSegs();
+    ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo();
+    toast('🗑️ 캠 영상을 모두 지웠어요' + (ccStream ? ' — 녹화는 계속돼요' : ''));
+  } catch (e) { toast('삭제 실패: ' + ((e && e.message) || e)); }
 }
 async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (→ PC로 옮겨 학습데이터)
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
