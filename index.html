@@ -1131,6 +1131,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
           <div style="position:relative;margin-top:8px" id="cc-stage">
             <video id="cc-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
+            <canvas id="cc-preview" style="display:none;position:absolute;inset:0;width:100%;height:100%;background:#000"></canvas>
             <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
             <canvas id="cc-cam-overlay" class="ai-overlay" onclick="clCanvasClick(event)"></canvas>
             <button type="button" id="cc-tap" onclick="ccShowTap(false); ccReacquire('tap')" style="display:none;position:absolute;inset:12% 8%;align-items:center;justify-content:center;background:rgba(27,94,32,.92);color:#fff;border:none;border-radius:16px;font-size:20px;font-weight:800;z-index:3">📷 탭해서 카메라 다시 켜기</button>
@@ -1162,10 +1163,6 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <select id="cl-calmode" style="flex:1" onchange="clCalModeChange(this.value)">
               <option value="corners">보정 기준: 네 귀퉁이 (코트 전체가 보일 때)</option>
               <option value="service">보정 기준: 먼 귀퉁이 + 가까운 서비스라인 (가까운 쪽이 잘릴 때)</option>
-            </select>
-            <select id="cc-aspect" style="flex:0 0 auto" onchange="ccAspectChange(this.value)">
-              <option value="16:9">화각 16:9 (기본)</option>
-              <option value="4:3">4:3 넓게 (실험 — 검으면 자동 복귀)</option>
             </select>
           </div>
           <button type="button" class="btn small full" id="cl-toggle-btn" style="margin-top:6px;background:#1b5e20" onclick="clToggle()">🤖 라이브 판정 켜기</button>
@@ -1886,7 +1883,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.60';
+const APP_VERSION = 'v0.61';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8223,10 +8220,9 @@ async function mrTryOpen() {
 const CC_SEG = 60;  // 세그먼트 길이(초)
 const CC_CUT = 20;  // ✂️ 클립 길이(초)
 // 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
-function ccAspect() { try { return localStorage.getItem('tm-ccaspect') === '4:3' ? '4:3' : '16:9'; } catch (e) { return '16:9'; } } // v0.56: 기본 16:9 (iOS 16에서 4:3이 검은 화면 보고됨)
+function ccAspect() { return '16:9'; } // v0.61: 화각 선택 제거 — 16:9 고정 (첫 실기기 성공 때와 동일 제약)
 function ccCamConstraints() {
-  const wide = ccAspect() === '4:3';
-  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: wide ? 960 : 720 }, frameRate: { ideal: 60 } }, audio: false };
+  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false };
 }
 function ccAspectChange(v) {
   try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
@@ -8514,7 +8510,25 @@ async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
     if (ccStream) ccStartRec();
   }
 }
-let ccNoFrame = 0, ccNoFrameRounds = 0;
+let ccNoFrame = 0, ccNoFrameRounds = 0, ccPreviewOn = false, ccPreviewRAF = null, ccPreviewLast = 0, ccRs0Ticks = 0;
+function ccPreviewStart() { // iOS가 <video>를 안 그리는 상태(트랙 live·크기 있음·readyState 0) → 앱이 직접 캔버스에 그림 (v0.61)
+  if (ccPreviewOn) return; ccPreviewOn = true;
+  const c = $('cc-preview'); if (c) c.style.display = 'block';
+  ccStatus('📺 아이폰이 화면을 안 그려서 앱이 직접 그려요 — 카메라·녹화는 정상');
+  const loop = (ts) => {
+    if (!ccPreviewOn) return;
+    ccPreviewRAF = requestAnimationFrame(loop);
+    if (ts - ccPreviewLast < 66) return; ccPreviewLast = ts; // ~15fps
+    const v = $('cc-cam'), c = $('cc-preview'); if (!v || !c || !v.videoWidth) return;
+    const r = c.getBoundingClientRect(); const W = Math.max(2, Math.round(r.width)), H = Math.max(2, Math.round(r.height));
+    if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+    const fit = aiFitRect(v.videoWidth, v.videoHeight, W, H); if (!fit) return;
+    const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    try { g.drawImage(v, fit.x, fit.y, fit.w, fit.h); } catch (e) {}
+  };
+  ccPreviewRAF = requestAnimationFrame(loop);
+}
+function ccPreviewStop() { ccPreviewOn = false; if (ccPreviewRAF) cancelAnimationFrame(ccPreviewRAF); ccPreviewRAF = null; const c = $('cc-preview'); if (c) c.style.display = 'none'; ccRs0Ticks = 0; }
 function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서 알려줄 수 있게 한 줄로
   const el = $('cc-diag'); if (!el) return;
   const v = $('cc-cam');
@@ -8523,7 +8537,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
     ' · 트랙 ' + (t ? t.readyState + (t.muted ? '/muted' : '') + (t.enabled ? '' : '/off') : '없음') +
     ' · 영상 ' + (v ? v.videoWidth + '×' + v.videoHeight : '-') +
     ' · ' + (v ? (v.paused ? '정지' : '재생') + ' rs' + v.readyState : '') +
-    ' · 녹화 ' + (ccRec ? ccRec.state : '-') + (v && v.srcObject ? '' : ' · src없음') +
+    ' · 녹화 ' + (ccRec ? ccRec.state : '-') + (v && v.srcObject ? '' : ' · src없음') + (ccPreviewOn ? ' · 대체표시' : '') +
     (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '');
 }
 function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
@@ -8546,6 +8560,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   }
   ccNoFrame = 0; ccNoFrameRounds = 0;
   if (!ccFrame._ok) { ccFrame._ok = true; try { sessionStorage.setItem('tm-cc-reloads', '0'); } catch (e) {} }
+  if (v.readyState < 2) { if (++ccRs0Ticks >= 2 && !ccPreviewOn) ccPreviewStart(); } else ccRs0Ticks = 0;
   const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
   const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
   cv.width = W; cv.height = H;
@@ -8555,6 +8570,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  ccPreviewStop();
   if (ccFull) ccFullToggle();
   clStop(true); // 🤖 라이브 판정도 함께 종료
   ccTimers.forEach(clearInterval); ccTimers = [];
