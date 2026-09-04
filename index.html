@@ -514,6 +514,17 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   .ai-wrap { position: relative; }
   .ai-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   .ai-overlay.picking { pointer-events: auto; cursor: crosshair; }
+  /* v0.53 클럽캠 전체 화면 모드 — 펜스 거치 시 카메라가 화면 전체 (가로·세로 모두) */
+  body.cc-full { overflow: hidden; }
+  body.cc-full #cc-stage { position: fixed !important; inset: 0 !important; width: 100vw; height: 100vh; z-index: 9999; background: #000; margin: 0 !important; }
+  body.cc-full #cc-cam { width: 100% !important; height: 100% !important; max-height: none !important; object-fit: contain; background: #000; }
+  #cc-fullbar { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 10px; background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #fff; font-size: 12px; }
+  body.cc-full #cc-fullbar { display: flex; flex-direction: column; gap: 6px; }
+  #cc-fullbar .row { gap: 6px; }
+  #cc-fullbar button { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 10px; padding: 8px 10px; font-size: 13px; font-weight: 700; flex: 1; }
+  #cc-fullbar button.hot { background: #1b5e20; }
+  #cc-full-status { font-weight: 700; font-size: 13px; text-shadow: 0 1px 2px #000; }
+  #cc-full-sub { opacity: .8; font-size: 11px; }
   .ai-verdict { display: inline-block; border-radius: 999px; padding: 4px 12px; font-weight: 800; font-size: 13px; }
   .ai-verdict.in { background: #e8f3ec; color: var(--green); }
   .ai-verdict.out { background: #fdeaea; color: #c0392b; }
@@ -1118,12 +1129,22 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         </div>
         <div id="cc-cam-wrap" style="display:none">
           <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
-          <div style="position:relative;margin-top:8px">
+          <div style="position:relative;margin-top:8px" id="cc-stage">
             <video id="cc-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
             <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
             <canvas id="cc-cam-overlay" class="ai-overlay" onclick="clCanvasClick(event)"></canvas>
+            <div id="cc-fullbar">
+              <div id="cc-full-status">📡 클럽캠</div>
+              <div id="cc-full-sub"></div>
+              <div class="row">
+                <button type="button" onclick="clAutoCalib()">✨ 보정</button>
+                <button type="button" id="cc-full-judge" onclick="clToggle()">🤖 판정 켜기</button>
+                <button type="button" onclick="ccFullToggle()">⛶ 나가기</button>
+              </div>
+            </div>
           </div>
           <div class="row" style="gap:6px;margin-top:4px">
+            <button type="button" class="tag-btn" style="background:#1b5e20;color:#fff" onclick="ccFullToggle()">⛶ 전체 화면 (펜스에 걸 때)</button>
             <button type="button" class="tag-btn" onclick="courtGuideToggle('cc-cam')">📐 설치 가이드 접기/펴기</button>
             <button type="button" class="tag-btn" onclick="ccReacquire('manual')">📷 화면이 검으면 카메라 다시 켜기</button>
           </div>
@@ -1847,7 +1868,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.52';
+const APP_VERSION = 'v0.53';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8203,7 +8224,28 @@ function ccRenderGate() {
     }).catch(() => {});
   }
 }
-function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; }
+function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
+let ccFull = false;
+let ccStageHome = null; // 전체 화면 전 원래 자리 {parent, next}
+function ccFullToggle() { // ⛶ 전체 화면 캠 모드 — 카메라가 화면 전체, 하단에 최소 컨트롤
+  const st = $('cc-stage'); if (!st) return;
+  ccFull = !ccFull;
+  if (ccFull) { // 조상 transform 영향 없이 fixed가 뷰포트 기준이 되도록 body 직속으로
+    ccStageHome = { parent: st.parentNode, next: st.nextSibling };
+    document.body.appendChild(st);
+  } else if (ccStageHome && ccStageHome.parent) {
+    ccStageHome.parent.insertBefore(st, ccStageHome.next && ccStageHome.next.parentNode === ccStageHome.parent ? ccStageHome.next : null);
+    ccStageHome = null;
+  }
+  document.body.classList.toggle('cc-full', ccFull);
+  if (ccFull) { window.scrollTo(0, 0); ccFullSync(); }
+  const v = $('cc-cam'); if (v && v.paused) v.play().catch(() => {}); // 노드 이동 후 재생 유지
+  setTimeout(() => { try { clDraw(); } catch (e) {} }, 80);
+}
+function ccFullSync() {
+  const j = $('cc-full-judge'); if (j) { j.textContent = clOn ? '⏹ 판정 끄기' : '🤖 판정 켜기'; j.classList.toggle('hot', !!clOn); }
+}
+window.addEventListener('resize', () => { if (ccFull) setTimeout(() => { try { clDraw(); } catch (e) {} }, 120); });
 // ── iOS 대응: 백그라운드 다녀오면 카메라 트랙이 ended/muted 되어 검은 화면 → 자동 재획득 (v0.51) ──
 let ccReacq = false;
 function ccTrackDead() {
@@ -8417,6 +8459,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  if (ccFull) ccFullToggle();
   clStop(true); // 🤖 라이브 판정도 함께 종료
   ccTimers.forEach(clearInterval); ccTimers = [];
   const stream = ccStream; ccStream = null; // seal 후 자동 재시작 방지
@@ -8483,7 +8526,7 @@ async function cvWatch() {
 const CL_TW = 320, CL_WIN = 1.6, CL_MIN_GAP = 1.5, CL_MAX_BLOB = 80, CL_AUTOCUT_GAP = 25000;
 let clOn = false, clH = null, clCorners = [], clPicking = false, clFrames = [], clPrev = null, clPrev2 = null;
 let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0, clLast = null, clTimer = null, clNCalls = 0;
-function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; }
+function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
   clOn = false; clH = null; clCorners = []; clPicking = false; clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0;
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
