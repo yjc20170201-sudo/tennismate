@@ -1883,7 +1883,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.61';
+const APP_VERSION = 'v0.62';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8323,6 +8323,7 @@ async function ccReacquire(why) {
     if (old) old.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     ccStream = fresh; ccBindTracks();
     ccBindVideo(fresh);
+    ccPreviewStart(true);
     ccStartRec();
     ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
     ccReacqFail = 0;
@@ -8438,6 +8439,7 @@ async function ccToggle() {
   ccChan = chan; ccCode = code;
   $('cc-cam-wrap').style.display = 'block'; $('cc-view-wrap').style.display = 'none'; // 보이는 상태에서 붙여야 iOS가 로드함 (v0.59)
   const v = $('cc-cam'); ccBindVideo(ccStream);
+  ccPreviewStart(true); // 항상 캔버스로 표시 (v0.62)
   courtGuideInit('cc-cam'); // 📐 설치 가이드
   clUiReset(); // 🤖 라이브 판정: 저장된 보정이 이 카메라 해상도와 맞으면 복원
   v.addEventListener('loadedmetadata', () => clRestoreCal(), { once: true });
@@ -8511,10 +8513,11 @@ async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
   }
 }
 let ccNoFrame = 0, ccNoFrameRounds = 0, ccPreviewOn = false, ccPreviewRAF = null, ccPreviewLast = 0, ccRs0Ticks = 0;
-function ccPreviewStart() { // iOS가 <video>를 안 그리는 상태(트랙 live·크기 있음·readyState 0) → 앱이 직접 캔버스에 그림 (v0.61)
+function ccPreviewStart(silent) { // v0.62: 항상 사용 — iOS <video> 컴포지팅이 죽어도(본폰 썸네일은 되는데 아이폰만 검음) 캔버스는 그려짐
   if (ccPreviewOn) return; ccPreviewOn = true;
   const c = $('cc-preview'); if (c) c.style.display = 'block';
-  ccStatus('📺 아이폰이 화면을 안 그려서 앱이 직접 그려요 — 카메라·녹화는 정상');
+  const v0 = $('cc-cam'); if (v0) v0.style.opacity = '0.02'; // 디코딩은 계속되게 숨기지 않고 투명하게
+  if (!silent) ccStatus('📺 앱이 직접 화면을 그려요 — 카메라·녹화는 정상');
   const loop = (ts) => {
     if (!ccPreviewOn) return;
     ccPreviewRAF = requestAnimationFrame(loop);
@@ -8528,7 +8531,7 @@ function ccPreviewStart() { // iOS가 <video>를 안 그리는 상태(트랙 liv
   };
   ccPreviewRAF = requestAnimationFrame(loop);
 }
-function ccPreviewStop() { ccPreviewOn = false; if (ccPreviewRAF) cancelAnimationFrame(ccPreviewRAF); ccPreviewRAF = null; const c = $('cc-preview'); if (c) c.style.display = 'none'; ccRs0Ticks = 0; }
+function ccPreviewStop() { ccPreviewOn = false; if (ccPreviewRAF) cancelAnimationFrame(ccPreviewRAF); ccPreviewRAF = null; const c = $('cc-preview'); if (c) c.style.display = 'none'; const v0 = $('cc-cam'); if (v0) v0.style.opacity = ''; ccRs0Ticks = 0; }
 function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서 알려줄 수 있게 한 줄로
   const el = $('cc-diag'); if (!el) return;
   const v = $('cc-cam');
