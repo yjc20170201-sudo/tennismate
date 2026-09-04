@@ -1141,6 +1141,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
                 <button type="button" onclick="clAutoCalib()">✨ 보정</button>
                 <button type="button" onclick="clManualStart()">📐 수동</button>
                 <button type="button" id="cc-full-judge" onclick="clToggle()">🤖 판정 켜기</button>
+                <button type="button" onclick="ccHardReload()">🔄</button>
                 <button type="button" onclick="ccFullToggle()">⛶ 나가기</button>
               </div>
             </div>
@@ -1148,7 +1149,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div class="row" style="gap:6px;margin-top:4px">
             <button type="button" class="tag-btn" style="background:#1b5e20;color:#fff" onclick="ccFullToggle()">⛶ 전체 화면 (펜스에 걸 때)</button>
             <button type="button" class="tag-btn" onclick="courtGuideToggle('cc-cam')">📐 설치 가이드 접기/펴기</button>
-            <button type="button" class="tag-btn" onclick="ccReacquire('manual')">📷 화면이 검으면 카메라 다시 켜기</button>
+            <button type="button" class="tag-btn" onclick="ccReacquire('manual')">📷 카메라 다시 켜기</button>
+            <button type="button" class="tag-btn" onclick="ccHardReload()">🔄 그래도 검으면 새로고침</button>
           </div>
           <div class="vj-ctrl" style="margin-top:6px">
             <button type="button" class="btn small" style="flex:1" id="cl-auto-btn" onclick="clAutoCalib()">✨ 코트 자동 보정</button>
@@ -1880,7 +1882,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.56';
+const APP_VERSION = 'v0.57';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8268,7 +8270,18 @@ function ccFullSync() {
 }
 window.addEventListener('resize', () => { if (ccFull) setTimeout(() => { try { clDraw(); } catch (e) {} }, 120); });
 // ── iOS 대응: 백그라운드 다녀오면 카메라 트랙이 ended/muted 되어 검은 화면 → 자동 재획득 (v0.51) ──
-let ccReacq = false;
+let ccReacq = false, ccReacqFail = 0;
+function ccHardReload() { // iOS는 카메라가 한 번 죽으면 페이지를 새로 열어야 살아나는 경우가 많음. 보정·코드·세그먼트는 저장돼 있음
+  try { sessionStorage.setItem('tm-cc-autostart', '1'); } catch (e) {}
+  location.reload();
+}
+function ccMaybeAutoReload(reason) {
+  let n = 0; try { n = parseInt(sessionStorage.getItem('tm-cc-reloads') || '0', 10) || 0; } catch (e) {}
+  if (n >= 2) { ccStatus('카메라가 계속 안 나와요 (' + reason + ') — 앱을 완전히 닫고 다시 열거나, 사파리 앱에서 주소를 열어 시도해 주세요'); return; }
+  try { sessionStorage.setItem('tm-cc-reloads', String(n + 1)); } catch (e) {}
+  ccStatus('🔄 카메라가 안 살아나서 3초 뒤 새로고침해요 (' + reason + ') — 자동으로 다시 켜집니다');
+  setTimeout(ccHardReload, 3000);
+}
 function ccTrackDead() {
   if (!ccStream) return false;
   const t = ccStream.getVideoTracks()[0];
@@ -8293,11 +8306,24 @@ async function ccReacquire(why) {
     const v = $('cc-cam'); if (v) { v.srcObject = fresh; v.play().catch(() => {}); }
     ccStartRec();
     ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
+    ccReacqFail = 0;
   } catch (e) {
-    ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e) + ' — 앱을 완전히 닫고(위로 밀어 종료) 다시 켜주세요');
+    ccReacqFail++;
+    ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e));
+    if (ccReacqFail >= 2) ccMaybeAutoReload('재시작 실패');
   } finally { ccReacq = false; }
 }
 document.addEventListener('DOMContentLoaded', () => { const a = $('cc-aspect'); if (a) a.value = ccAspect(); }); // 화각 선택 복원 (v0.55)
+document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 클럽캠 자동 재시작 (v0.57)
+  let want = false; try { want = sessionStorage.getItem('tm-cc-autostart') === '1'; sessionStorage.removeItem('tm-cc-autostart'); } catch (e) {}
+  if (!want) return;
+  let tries = 0;
+  const tick = setInterval(() => {
+    tries++;
+    if (serverMode() && TMAuth.isLoggedIn && !ccChan) { clearInterval(tick); goSection('rank', 'cc-code-in'); setTimeout(() => ccToggle(), 400); toast('🔄 클럽캠 다시 켜는 중…'); }
+    else if (tries > 20) clearInterval(tick);
+  }, 500);
+});
 document.addEventListener('DOMContentLoaded', () => { // 뷰어: 지난번 캠 코드 자동 채움 (v0.54)
   try { const c = localStorage.getItem('tm-cvcode'); const el = $('cc-code-in'); if (c && el && !el.value) el.value = c; } catch (e) {}
 });
@@ -8455,7 +8481,7 @@ async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
     if (ccStream) ccStartRec();
   }
 }
-let ccNoFrame = 0;
+let ccNoFrame = 0, ccNoFrameRounds = 0;
 function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서 알려줄 수 있게 한 줄로
   const el = $('cc-diag'); if (!el) return;
   const v = $('cc-cam');
@@ -8476,6 +8502,8 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
     if (++ccNoFrame >= 4 && !ccReacq) {
       ccNoFrame = 0;
       if (ccAspect() === '4:3') { try { localStorage.setItem('tm-ccaspect', '16:9'); } catch (e) {} const a = $('cc-aspect'); if (a) a.value = '16:9'; toast('4:3 화각에서 화면이 안 와서 16:9로 되돌렸어요'); }
+      ccNoFrameRounds = (ccNoFrameRounds || 0) + 1;
+      if (ccNoFrameRounds >= 2) { ccNoFrameRounds = 0; ccMaybeAutoReload('프레임 없음'); return; }
       ccReacquire('noframe');
     }
     return;
