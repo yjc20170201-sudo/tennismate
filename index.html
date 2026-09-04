@@ -1134,6 +1134,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
             <canvas id="cc-cam-overlay" class="ai-overlay" onclick="clCanvasClick(event)"></canvas>
             <div id="cc-fullbar">
+              <div id="cc-full-code" style="font-size:12px;opacity:.9"></div>
               <div id="cc-full-status">📡 클럽캠</div>
               <div id="cc-full-sub"></div>
               <div class="row">
@@ -1868,7 +1869,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.53';
+const APP_VERSION = 'v0.54';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8208,7 +8209,7 @@ const CC_CAM_CONSTRAINTS = { video: { facingMode: 'environment', width: { ideal:
 const CC_MAX_SEGS = 120; // 폰에 보관할 최대 세그먼트 수(≈2시간·약 2GB) — 넘치면 오래된 것부터 삭제
 let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
 let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
-let cvChan = null, cvCode = null;
+let cvChan = null, cvCode = null, cvLastFrame = 0, cvTimer = null, cvHelloN = 0;
 
 function ccRenderGate() {
   const on = serverMode() && TMAuth.isLoggedIn;
@@ -8238,7 +8239,7 @@ function ccFullToggle() { // ⛶ 전체 화면 캠 모드 — 카메라가 화�
     ccStageHome = null;
   }
   document.body.classList.toggle('cc-full', ccFull);
-  if (ccFull) { window.scrollTo(0, 0); ccFullSync(); }
+  if (ccFull) { window.scrollTo(0, 0); ccFullSync(); const fc = $('cc-full-code'); if (fc) fc.textContent = '📡 캠 코드 ' + (ccCode || '—') + ' — 내 폰에서 이 코드로 👀 보기 (이 폰은 항상 같은 코드)'; }
   const v = $('cc-cam'); if (v && v.paused) v.play().catch(() => {}); // 노드 이동 후 재생 유지
   setTimeout(() => { try { clDraw(); } catch (e) {} }, 80);
 }
@@ -8276,6 +8277,9 @@ async function ccReacquire(why) {
     ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e) + ' — 앱을 완전히 닫고(위로 밀어 종료) 다시 켜주세요');
   } finally { ccReacq = false; }
 }
+document.addEventListener('DOMContentLoaded', () => { // 뷰어: 지난번 캠 코드 자동 채움 (v0.54)
+  try { const c = localStorage.getItem('tm-cvcode'); const el = $('cc-code-in'); if (c && el && !el.value) el.value = c; } catch (e) {}
+});
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !ccChan) return;
   setTimeout(() => { if (ccChan && ccTrackDead()) ccReacquire('visible'); }, 800);
@@ -8341,7 +8345,9 @@ async function ccToggle() {
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
-  const code = mrGenCode();
+  let code = '';
+  try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
+  if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} } // 이 폰의 고정 코드 (v0.54)
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
@@ -8513,6 +8519,15 @@ async function cvWatch() {
     }));
   } catch (e) { toast('캠 연결 실패: ' + (e.message || e)); return; }
   cvChan = chan; cvCode = code;
+  try { localStorage.setItem('tm-cvcode', code); } catch (e) {}
+  cvLastFrame = Date.now(); cvHelloN = 0;
+  if (cvTimer) clearInterval(cvTimer);
+  cvTimer = setInterval(() => { // 화면이 안 오면 hello 재전송 + 안내
+    if (!cvChan) return;
+    const gap = Date.now() - cvLastFrame;
+    if (gap > 4000 && cvHelloN < 20) { cvHelloN++; try { cvChan.send({ type: 'broadcast', event: 'hello', payload: {} }); } catch (e) {} }
+    if (gap > 8000) { const st = $('cc-view-status'); if (st) st.textContent = '⏳ 캠 화면이 안 와요 (' + Math.round(gap / 1000) + '초) — 공기계 캠 코드가 ' + code + ' 인지, 📡 켜져 있고 화면이 검지 않은지 확인. 캠이 다시 켜지면 자동으로 이어져요'; }
+  }, 2000);
   chan.send({ type: 'broadcast', event: 'hello', payload: {} });
   $('cc-view-wrap').style.display = 'block';
   $('cc-view-info').textContent = '👀 캠 ' + code + ' 시청 중';
@@ -8705,6 +8720,7 @@ function cvRenderCalls() {
 }
 function cvFrame(p) {
   if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
+  cvLastFrame = Date.now(); cvHelloN = 0;
   const img = $('cc-live'); if (img) img.src = p.d;
   const st = $('cc-view-status');
   if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
@@ -8731,6 +8747,7 @@ async function cvClip(p) {
 }
 async function cvStop(silent) {
   if (cvChan) { try { await cvChan.unsubscribe(); } catch (e) {} cvChan = null; }
+  if (cvTimer) { clearInterval(cvTimer); cvTimer = null; }
   cvCode = null;
   cvCalls = []; cvRenderCalls();
   const w = $('cc-view-wrap'); if (w) w.style.display = 'none';
