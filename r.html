@@ -13,14 +13,21 @@
   #join input { width: 100%; max-width: 140px; font-size: 22px; text-align: center; padding: 8px; border-radius: 10px; border: none; text-transform: uppercase; }
   #join button, .full-btn { border: none; border-radius: 14px; font-weight: 800; cursor: pointer; }
   #join button { background: #2f9e5f; color: #fff; font-size: 16px; padding: 10px 22px; }
-  #play { display: none; flex-direction: column; height: 100%; padding: 6% 10%; gap: 6px; }
-  #score { text-align: center; font-size: 13px; line-height: 1.4; padding-top: 4%; }
-  #score b { font-size: 22px; }
-  .full-btn { flex: 1; font-size: 20px; color: #fff; }
+  #play { display: none; flex-direction: column; height: 100%; padding: 5% 9% 6%; gap: 5px; }
+  /* 점수판: 탭하면 음성으로 읽어줌 */
+  #score { text-align: center; line-height: 1.15; padding-top: 3%; cursor: pointer; }
+  #sets { font-size: 10px; opacity: .7; min-height: 12px; }
+  #games { font-size: 13px; font-weight: 800; margin-top: 2px; }
+  #games .g0 { color: #7ee2a8; } #games .g1 { color: #ff9b9b; }
+  #pts { font-size: 34px; font-weight: 900; letter-spacing: 1px; margin-top: 1px; font-variant-numeric: tabular-nums; }
+  #pts .p0 { color: #7ee2a8; } #pts .p1 { color: #ff9b9b; } #pts .colon { opacity: .5; font-size: 24px; margin: 0 4px; }
+  #state { font-size: 11px; opacity: .8; min-height: 13px; }
+  .full-btn { flex: 1; font-size: 18px; color: #fff; }
   #btn-us { background: #2f9e5f; }
   #btn-them { background: #b03a3a; }
-  #foot { display: flex; gap: 6px; padding-bottom: 5%; }
-  #foot button { flex: 1; background: rgba(255,255,255,.14); color: #fff; border: none; border-radius: 10px; padding: 8px; font-size: 12px; }
+  #foot { display: flex; gap: 5px; padding-bottom: 4%; }
+  #foot button { flex: 1; background: rgba(255,255,255,.14); color: #fff; border: none; border-radius: 10px; padding: 7px 4px; font-size: 11.5px; }
+  #foot button.on { background: rgba(126,226,168,.35); }
   #msg { font-size: 11px; text-align: center; opacity: .75; min-height: 14px; }
 </style>
 </head>
@@ -33,56 +40,130 @@
   <div id="msg">점수판 폰의 "📟 리모컨 연결" 코드를 입력하세요</div>
 </div>
 <div id="play">
-  <div id="score"><span id="names">연결됨 — 점수판에서 경기를 시작하세요</span><br><b id="pts">— : —</b></div>
+  <div id="score" onclick="speakNow()" title="탭하면 점수를 읽어줘요">
+    <div id="sets"></div>
+    <div id="games">연결됨 — 점수판에서 경기를 시작하세요</div>
+    <div id="pts"><span class="p0">—</span><span class="colon">:</span><span class="p1">—</span></div>
+    <div id="state"></div>
+  </div>
   <button class="full-btn" id="btn-us" onclick="sendPoint(0)">🟢 우리 포인트</button>
   <button class="full-btn" id="btn-them" onclick="sendPoint(1)">🔴 상대 포인트</button>
   <div id="foot">
     <button onclick="sendUndo()">↩️ 되돌리기</button>
-    <button onclick="location.reload()">연결 끊기</button>
+    <button id="voice-btn" onclick="toggleVoice()">🔊 음성</button>
+    <button onclick="location.reload()">끊기</button>
   </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 var SB_URL = 'https://ssibxgplavavsqemqrej.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaWJ4Z3BsYXZhdnNxZW1xcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDkwNzAsImV4cCI6MjEwMzY4NTA3MH0.SU5gZ8lIT8qdQNF0t8EnYRpD_GA7QFF3KohOsNlvc6U';
-var chan = null;
+var chan = null, last = null, pendingSpeak = false;
+// 🔊 음성 안내 — Web Speech(speechSynthesis) 있는 기기만. 없으면 진동 패턴으로만 구분
+var voiceOn = true;
+try { voiceOn = localStorage.getItem('tm-rc-voice') !== '0'; } catch (e) {}
+var canSpeak = typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
+function $(id) { return document.getElementById(id); }
+function renderVoiceBtn() {
+  var b = $('voice-btn');
+  b.textContent = !canSpeak ? '🔇 음성 불가' : voiceOn ? '🔊 음성 켬' : '🔇 음성 끔';
+  b.className = voiceOn && canSpeak ? 'on' : '';
+}
+function toggleVoice() {
+  if (!canSpeak) { speak('', true); return; }
+  voiceOn = !voiceOn;
+  try { localStorage.setItem('tm-rc-voice', voiceOn ? '1' : '0'); } catch (e) {}
+  renderVoiceBtn();
+  if (voiceOn) speak('음성 안내를 켰어요', true);
+}
+function speak(text, force) {
+  if (!canSpeak || (!voiceOn && !force) || !text) return;
+  try {
+    speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'ko-KR'; u.rate = 1.05;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+// 포인트 표기(0/15/30/40/Ad) → 말
+function sayPt(d) { return d === 'Ad' ? '어드밴티지' : d === '✓' ? '' : String(d); }
+function saySets(s) { return String(s || '').split(' ').filter(Boolean).map(function (x) { return x.replace('-', ' 대 '); }).join(', '); } // "6-4 4-6" → "6 대 4, 4 대 6"
+function scoreText(p) { // 현재 상태를 한 문장으로 (탭했을 때·포인트 후)
+  if (!p) return '';
+  if (p.done) return '경기 종료. 세트 ' + saySets(p.sets);
+  if (p.tb) return '타이브레이크, ' + p.d0 + ' 대 ' + p.d1;
+  var a = p.d0, b = p.d1;
+  if (a === '40' && b === '40') return '듀스';
+  if (a === 'Ad') return '우리 어드밴티지';
+  if (b === 'Ad') return '상대 어드밴티지';
+  if (a === '0' && b === '0') return '게임 ' + p.g0 + ' 대 ' + p.g1;
+  return sayPt(a) + ' 대 ' + sayPt(b);
+}
 function joinRoom() {
-  var code = (document.getElementById('code').value || '').trim().toUpperCase();
-  if (code.length !== 6) { document.getElementById('msg').textContent = '코드 6자리를 입력하세요'; return; }
-  document.getElementById('msg').textContent = '연결 중…';
+  var code = ($('code').value || '').trim().toUpperCase();
+  if (code.length !== 6) { $('msg').textContent = '코드 6자리를 입력하세요'; return; }
+  $('msg').textContent = '연결 중…';
   try {
     var client = (window.__testClient) || window.supabase.createClient(SB_URL, SB_KEY);
     chan = client.channel('score:' + code, { config: { broadcast: { self: false } } });
     chan.on('broadcast', { event: 'state' }, function (p) { onState(p.payload); });
     chan.subscribe(function (st) {
       if (st === 'SUBSCRIBED') {
-        document.getElementById('join').style.display = 'none';
-        document.getElementById('play').style.display = 'flex';
+        $('join').style.display = 'none';
+        $('play').style.display = 'flex';
+        renderVoiceBtn();
         chan.send({ type: 'broadcast', event: 'hello', payload: {} });
       } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') {
-        document.getElementById('msg').textContent = '연결 실패 — 인터넷을 확인하고 다시 시도하세요';
+        $('msg').textContent = '연결 실패 — 인터넷을 확인하고 다시 시도하세요';
       }
     });
-  } catch (e) { document.getElementById('msg').textContent = '오류: ' + (e.message || e); }
+  } catch (e) { $('msg').textContent = '오류: ' + (e.message || e); }
 }
 function onState(p) {
-  if (!p) return;
-  document.getElementById('names').textContent = p.n0 + ' vs ' + p.n1 + (p.sets ? ' · 세트 ' + p.sets : '') + (p.done ? ' · 🏁 종료' : '');
-  document.getElementById('pts').textContent = p.d0 + ' : ' + p.d1;
-  document.getElementById('btn-us').textContent = '🟢 ' + p.n0;
-  document.getElementById('btn-them').textContent = '🔴 ' + p.n1;
+  if (!p || typeof p !== 'object') return;
+  var g0 = Number(p.g0) || 0, g1 = Number(p.g1) || 0;
+  var d0 = String(p.d0 == null ? '—' : p.d0), d1 = String(p.d1 == null ? '—' : p.d1);
+  $('sets').textContent = (p.sets ? '세트 ' + String(p.sets) : '') + (p.done ? ' · 🏁 종료' : '');
+  $('games').innerHTML = '게임 <span class="g0">' + g0 + '</span> - <span class="g1">' + g1 + '</span>';
+  $('pts').innerHTML = '<span class="p0">' + esc(d0) + '</span><span class="colon">:</span><span class="p1">' + esc(d1) + '</span>';
+  $('state').textContent = p.done ? '경기 종료' : p.tb ? '🔥 타이브레이크' : (d0 === '40' && d1 === '40') ? '듀스' : (d0 === 'Ad' || d1 === 'Ad') ? '어드밴티지' : '';
+  $('btn-us').textContent = '🟢 ' + esc(String(p.n0 || '우리'));
+  $('btn-them').textContent = '🔴 ' + esc(String(p.n1 || '상대'));
+  // 게임이 넘어갔으면 진동 길게 + "게임" 먼저 말하기
+  var gameWon = last && (g0 !== last.g0 || g1 !== last.g1) && !p.done;
+  var setWon = last && String(p.sets || '') !== String(last.sets || '');
+  if (pendingSpeak) {
+    pendingSpeak = false;
+    var t = scoreText(p);
+    if (p.done) t = '경기 종료';
+    else if (setWon) t = '세트. ' + saySets(p.sets);
+    else if (gameWon) t = '게임. ' + g0 + ' 대 ' + g1;
+    speak(t);
+    if (navigator.vibrate) navigator.vibrate(p.done ? [80, 60, 80, 60, 160] : (gameWon || setWon) ? [60, 50, 60] : 25);
+  }
+  last = { g0: g0, g1: g1, sets: p.sets, d0: d0, d1: d1, tb: !!p.tb, done: !!p.done };
+}
+function esc(s) { return s.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function speakNow() { // 점수판 탭 → 지금 점수 읽기
+  if (!last) { speak('아직 경기가 시작되지 않았어요', true); return; }
+  var p = { d0: last.d0, d1: last.d1, g0: last.g0, g1: last.g1, sets: last.sets, tb: last.tb, done: last.done };
+  speak(scoreText(p), true);
+  if (navigator.vibrate) navigator.vibrate(15);
 }
 function sendPoint(side) {
   if (!chan) return;
+  pendingSpeak = true; // 점수판이 새 상태를 보내면 그때 읽음 (사용자 탭 직후라 음성 허용됨)
   chan.send({ type: 'broadcast', event: 'point', payload: { side: side } });
   if (navigator.vibrate) navigator.vibrate(25);
 }
 function sendUndo() {
   if (!chan) return;
+  pendingSpeak = true;
   chan.send({ type: 'broadcast', event: 'undo', payload: {} });
   if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
 }
-document.getElementById('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinRoom(); });
+$('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinRoom(); });
+renderVoiceBtn();
 </script>
 </body>
 </html>
