@@ -1139,6 +1139,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <div id="cc-full-sub"></div>
               <div class="row">
                 <button type="button" onclick="clAutoCalib()">✨ 보정</button>
+                <button type="button" onclick="clManualStart()">📐 수동</button>
                 <button type="button" id="cc-full-judge" onclick="clToggle()">🤖 판정 켜기</button>
                 <button type="button" onclick="ccFullToggle()">⛶ 나가기</button>
               </div>
@@ -1153,6 +1154,16 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <button type="button" class="btn small" style="flex:1" id="cl-auto-btn" onclick="clAutoCalib()">✨ 코트 자동 보정</button>
             <button type="button" class="btn small outline" style="flex:1" id="cl-manual-btn" onclick="clManualStart()">📐 수동 (4점 탭)</button>
             <button type="button" class="tag-btn" onclick="clClearCal()">지우기</button>
+          </div>
+          <div class="row" style="gap:6px;margin-top:6px">
+            <select id="cl-calmode" style="flex:1" onchange="clCalModeChange(this.value)">
+              <option value="corners">보정 기준: 네 귀퉁이 (코트 전체가 보일 때)</option>
+              <option value="service">보정 기준: 먼 귀퉁이 + 가까운 서비스라인 (가까운 쪽이 잘릴 때)</option>
+            </select>
+            <select id="cc-aspect" style="flex:0 0 auto" onchange="ccAspectChange(this.value)">
+              <option value="4:3">화각 넓게 4:3</option>
+              <option value="16:9">16:9</option>
+            </select>
           </div>
           <button type="button" class="btn small full" id="cl-toggle-btn" style="margin-top:6px;background:#1b5e20" onclick="clToggle()">🤖 라이브 판정 켜기</button>
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
@@ -1869,7 +1880,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.54';
+const APP_VERSION = 'v0.55';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8205,7 +8216,16 @@ async function mrTryOpen() {
 // 뷰어(내 폰): 썸네일 라이브 보기 + ✂️ 요청 → 캠이 직전 ~20초를 storage 'clips'(cam/코드/)에 올리면 판독 센터로 자동 오픈
 const CC_SEG = 60;  // 세그먼트 길이(초)
 const CC_CUT = 20;  // ✂️ 클립 길이(초)
-const CC_CAM_CONSTRAINTS = { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false };
+// 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
+function ccAspect() { try { return localStorage.getItem('tm-ccaspect') === '16:9' ? '16:9' : '4:3'; } catch (e) { return '4:3'; } }
+function ccCamConstraints() {
+  const wide = ccAspect() === '4:3';
+  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: wide ? 960 : 720 }, aspectRatio: { ideal: wide ? 4 / 3 : 16 / 9 }, frameRate: { ideal: 60 } }, audio: false };
+}
+function ccAspectChange(v) {
+  try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
+  if (ccStream && ccChan) ccReacquire('aspect'); else toast('화각 ' + (v === '16:9' ? '16:9' : '넓게 4:3') + ' — 다음 클럽캠 시작부터 적용');
+}
 const CC_MAX_SEGS = 120; // 폰에 보관할 최대 세그먼트 수(≈2시간·약 2GB) — 넘치면 오래된 것부터 삭제
 let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
 let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
@@ -8267,7 +8287,7 @@ async function ccReacquire(why) {
   try {
     try { await ccSealSeg(); } catch (e) {} // 지금까지 구간은 저장
     const old = ccStream;
-    const fresh = await navigator.mediaDevices.getUserMedia(CC_CAM_CONSTRAINTS);
+    const fresh = await navigator.mediaDevices.getUserMedia(ccCamConstraints());
     if (old) old.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     ccStream = fresh; ccBindTracks();
     const v = $('cc-cam'); if (v) { v.srcObject = fresh; v.play().catch(() => {}); }
@@ -8277,6 +8297,7 @@ async function ccReacquire(why) {
     ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e) + ' — 앱을 완전히 닫고(위로 밀어 종료) 다시 켜주세요');
   } finally { ccReacq = false; }
 }
+document.addEventListener('DOMContentLoaded', () => { const a = $('cc-aspect'); if (a) a.value = ccAspect(); }); // 화각 선택 복원 (v0.55)
 document.addEventListener('DOMContentLoaded', () => { // 뷰어: 지난번 캠 코드 자동 채움 (v0.54)
   try { const c = localStorage.getItem('tm-cvcode'); const el = $('cc-code-in'); if (c && el && !el.value) el.value = c; } catch (e) {}
 });
@@ -8341,7 +8362,7 @@ async function ccToggle() {
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
-    ccStream = await navigator.mediaDevices.getUserMedia(CC_CAM_CONSTRAINTS);
+    ccStream = await navigator.mediaDevices.getUserMedia(ccCamConstraints());
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
@@ -8549,13 +8570,24 @@ function clUiReset() {
   const a = $('cl-autocut'); if (a) clAutoCut = a.checked;
   clDraw();
 }
-function clCourtDst() { return [[0, 0], [AI_COURT_W, 0], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]]; }
-function clSaveCal(vw, vh) { try { localStorage.setItem('tm-clcal', JSON.stringify({ vw, vh, corners: clCorners })); } catch (e) {} }
+let clCalMode = 'corners'; // corners: 복식 네 귀퉁이 | service: 먼 귀퉁이 2 + 가까운 서비스라인 양끝 2 (가까운 베이스라인이 화면에 안 들어올 때)
+const CL_SVC_Y = AI_COURT_L / 2 + 6.40; // 가까운 서비스라인: 네트에서 6.40m (라인 중심 기준 근사)
+function clCourtDst(mode) {
+  if ((mode || clCalMode) === 'service') return [[0, 0], [AI_COURT_W, 0], [AI_COURT_W - AI_SINGLES_IN, CL_SVC_Y], [AI_SINGLES_IN, CL_SVC_Y]];
+  return [[0, 0], [AI_COURT_W, 0], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]];
+}
+function clCalModeChange(v) {
+  clCalMode = v === 'service' ? 'service' : 'corners';
+  const sel = $('cl-calmode'); if (sel && sel.value !== clCalMode) sel.value = clCalMode;
+  clStatus(clCalMode === 'service' ? '📐 서비스라인 기준 — 수동 보정에서 ① 먼 왼쪽 귀퉁이 ② 먼 오른쪽 귀퉁이 ③ 가까운 서비스라인 오른쪽 끝 ④ 왼쪽 끝을 탭' : '📐 네 귀퉁이 기준 — ✨ 자동 보정 또는 수동 4점 탭');
+}
+function clSaveCal(vw, vh) { try { localStorage.setItem('tm-clcal', JSON.stringify({ vw, vh, corners: clCorners, mode: clCalMode })); } catch (e) {} }
 function clRestoreCal() {
   const v = $('cc-cam'); if (!v || !v.videoWidth) return;
   try {
     const d = JSON.parse(localStorage.getItem('tm-clcal') || 'null');
     if (d && d.vw === v.videoWidth && d.vh === v.videoHeight && Array.isArray(d.corners) && d.corners.length === 4) {
+      clCalModeChange(d.mode === 'service' ? 'service' : 'corners');
       clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst());
       if (clH) { clStatus('📐 지난 보정을 복원했어요 (카메라 위치가 바뀌었으면 ✨ 자동 보정 다시) — 🤖 라이브 판정을 켜세요'); clDraw(); }
     }
@@ -8571,8 +8603,9 @@ function clAutoCalib() {
     const cx = cv.getContext('2d', { willReadFrequently: true });
     cx.drawImage(v, 0, 0, w2, h2);
     const q = aiDetectCourt(cx.getImageData(0, 0, w2, h2).data, w2, h2);
-    if (!q) { clStatus('자동 인식 실패 — 코트 네 귀퉁이와 라인이 다 보이게 폰 위치를 잡고 다시 누르거나, 📐 수동으로 4점을 탭하세요'); return; }
+    if (!q) { clStatus('자동 인식 실패 — 네 귀퉁이가 다 안 보이면 보정 기준을 "서비스라인"으로 바꾸고 📐 수동으로 4점을 탭하세요 (가까운 베이스라인 없어도 됨)'); return; }
     const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
+    clCalModeChange('corners');
     clCorners = q.map(c => [c[0] * sx, c[1] * sy]);
     clH = aiHomography(clCorners, clCourtDst());
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
@@ -8586,7 +8619,9 @@ function clManualStart() {
   if (!v || !v.videoWidth) { toast('캠이 켜져 있어야 해요'); return; }
   clCorners = []; clH = null; clPicking = true;
   const c = $('cc-cam-overlay'); if (c) c.classList.add('picking');
-  clStatus('📐 화면에서 코트 귀퉁이를 순서대로 탭: ① 먼 쪽 왼쪽 → ② 먼 쪽 오른쪽 → ③ 가까운 오른쪽 → ④ 가까운 왼쪽 (흰 라인에 자동 흡착)');
+  clStatus(clCalMode === 'service'
+    ? '📐 순서대로 탭: ① 먼 베이스라인 왼쪽 귀퉁이 → ② 먼 오른쪽 귀퉁이 → ③ 가까운 서비스라인 오른쪽 끝(단식 라인과 만나는 점) → ④ 왼쪽 끝 (흰 라인에 자동 흡착)'
+    : '📐 화면에서 코트 귀퉁이를 순서대로 탭: ① 먼 쪽 왼쪽 → ② 먼 쪽 오른쪽 → ③ 가까운 오른쪽 → ④ 가까운 왼쪽 (흰 라인에 자동 흡착)');
   clDraw();
 }
 function clFit() { // 비디오 표시 영역(object-fit:contain) 계산
@@ -8608,7 +8643,7 @@ function clCanvasClick(ev) {
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
     if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✅ 수동 보정 완료 — 🤖 라이브 판정을 켜세요'); }
     else { clCorners = []; clStatus('보정 실패 — 네 점이 일직선이면 안 돼요. 다시 📐 수동'); }
-  } else clStatus('📐 ' + clCorners.length + '/4 — 다음 귀퉁이를 탭하세요');
+  } else clStatus('📐 ' + clCorners.length + '/4 — 다음 점을 탭하세요' + (clCalMode === 'service' ? (clCorners.length === 2 ? ' (이제 가까운 서비스라인 오른쪽 끝)' : clCorners.length === 3 ? ' (가까운 서비스라인 왼쪽 끝)' : '') : ''));
   clDraw();
 }
 function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스 마커
