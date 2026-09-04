@@ -1133,6 +1133,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <video id="cc-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
             <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
             <canvas id="cc-cam-overlay" class="ai-overlay" onclick="clCanvasClick(event)"></canvas>
+            <button type="button" id="cc-tap" onclick="ccShowTap(false); ccReacquire('tap')" style="display:none;position:absolute;inset:12% 8%;align-items:center;justify-content:center;background:rgba(27,94,32,.92);color:#fff;border:none;border-radius:16px;font-size:20px;font-weight:800;z-index:3">📷 탭해서 카메라 다시 켜기</button>
             <div id="cc-fullbar">
               <div id="cc-full-code" style="font-size:12px;opacity:.9"></div>
               <div id="cc-full-status">📡 클럽캠</div>
@@ -1882,7 +1883,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.57';
+const APP_VERSION = 'v0.58';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8294,13 +8295,22 @@ function ccBindTracks() {
     t.onmute = () => { setTimeout(() => { if (ccChan && document.visibilityState === 'visible' && ccTrackDead()) ccReacquire('muted'); }, 1200); };
   });
 }
+function ccShowTap(on, msg) { // 자동 복구가 iOS에 막혔을 때: 손으로 탭해야 카메라가 열림
+  const b = $('cc-tap'); if (!b) return;
+  b.style.display = on ? 'flex' : 'none';
+  if (msg) b.textContent = msg;
+  if (on && navigator.vibrate) navigator.vibrate([60, 60, 60]);
+}
 async function ccReacquire(why) {
   if (!ccChan || ccReacq) return; ccReacq = true;
-  ccStatus('📷 카메라 다시 여는 중… (' + (why === 'manual' ? '수동' : '백그라운드 복귀') + ')');
+  ccStatus('📷 카메라 다시 여는 중… (' + (why === 'manual' || why === 'tap' ? '수동' : why) + ')');
+  const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // 탭 직후 즉시 요청 — 어떤 await보다 먼저 (v0.58)
+  camReq.catch(() => {});
   try {
     try { await ccSealSeg(); } catch (e) {} // 지금까지 구간은 저장
     const old = ccStream;
-    const fresh = await navigator.mediaDevices.getUserMedia(ccCamConstraints());
+    const fresh = await camReq;
+    ccShowTap(false);
     if (old) old.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
     ccStream = fresh; ccBindTracks();
     const v = $('cc-cam'); if (v) { v.srcObject = fresh; v.play().catch(() => {}); }
@@ -8308,9 +8318,16 @@ async function ccReacquire(why) {
     ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
     ccReacqFail = 0;
   } catch (e) {
-    ccReacqFail++;
-    ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e));
-    if (ccReacqFail >= 2) ccMaybeAutoReload('재시작 실패');
+    const notAllowed = !!(e && (e.name === 'NotAllowedError' || /not allowed/i.test(e.message || '')));
+    if (notAllowed) { // iOS: 제스처 없이는 못 엶 → 사용자 탭 유도 (실패 횟수에 안 셈)
+      ccStatus('📷 아이폰은 손으로 탭해야 카메라를 다시 열 수 있어요 — 화면의 큰 버튼을 탭하세요');
+      ccShowTap(true, '📷 탭해서 카메라 다시 켜기');
+    } else {
+      ccReacqFail++;
+      ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e));
+      ccShowTap(true, '📷 탭해서 다시 시도');
+      if (ccReacqFail >= 2) ccMaybeAutoReload('재시작 실패');
+    }
   } finally { ccReacq = false; }
 }
 document.addEventListener('DOMContentLoaded', () => { const a = $('cc-aspect'); if (a) a.value = ccAspect(); }); // 화각 선택 복원 (v0.55)
@@ -8320,7 +8337,7 @@ document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 �
   let tries = 0;
   const tick = setInterval(() => {
     tries++;
-    if (serverMode() && TMAuth.isLoggedIn && !ccChan) { clearInterval(tick); goSection('rank', 'cc-code-in'); setTimeout(() => ccToggle(), 400); toast('🔄 클럽캠 다시 켜는 중…'); }
+    if (serverMode() && TMAuth.isLoggedIn && !ccChan) { clearInterval(tick); goSection('rank', 'cc-code-in'); toast('🔄 새로고침 완료 — 📡 클럽캠 시작 버튼을 탭해 주세요 (아이폰은 탭해야 카메라가 열려요)'); const b = $('cc-start-btn'); if (b) { b.style.background = '#c0392b'; b.textContent = '📡 여기를 탭해서 클럽캠 다시 시작'; } }
     else if (tries > 20) clearInterval(tick);
   }, 500);
 });
@@ -8386,9 +8403,11 @@ function ccClearSegs() {
 async function ccToggle() {
   if (ccChan) { ccStop(); return; }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // iOS: 탭 직후(어떤 await보다 먼저) 요청해야 허용됨 (v0.58)
+  camReq.catch(() => {});
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
-    ccStream = await navigator.mediaDevices.getUserMedia(ccCamConstraints());
+    ccStream = await camReq;
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
