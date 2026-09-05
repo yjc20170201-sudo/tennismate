@@ -1173,6 +1173,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 🔊 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
+          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 🧪 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
           <div id="cc-diag" class="muted" style="font-size:11px;margin-top:2px;font-family:ui-monospace,monospace"></div>
@@ -1892,7 +1893,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.67';
+const APP_VERSION = 'v0.68';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8383,7 +8384,7 @@ function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
 }
-document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; });
+document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
   const v = $('cc-cam'); if (!v || !stream) return;
   try {
@@ -8860,11 +8861,52 @@ function cvClipPair(slot, blob, at) { // 20초 안에 A·B 클립이 다 오면 
 //        → 바운스(aiBounceIdx·aiRefineBounce) → 캠 보정(clH)으로 IN/OUT(aiVerdict) → 채널 'call' 송신 → 아슬아슬하면 자동 ✂️
 // 되감기 없이 프레임을 바로 받으므로 지연 1~2초. 폰이 뜨거워지므로 보조배터리 권장. 참고 의견일 뿐 공식 판정 아님.
 const CL_TW = 320, CL_WIN = 1.6, CL_MIN_GAP = 1.5, CL_MAX_BLOB = 80, CL_AUTOCUT_GAP = 25000;
+const CL_SAMPLE_MAX_PER_DAY = 400; // 무료 저장 한도 보호 (팩당 ~0.1MB → 하루 40MB)
+let clRing = [], clSampleOn = true, clSampleN = 0, clSampleBusy = false;
+try { clSampleOn = localStorage.getItem('tm-clsample') !== '0'; } catch (e) {}
+function clSampleSet(on) { clSampleOn = !!on; try { localStorage.setItem('tm-clsample', clSampleOn ? '1' : '0'); } catch (e) {} if (!clSampleOn) clRing = []; }
+function clSampleDayKey() { const d = new Date(); return 'tm-clsample-' + d.getFullYear() + (d.getMonth() + 1) + d.getDate(); }
+function clSampleCount() { try { return parseInt(localStorage.getItem(clSampleDayKey()) || '0', 10) || 0; } catch (e) { return 0; } }
+function clSampleBump() { const n = clSampleCount() + 1; try { localStorage.setItem(clSampleDayKey(), String(n)); } catch (e) {} clSampleN = n; const el = $('cl-sample-n'); if (el) el.textContent = n; return n; }
+async function clSampleUpload(pts, bi, tw, th, v, vd, shot, mC) { // 바운스 앞뒤 프레임 6장 + 메타 → storage (학습 데이터, 라벨 초안 포함)
+  if (!clSampleOn || clSampleBusy || !ccChan || !svClient() || !clRing.length) return;
+  if (clSampleCount() >= CL_SAMPLE_MAX_PER_DAY) return;
+  clSampleBusy = true;
+  try {
+    const t0 = pts[bi].t;
+    // 바운스 시각 기준 앞 3장·뒤 2장 + 바운스 = 6장 (링에서 시각 가장 가까운 프레임)
+    const wantT = [-3, -2, -1, 0, 1, 2].map(k => { const q = pts[Math.min(pts.length - 1, Math.max(0, bi + k))]; return q ? q.t : t0 + k * 0.04; });
+    const frames = wantT.map(tt => { let best = null, bd = 1e9; for (const f of clRing) { const d = Math.abs(f.t - tt); if (d < bd) { bd = d; best = f; } } return best && bd < 0.08 ? best : null; }).filter(Boolean);
+    if (frames.length < 4) return;
+    const cv = clSampleUpload._cv || (clSampleUpload._cv = document.createElement('canvas')); cv.width = tw; cv.height = th;
+    const g = cv.getContext('2d');
+    const ts = Date.now(), base = 'train/' + (ccCode || 'X') + '/' + ts + '/';
+    const st = svClient().storage.from('clips');
+    const meta = { v: APP_VERSION, at: ts, cam: ccCode, w: tw, h: th, videoW: v.videoWidth, videoH: v.videoHeight, bounceT: t0,
+      call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!aiSingles, court: mC ? { x: mC[0], y: mC[1] } : null,
+      shot: shot || null, corners: clCorners.length === 4 ? clCorners : null, calMode: clCalMode,
+      track: pts.map(p => ({ t: +p.t.toFixed(3), x: +p.x.toFixed(1), y: +p.y.toFixed(1), s: +(p.s || 0).toFixed(2) })), bounceIdx: bi, frames: [] };
+    for (let i = 0; i < frames.length; i++) {
+      const f = frames[i];
+      g.putImageData(new ImageData(new Uint8ClampedArray(f.d), tw, th), 0, 0);
+      const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.82));
+      if (!blob) continue;
+      const ball = pts.reduce((b0, p) => Math.abs(p.t - f.t) < Math.abs(b0.t - f.t) ? p : b0, pts[0]); // 이 프레임의 공 위치(트랙 기준, 라벨 초안)
+      meta.frames.push({ file: 'f' + i + '.jpg', t: +f.t.toFixed(3), ball: Math.abs(ball.t - f.t) < 0.06 ? { x: +ball.x.toFixed(1), y: +ball.y.toFixed(1) } : null });
+      const { error } = await st.upload(base + 'f' + i + '.jpg', blob, { contentType: 'image/jpeg', upsert: true });
+      if (error) throw error;
+    }
+    const { error: e2 } = await st.upload(base + 'meta.json', new Blob([JSON.stringify(meta)], { type: 'application/json' }), { contentType: 'application/json', upsert: true });
+    if (e2) throw e2;
+    clSampleBump();
+  } catch (e) { const el = $('cl-sample-n'); if (el) el.textContent = clSampleN + ' (업로드 실패: ' + ((e && e.message) || e).slice(0, 40) + ')'; }
+  finally { clSampleBusy = false; }
+}
 let clOn = false, clH = null, clCorners = [], clPicking = false, clFrames = [], clPrev = null, clPrev2 = null;
 let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0, clLast = null, clTimer = null, clNCalls = 0;
 function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
-  clOn = false; clH = null; clCorners = []; clPicking = false; clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0;
+  clOn = false; clH = null; clCorners = []; clPicking = false; clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   const c = $('cl-singles'); if (c) c.checked = !!aiSingles;
   const a = $('cl-autocut'); if (a) clAutoCut = a.checked;
@@ -8998,6 +9040,7 @@ function clLoop() {
     const cx = cv.getContext('2d', { willReadFrequently: true });
     cx.drawImage(v, 0, 0, tw, th);
     const cur = { t: now, d: cx.getImageData(0, 0, tw, th).data };
+    if (clSampleOn) { clRing.push(cur); while (clRing.length > 45) clRing.shift(); } // 🧪 학습 샘플용 프레임 보관 (v0.68)
     if (clPrev2 && clPrev) { // 3프레임 차분: 가운데(prev) 프레임의 후보
       const r = aiExtractCands(clPrev2.d, clPrev.d, cur.d, tw, th);
       clFrames.push({ t: clPrev.t, cands: r.shake ? [] : r.cands.filter(c => c.n <= CL_MAX_BLOB) });
@@ -9030,6 +9073,7 @@ function clDetect(tw, th, v) {
   clDraw();
   clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
   if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
+  clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
     setTimeout(() => ccOnCut(), 1500); // 반등 후 장면까지 담기게 잠깐 뒤에 자름
