@@ -1892,7 +1892,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.65';
+const APP_VERSION = 'v0.66';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4261,7 +4261,7 @@ function lvRCPushState() {
   lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
     d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1],
     sets: live.sets.map(s => s[0] + '-' + s[1]).join(' '),
-    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs
+    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs, srv: live.srv || 0
   } });
 }
 function lvRCRemoteState(p) {
@@ -4708,15 +4708,17 @@ function lvSpeak(text) { // 본폰 스피커 + 캠 채널로 전달(공기계가
   if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sayMsg); } catch (e) {} }
 }
 function lvSideName(side) { return side === 0 ? (live && live.type === 'd' ? '우리' : '내') : '상대'; }
-function lvPtWord(d) { return d === 'Ad' ? '어드밴티지' : d === '0' ? '영' : String(d); }
-function lvScoreCall() { // 현재 포인트 상황 한 줄
+function lvPtWord(d) { return ({ '0': '러브', '15': '피프틴', '30': '써티', '40': '포티', 'Ad': '어드밴티지' })[d] || String(d); } // 테니스식 콜 (v0.66)
+function lvScoreCall() { // 현재 포인트 상황 — 서브 넣는 쪽 점수 먼저 (테니스 관례)
   if (!live) return '';
   const [a, b] = liveDisp();
   if (live.tb) return '타이브레이크, ' + a + ' 대 ' + b;
   if (a === '40' && b === '40') return '듀스';
   if (a === 'Ad') return '어드밴티지 ' + lvSideName(0);
   if (b === 'Ad') return '어드밴티지 상대';
-  return lvPtWord(a) + ' 대 ' + lvPtWord(b);
+  if (a === b) return lvPtWord(a) + ' 올';
+  const srvFirst = (live.srv || 0) === 0 ? [a, b] : [b, a];
+  return lvPtWord(srvFirst[0]) + ' ' + lvPtWord(srvFirst[1]);
 }
 function lvAnnounce(before, side, finished) {
   if (!live) return;
