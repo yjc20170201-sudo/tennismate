@@ -1168,6 +1168,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <button type="button" class="btn small full" id="cl-toggle-btn" style="margin-top:6px;background:#1b5e20" onclick="clToggle()">🤖 라이브 판정 켜기</button>
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
           <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
+          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 🔊 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
           <div id="cc-diag" class="muted" style="font-size:11px;margin-top:2px;font-family:ui-monospace,monospace"></div>
@@ -1883,7 +1884,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.62';
+const APP_VERSION = 'v0.63';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4542,7 +4543,8 @@ function startLive() {
   }
   const gT = parseInt($('lv-games') ? $('lv-games').value : '6') || 6;
   const sNeed = parseInt($('lv-sets') ? $('lv-sets').value : '2') || 2;
-  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false };
+  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0 };
+  lvSpeak('경기 시작. 서브 우리');
   renderLive();
 }
 function liveDisp() {
@@ -4629,6 +4631,16 @@ function renderLive() {
       <button class="btn small outline" style="flex:1" onclick="liveUndo()" ${live.hist.length ? '' : 'disabled'}>↩️ 되돌리기</button>
       <button class="btn small outline" style="flex:1" onclick="liveQuit()">경기 취소</button>
     </div>
+    <div class="row" style="gap:6px;margin-top:8px">
+      <button class="btn small ${lvVoiceOn ? '' : 'outline'}" style="flex:1" onclick="lvVoiceToggle()">${lvVoiceOn ? '🔊 콜 소리 켬' : '🔇 콜 소리 끔'}</button>
+      <button class="btn small ${lvMicOn ? '' : 'outline'}" style="flex:1" onclick="lvMicToggle()">${lvMicOn ? '🎤 듣는 중' : '🎤 음성 입력'}</button>
+      <button class="btn small outline" style="flex:1" onclick="lvServeFlip()">🎾 서브: ${live.srv === 1 ? '상대' : lvSideName(0)}</button>
+    </div>
+    <div class="row" style="gap:6px;margin-top:6px">
+      <button class="btn small outline" style="flex:1" onclick="lvFault()">폴트${live.fault ? ' (첫 폴트 ✓)' : ''}</button>
+      <button class="btn small outline" style="flex:1" onclick="lvLet()">렛</button>
+    </div>
+    <div class="muted" id="lv-mic-status" style="font-size:11.5px;margin-top:4px">${lvMicOn ? '🎤 듣는 중 — "우리" "상대" "폴트" "렛" "취소"' : '🔊 콜 소리는 본폰과 공기계(클럽캠 연결 시) 둘 다 · 🎤 갤럭시 크롬에서 음성 입력'}</div>
     ${lvTagRowHtml()}
     <div class="dline">총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]}</div>`;
   lvRCPushState(); // 리모컨에 현재 점수 중계
@@ -4638,6 +4650,8 @@ function livePoint(side) {
   live.hist.push(JSON.stringify({ sets: live.sets, g: live.g, p: live.p, tb: live.tb, ptsTotal: live.ptsTotal }));
   live.tags.push({ side, tag: null }); // 🏷️ 포인트 태그 슬롯
   const o = 1 - side;
+  const before = { g: live.g.slice(), sets: live.sets.length, tb: live.tb };
+  live.fault = 0;
   live.ptsTotal[side]++;
   live.p[side]++;
   if (live.tb) {
@@ -4661,13 +4675,112 @@ function livePoint(side) {
     lvCamClip((side === 0 ? (live.type === 'd' ? '🟢 우리 포인트' : '🟢 내 포인트') : '🔴 상대 포인트') + ' · ' + (live.tb ? 'TB' : (live.sets.length + 1) + '세트') + ' ' + d[0] + ':' + d[1]);
   }
   const sNeed = live.sNeed || 2;
+  lvAnnounce(before, side, myS === sNeed || opS === sNeed);
   if (myS === sNeed || opS === sNeed) finishLive(myS, opS);
   else renderLive();
+}
+// ===== 🔊 점수 콜 소리 · 🎤 음성 입력 · 서브/폴트/렛 (v0.63) =====
+let lvVoiceOn = true, lvSpeaking = false, lvSpeakEnd = 0, lvMic = null, lvMicOn = false, lvMicLast = 0;
+try { lvVoiceOn = localStorage.getItem('tm-lv-voice') !== '0'; } catch (e) {}
+function lvVoiceToggle() { lvVoiceOn = !lvVoiceOn; try { localStorage.setItem('tm-lv-voice', lvVoiceOn ? '1' : '0'); } catch (e) {} renderLive(); if (lvVoiceOn) lvSpeak('콜 소리 켬'); }
+function lvSpeak(text) { // 본폰 스피커 + 캠 채널로 전달(공기계가 같이 외침)
+  if (!text) return;
+  if (lvVoiceOn && window.speechSynthesis && window.SpeechSynthesisUtterance) {
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05;
+      lvSpeaking = true;
+      u.onend = u.onerror = () => { lvSpeaking = false; lvSpeakEnd = Date.now(); };
+      speechSynthesis.speak(u);
+      setTimeout(() => { lvSpeaking = false; }, 6000); // 안전장치
+    } catch (e) { lvSpeaking = false; }
+  }
+  if (cvChan) { try { cvChan.send({ type: 'broadcast', event: 'say', payload: { text: String(text).slice(0, 80), at: Date.now() } }); } catch (e) {} }
+}
+function lvSideName(side) { return side === 0 ? (live && live.type === 'd' ? '우리' : '내') : '상대'; }
+function lvPtWord(d) { return d === 'Ad' ? '어드밴티지' : d === '0' ? '영' : String(d); }
+function lvScoreCall() { // 현재 포인트 상황 한 줄
+  if (!live) return '';
+  const [a, b] = liveDisp();
+  if (live.tb) return '타이브레이크, ' + a + ' 대 ' + b;
+  if (a === '40' && b === '40') return '듀스';
+  if (a === 'Ad') return '어드밴티지 ' + lvSideName(0);
+  if (b === 'Ad') return '어드밴티지 상대';
+  return lvPtWord(a) + ' 대 ' + lvPtWord(b);
+}
+function lvAnnounce(before, side, finished) {
+  if (!live) return;
+  const gameChanged = live.g[0] !== before.g[0] || live.g[1] !== before.g[1] || live.sets.length !== before.sets;
+  let t;
+  if (finished) {
+    t = '경기 종료. 세트 ' + live.sets.map(x => x[0] + ' 대 ' + x[1]).join(', ');
+  } else if (live.sets.length !== before.sets) {
+    const last = live.sets[live.sets.length - 1];
+    live.srv = 1 - live.srv;
+    t = '세트, ' + lvSideName(last[0] > last[1] ? 0 : 1) + '. ' + last[0] + ' 대 ' + last[1] + '. 서브 ' + lvSideName(live.srv);
+  } else if (gameChanged) {
+    live.srv = 1 - live.srv; // 게임마다 서브 교대 (타이브레이크 세부 교대는 수동 🎾 버튼)
+    t = '게임, ' + lvSideName(side) + '. ' + live.g[0] + ' 대 ' + live.g[1] + (live.tb ? '. 타이브레이크' : '') + '. 서브 ' + lvSideName(live.srv);
+  } else {
+    t = lvSideName(side) + ' 포인트. ' + lvScoreCall();
+  }
+  lvSpeak(t);
+}
+function lvServeFlip() { if (!live || live.done) return; live.srv = 1 - live.srv; live.fault = 0; lvSpeak('서브 ' + lvSideName(live.srv)); renderLive(); }
+function lvFault() {
+  if (!live || live.done) return;
+  live.fault = (live.fault || 0) + 1;
+  if (live.fault >= 2) { live.fault = 0; lvSpeak('더블 폴트'); setTimeout(() => livePoint(1 - live.srv), 900); }
+  else { lvSpeak('폴트'); renderLive(); }
+}
+function lvLet() { if (!live || live.done) return; lvSpeak('렛, 다시'); }
+function lvBeep() {
+  try {
+    const ac = lvBeep._ac || (lvBeep._ac = new (window.AudioContext || window.webkitAudioContext)());
+    const o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = 880; g.gain.value = 0.08;
+    o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime + 0.09);
+  } catch (e) {}
+}
+function lvMicToggle() {
+  if (lvMicOn) { lvMicStop(); toast('🎤 음성 입력 껐어요'); return; }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('이 브라우저는 음성 인식을 지원하지 않아요 — 갤럭시 크롬에서 써주세요'); return; }
+  try { lvBeep(); } catch (e) {} // 오디오 컨텍스트를 제스처 안에서 열어둠
+  const m = new SR(); m.lang = 'ko-KR'; m.continuous = true; m.interimResults = false; m.maxAlternatives = 3;
+  m.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (!e.results[i].isFinal) continue;
+      const alts = []; for (let k = 0; k < e.results[i].length; k++) alts.push(e.results[i][k].transcript);
+      lvVoiceCommand(alts);
+    }
+  };
+  m.onerror = e => { if (e.error === 'not-allowed' || e.error === 'service-not-allowed') { toast('마이크 권한을 허용해 주세요'); lvMicStop(); } };
+  m.onend = () => { if (lvMicOn && lvMic === m) { try { m.start(); } catch (e) {} } }; // 크롬은 잠깐씩 끊김 → 자동 재시작
+  try { m.start(); } catch (e) { toast('음성 인식 시작 실패: ' + (e.message || e)); return; }
+  lvMic = m; lvMicOn = true; renderLive();
+  toast('🎤 듣는 중 — "우리" "상대" "폴트" "렛" "취소"라고 말하세요');
+}
+function lvMicStop() { lvMicOn = false; const m = lvMic; lvMic = null; if (m) { try { m.onend = null; m.stop(); } catch (e) {} } renderLive(); }
+function lvVoiceCommand(alts) {
+  if (!live || live.done) return;
+  if (lvSpeaking || Date.now() - lvSpeakEnd < 1500) return; // 내 콜 소리를 다시 듣는 것 방지
+  const t = alts.join(' ').replace(/\s+/g, '');
+  if (Date.now() - lvMicLast < 1200) return;
+  let did = null;
+  if (/취소|되돌|무르|물러/.test(t)) { liveUndo(); did = '취소'; }
+  else if (/더블/.test(t)) { live.fault = 1; lvFault(); did = '더블 폴트'; }
+  else if (/폴트|풀트|폭트|파울/.test(t)) { lvFault(); did = '폴트'; }
+  else if (/렛|레트|네트/.test(t)) { lvLet(); did = '렛'; }
+  else if (/우리|내포인트|내점수|우리점수/.test(t)) { livePoint(0); did = '우리 포인트'; }
+  else if (/상대|저쪽|쟤네|상대편/.test(t)) { livePoint(1); did = '상대 포인트'; }
+  if (did) { lvMicLast = Date.now(); lvBeep(); if (navigator.vibrate) navigator.vibrate(40); const st = $('lv-mic-status'); if (st) st.textContent = '🎤 "' + alts[0] + '" → ' + did; }
+  else { const st = $('lv-mic-status'); if (st) st.textContent = '🎤 못 알아들음: "' + alts[0] + '"'; }
 }
 function liveUndo() {
   if (!live || !live.hist.length || live.done) return;
   Object.assign(live, JSON.parse(live.hist.pop()));
   if (live.tags && live.tags.length) live.tags.pop();
+  lvSpeak('되돌리기. ' + lvScoreCall());
   renderLive();
 }
 function liveQuit() {
@@ -8248,6 +8361,14 @@ function ccRenderGate() {
   }
 }
 function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
+let ccVoiceOn = true; try { ccVoiceOn = localStorage.getItem('tm-cc-voice') !== '0'; } catch (e) {}
+function ccVoiceSet(on) { ccVoiceOn = !!on; try { localStorage.setItem('tm-cc-voice', ccVoiceOn ? '1' : '0'); } catch (e) {} if (ccVoiceOn) ccSay({ text: '콜 소리 켬' }); }
+function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
+  if (!ccVoiceOn || !p || typeof p.text !== 'string' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
   const v = $('cc-cam'); if (!v || !stream) return;
   try {
@@ -8427,6 +8548,7 @@ async function ccToggle() {
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
+  chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
       if (st === 'SUBSCRIBED') res();
