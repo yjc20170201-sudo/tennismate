@@ -1892,7 +1892,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.66';
+const APP_VERSION = 'v0.67';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4261,7 +4261,7 @@ function lvRCPushState() {
   lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
     d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1],
     sets: live.sets.map(s => s[0] + '-' + s[1]).join(' '),
-    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs, srv: live.srv || 0
+    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs, srv: live.srv || 0, noAd: !!live.noAd
   } });
 }
 function lvRCRemoteState(p) {
@@ -4551,7 +4551,8 @@ function startLive() {
   }
   const gT = parseInt($('lv-games') ? $('lv-games').value : '6') || 6;
   const sNeed = parseInt($('lv-sets') ? $('lv-sets').value : '2') || 2;
-  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0 };
+  const noAd = !$('lv-noad') || $('lv-noad').value !== '0'; // 기본 노애드 (동호회 규칙) — v0.67
+  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd };
   lvSpeak('경기 시작. 서브 우리');
   renderLive();
 }
@@ -4567,7 +4568,7 @@ function liveDisp() {
 function liveStateLabel() {
   if (live.tb) return '· 먼저 7포인트(2점 차)를 따면 세트!';
   const [a, b] = live.p;
-  if (a >= 3 && b >= 3) return a === b ? '· 듀스' : '· 어드밴티지';
+  if (a >= 3 && b >= 3) return a === b ? (live.noAd ? '· 듀스 — 다음 한 점으로 게임 결정' : '· 듀스') : '· 어드밴티지';
   return '';
 }
 function liveSetChips() {
@@ -4590,6 +4591,7 @@ function renderLive() {
       <div class="row" style="gap:8px">
         <div style="flex:1"><label>세트당 게임</label><select id="lv-games"><option value="6" selected>6게임</option><option value="4">4게임</option></select></div>
         <div style="flex:1"><label>세트 수</label><select id="lv-sets"><option value="2" selected>3판 2선승</option><option value="1">단판</option></select></div>
+        <div style="flex:1"><label>듀스</label><select id="lv-noad"><option value="1" selected>노애드 (한 점 결정)</option><option value="0">어드밴티지</option></select></div>
       </div>
       <label id="lv-opp-lbl">상대 1</label>
       <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
@@ -4616,7 +4618,7 @@ function renderLive() {
       <div style="font-size:34px">${win ? '🏆' : '🎾'}</div>
       <h3 style="margin-top:6px">${win ? '승리!' : '아쉬운 패배'} — 세트 ${myS}:${opS}</h3>
       <div style="margin:8px 0">${liveSetChips()}</div>
-      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}${(live.gT || 6) === 4 ? '⚡4게임제 · ' : ''}${(live.sNeed || 2) === 1 ? '단판 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
+      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}${(live.gT || 6) === 4 ? '⚡4게임제 · ' : ''}${(live.sNeed || 2) === 1 ? '단판 · ' : ''}${live.noAd ? '노애드 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
       <button class="btn full" style="margin-top:12px" onclick="closeLive()">확인</button>
     </div>`;
     lvRCPushState();
@@ -4669,7 +4671,7 @@ function livePoint(side) {
       live.sets.push(set);
       live.g = [0, 0]; live.p = [0, 0]; live.tb = false;
     }
-  } else if (live.p[side] >= 4 && live.p[side] - live.p[o] >= 2) { // 게임 승리
+  } else if (live.p[side] >= 4 && (live.noAd ? true : live.p[side] - live.p[o] >= 2)) { // 게임 승리 (노애드: 듀스 뒤 한 점, v0.67)
     live.g[side]++; live.p = [0, 0];
     if (live.g[side] >= (live.gT || 6) && live.g[side] - live.g[o] >= 2) { // 세트 승리
       live.sets.push(live.g.slice()); live.g = [0, 0];
@@ -4713,7 +4715,7 @@ function lvScoreCall() { // 현재 포인트 상황 — 서브 넣는 쪽 점수
   if (!live) return '';
   const [a, b] = liveDisp();
   if (live.tb) return '타이브레이크, ' + a + ' 대 ' + b;
-  if (a === '40' && b === '40') return '듀스';
+  if (a === '40' && b === '40') return live.noAd ? '듀스, 결정 포인트' : '듀스';
   if (a === 'Ad') return '어드밴티지 ' + lvSideName(0);
   if (b === 'Ad') return '어드밴티지 상대';
   if (a === b) return lvPtWord(a) + ' 올';

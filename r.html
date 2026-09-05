@@ -93,7 +93,7 @@ function scoreText(p) { // 현재 상태를 한 문장으로 (탭했을 때·포
   if (p.done) return '경기 종료. 세트 ' + saySets(p.sets);
   if (p.tb) return '타이브레이크, ' + p.d0 + ' 대 ' + p.d1;
   var a = p.d0, b = p.d1;
-  if (a === '40' && b === '40') return '듀스';
+  if (a === '40' && b === '40') return p.noAd ? '듀스, 결정 포인트' : '듀스';
   if (a === 'Ad') return '우리 어드밴티지';
   if (b === 'Ad') return '상대 어드밴티지';
   if (a === '0' && b === '0') return '게임 ' + p.g0 + ' 대 ' + p.g1;
@@ -143,12 +143,12 @@ function onState(p) {
     speak(t);
     if (navigator.vibrate) navigator.vibrate(p.done ? [80, 60, 80, 60, 160] : (gameWon || setWon) ? [60, 50, 60] : 25);
   }
-  last = { g0: g0, g1: g1, sets: p.sets, d0: d0, d1: d1, tb: !!p.tb, done: !!p.done, srv: Number(p.srv) || 0 };
+  last = { g0: g0, g1: g1, sets: p.sets, d0: d0, d1: d1, tb: !!p.tb, done: !!p.done, srv: Number(p.srv) || 0, noAd: !!p.noAd };
 }
 function esc(s) { return s.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function speakNow() { // 점수판 탭 → 지금 점수 읽기
   if (!last) { speak('아직 경기가 시작되지 않았어요', true); return; }
-  var p = { d0: last.d0, d1: last.d1, g0: last.g0, g1: last.g1, sets: last.sets, tb: last.tb, done: last.done, srv: last.srv };
+  var p = { d0: last.d0, d1: last.d1, g0: last.g0, g1: last.g1, sets: last.sets, tb: last.tb, done: last.done, srv: last.srv, noAd: last.noAd };
   speak(scoreText(p), true);
   if (navigator.vibrate) navigator.vibrate(15);
 }
