@@ -1127,6 +1127,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <input id="cc-code-in" placeholder="캠 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase">
           <button type="button" class="btn small outline" id="cc-watch-btn" onclick="cvWatch()">👀 보기</button>
         </div>
+        <div class="vj-ctrl" style="margin-top:4px">
+          <input id="cc-code-in2" placeholder="반대편 캠 코드 (두 대일 때)" maxlength="6" style="flex:1;text-transform:uppercase">
+          <button type="button" class="btn small outline" onclick="cvWatchB()">👀 B 추가</button>
+        </div>
         <div id="cc-cam-wrap" style="display:none">
           <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
           <div style="position:relative;margin-top:8px" id="cc-stage">
@@ -1178,7 +1182,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div class="vj-mark set" id="cc-view-info" style="flex:1">캠 —</div>
             <button type="button" class="tag-btn" onclick="cvStop()">연결 끊기</button>
           </div>
-          <img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:120px;display:block;margin-top:6px" alt="클럽캠 라이브">
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <div style="flex:1;min-width:0"><div class="muted" style="font-size:11px">A 캠</div><img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 A 라이브"></div>
+            <div id="cc-live-b-wrap" style="flex:1;min-width:0;display:none"><div class="muted" style="font-size:11px">B 캠(반대편) <button type="button" class="tag-btn" style="padding:0 6px;font-size:10px" onclick="cvStopB()">끊기</button></div><img id="cc-live2" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 B 라이브"></div>
+          </div>
           <div id="cc-view-status" class="muted" style="font-size:12px;margin-top:6px">캠 화면을 기다리는 중…</div>
           <div id="cc-call-last" style="margin-top:6px"></div>
           <div id="cc-call-feed" style="margin-top:4px"></div>
@@ -1885,7 +1892,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.64';
+const APP_VERSION = 'v0.65';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4696,7 +4703,9 @@ function lvSpeak(text) { // 본폰 스피커 + 캠 채널로 전달(공기계가
       setTimeout(() => { lvSpeaking = false; }, 6000); // 안전장치
     } catch (e) { lvSpeaking = false; }
   }
-  if (cvChan) { try { cvChan.send({ type: 'broadcast', event: 'say', payload: { text: String(text).slice(0, 80), at: Date.now() } }); } catch (e) {} }
+  const sayMsg = { type: 'broadcast', event: 'say', payload: { text: String(text).slice(0, 80), at: Date.now() } };
+  if (cvChan) { try { cvChan.send(sayMsg); } catch (e) {} }
+  if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sayMsg); } catch (e) {} }
 }
 function lvSideName(side) { return side === 0 ? (live && live.type === 'd' ? '우리' : '내') : '상대'; }
 function lvPtWord(d) { return d === 'Ad' ? '어드밴티지' : d === '0' ? '영' : String(d); }
@@ -8346,6 +8355,7 @@ const CC_MAX_SEGS = 120; // 폰에 보관할 최대 세그먼트 수(≈2시간�
 let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
 let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
 let cvChan = null, cvCode = null, cvLastFrame = 0, cvTimer = null, cvHelloN = 0;
+let cvChanB = null, cvCodeB = null, cvLastFrameB = 0, cvTimerB = null, cvHelloNB = 0, cvClipPend = {}; // v0.65 두 번째 캠(반대편)
 
 function ccRenderGate() {
   const on = serverMode() && TMAuth.isLoggedIn;
@@ -8475,6 +8485,7 @@ document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 �
 });
 document.addEventListener('DOMContentLoaded', () => { // 뷰어: 지난번 캠 코드 자동 채움 (v0.54)
   try { const c = localStorage.getItem('tm-cvcode'); const el = $('cc-code-in'); if (c && el && !el.value) el.value = c; } catch (e) {}
+  try { const c = localStorage.getItem('tm-cvcode2'); const el = $('cc-code-in2'); if (c && el && !el.value) el.value = c; } catch (e) {}
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !ccChan) return;
@@ -8777,6 +8788,69 @@ async function cvWatch() {
   $('cc-view-status').textContent = '캠 화면을 기다리는 중… (공기계에서 📡 켜져 있어야 해요)';
   toast('👀 캠 ' + code + ' 연결!');
 }
+async function cvWatchB() { // 반대편 캠(B) 추가 시청 (v0.65)
+  const code = ($('cc-code-in2').value || '').trim().toUpperCase();
+  if (code.length !== 6) { toast('반대편 캠 코드 6자리를 입력해 주세요'); return; }
+  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  if (cvCode && code === cvCode) { toast('A 캠과 같은 코드예요 — 반대편 공기계의 코드를 넣어 주세요'); return; }
+  if (cvChanB) await cvStopB(true);
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } });
+  chan.on('broadcast', { event: 'frame' }, p => cvFrameB(p.payload));
+  chan.on('broadcast', { event: 'camclip' }, p => cvClipB(p.payload));
+  chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload, 'B'));
+  try {
+    await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
+  } catch (e) { toast('B 캠 연결 실패: ' + (e.message || e)); return; }
+  cvChanB = chan; cvCodeB = code;
+  try { localStorage.setItem('tm-cvcode2', code); } catch (e) {}
+  cvLastFrameB = Date.now(); cvHelloNB = 0;
+  if (cvTimerB) clearInterval(cvTimerB);
+  cvTimerB = setInterval(() => { if (!cvChanB) return; if (Date.now() - cvLastFrameB > 4000 && cvHelloNB < 20) { cvHelloNB++; try { cvChanB.send({ type: 'broadcast', event: 'hello', payload: {} }); } catch (e) {} } }, 2000);
+  chan.send({ type: 'broadcast', event: 'hello', payload: {} });
+  $('cc-view-wrap').style.display = 'block';
+  const w = $('cc-live-b-wrap'); if (w) w.style.display = 'block';
+  toast('👀 B 캠 ' + code + ' 연결 — 두 캠 판정을 합쳐서 보여줘요');
+}
+function cvFrameB(p) {
+  if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
+  cvLastFrameB = Date.now(); cvHelloNB = 0;
+  const img = $('cc-live2'); if (img) img.src = p.d;
+}
+async function cvStopB(silent) {
+  if (cvChanB) { try { await cvChanB.unsubscribe(); } catch (e) {} cvChanB = null; }
+  if (cvTimerB) { clearInterval(cvTimerB); cvTimerB = null; }
+  cvCodeB = null;
+  const w = $('cc-live-b-wrap'); if (w) w.style.display = 'none';
+  if (!silent) toast('B 캠 연결을 끊었어요');
+}
+async function cvClipB(p) { // B 캠 클립 → 판독 센터 + (A 클립도 있으면) 듀얼 뷰어
+  if (!p) return;
+  const st = $('cc-view-status');
+  if (p.err) { if (st) st.textContent = 'B 캠 쪽 실패: ' + p.err; return; }
+  if (st) st.textContent = '⬇️ B 캠 클립 내려받는 중…';
+  try {
+    const { data, error } = await TMAuth.client.storage.from('clips').download(p.path);
+    if (error) throw error;
+    vjLoadBlob(data, '✂️ 반대편 캠(B) 클립 도착 — 슬로우·🤖 AI로 판독하세요');
+    if (st) st.textContent = '⚖️ B 캠 클립이 아래 판독 센터에 열렸어요';
+    cvClipPair('B', data, p.at);
+  } catch (e) { if (st) st.textContent = 'B 클립 다운로드 실패: ' + (e.message || e); }
+}
+function cvClipPair(slot, blob, at) { // 20초 안에 A·B 클립이 다 오면 듀얼 뷰어(A=A캠, B=B캠)에 나란히
+  cvClipPend[slot] = { blob, t: Date.now() };
+  const o = cvClipPend[slot === 'A' ? 'B' : 'A'];
+  if (!o || Date.now() - o.t > 20000) return;
+  try {
+    const A = slot === 'A' ? blob : o.blob, B = slot === 'B' ? blob : o.blob;
+    if (vcUrls.a) URL.revokeObjectURL(vcUrls.a);
+    if (vcUrls.b) URL.revokeObjectURL(vcUrls.b);
+    vcUrls.a = URL.createObjectURL(A); vcUrls.b = URL.createObjectURL(B);
+    const ea = vcEl('a'), eb = vcEl('b');
+    if (ea && eb) { ea.src = vcUrls.a; eb.src = vcUrls.b; const pl = $('vc-player'); if (pl) pl.style.display = 'block'; vcSync.a = vcSync.b = null; }
+    toast('⚖️ 두 캠 클립을 듀얼 뷰어에 나란히 열었어요 (A=한쪽, B=반대편)');
+    cvClipPend = {};
+  } catch (e) {}
+}
 // ===== 🤖 클럽캠 라이브 판정 (v0.49, 준실시간) =====
 // 캠 폰: 카메라 스트림 프레임 → 축소(320px) → 3프레임 차분 공 후보(aiExtractCands) → 1.6초 창 트랙 연결(aiBuildTracks)
 //        → 바운스(aiBounceIdx·aiRefineBounce) → 캠 보정(clH)으로 IN/OUT(aiVerdict) → 채널 'call' 송신 → 아슬아슬하면 자동 ✂️
@@ -8942,7 +9016,8 @@ function clDetect(tw, th, v) {
   const sx = v.videoWidth / tw, sy = v.videoHeight / th;
   const px = rb.x * sx, py = rb.y * sy;
   let vd = null;
-  if (clH) { const m = aiMapPt(clH, px, py); vd = aiVerdict(m[0], m[1]); }
+  let mC = null;
+  if (clH) { mC = aiMapPt(clH, px, py); vd = aiVerdict(mC[0], mC[1]); }
   clLastCall = performance.now() / 1000; clNCalls++;
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
   const at = Date.now();
@@ -8950,7 +9025,7 @@ function clDetect(tw, th, v) {
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0 };
   clDraw();
   clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth } });
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
     setTimeout(() => ccOnCut(), 1500); // 반등 후 장면까지 담기게 잠깐 뒤에 자름
@@ -8990,13 +9065,30 @@ function clShotText(sh) {
 }
 // ── 뷰어 쪽 ──
 let cvCalls = [];
-function cvCall(p) {
+function cvCall(p, slot) {
   if (!p || typeof p !== 'object') return;
+  slot = slot === 'B' ? 'B' : 'A';
   const call = p.call === 'IN' ? 'IN' : p.call === 'OUT' ? 'OUT' : null;
   const SPINS = ['탑스핀성', '슬라이스성', '플랫성'], COURSES = ['크로스', '스트레이트'], DEPTHS = ['깊음', '중간', '짧음'];
   cvCalls.unshift({ at: Number(p.at) || Date.now(), call, distCm: Number.isFinite(p.distCm) ? Math.round(p.distCm) : null, close: !!p.close, singles: !!p.singles, n: Number(p.n) || 0,
     spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh > 0 && p.kmh < 300 ? Math.round(p.kmh) : null,
-    course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null });
+    course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
+    slot, cy: Number.isFinite(p.cy) ? p.cy : null, alt: null, conflict: false });
+  // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
+  if (cvChanB || cvCalls.some(c => c.slot === 'B')) {
+    const me = cvCalls[0];
+    for (let i = 1; i < Math.min(cvCalls.length, 5); i++) {
+      const c = cvCalls[i];
+      if (c.slot === slot || c.alt || Math.abs(c.at - me.at) > 800) continue;
+      const meCloser = me.cy != null && c.cy != null ? me.cy > c.cy : false; // 정보 없으면 먼저 온 것(기존) 우선
+      const prim = meCloser ? me : c, sec = meCloser ? c : me;
+      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm };
+      prim.conflict = !!(prim.call && sec.call && prim.call !== sec.call);
+      cvCalls = cvCalls.filter(x => x !== sec);
+      if (cvCalls[0] !== prim) { cvCalls = cvCalls.filter(x => x !== prim); cvCalls.unshift(prim); }
+      break;
+    }
+  }
   cvCalls = cvCalls.slice(0, 30);
   cvRenderCalls();
   if (call && p.close) toast((call === 'IN' ? '🟢 IN' : '🔴 OUT') + '? 아슬아슬 — 캠이 클립을 올리는 중이면 곧 판독 센터에 열려요');
@@ -9010,9 +9102,10 @@ function cvRenderCalls() {
   const c0 = cvCalls[0];
   const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
   const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
-  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
+  const slotStr = c => (cvChanB || c.slot === 'B') ? '<b>' + c.slot + '캠</b>' + (c.alt ? (c.conflict ? ' <span class="ai-verdict unsure" style="font-size:11px;padding:2px 8px">⚠️ ' + c.alt.slot + '캠은 ' + (c.alt.call || '바운스만') + '</span>' : ' <span class="muted">(' + c.alt.slot + '캠도 같음)</span>') : '') + ' · ' : '';
+  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${slotStr(c0)}${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
     (shotStr(c0) ? `<div style="font-size:12.5px;margin-top:3px">${shotStr(c0)} <span class="muted" style="font-size:11px">(폰 1대 참고치)</span></div>` : '');
-  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
+  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + ((cvChanB || c.slot === 'B') ? c.slot + (c.conflict ? '⚠️' : '') + ' ' : '') + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
   // 누적 요약 (샷 정보 있는 것만)
   const withShot = cvCalls.filter(c => c.spin || c.kmh);
   const sum = $('cc-call-sum');
@@ -9036,8 +9129,10 @@ function cvFrame(p) {
   if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
 }
 function cvCut() {
-  if (!cvChan) { toast('먼저 캠에 연결해 주세요'); return; }
-  cvChan.send({ type: 'broadcast', event: 'cut', payload: { at: Date.now() } });
+  if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
+  const cutMsg = { type: 'broadcast', event: 'cut', payload: { at: Date.now() } };
+  if (cvChan) cvChan.send(cutMsg);
+  if (cvChanB) { try { cvChanB.send(cutMsg); } catch (e) {} }
   const st = $('cc-view-status');
   if (st) st.textContent = '✂️ 요청 보냄 — 캠이 클립을 올리면 자동으로 열려요 (몇 초 걸려요)';
 }
@@ -9050,12 +9145,15 @@ async function cvClip(p) {
     const { data, error } = await TMAuth.client.storage.from('clips').download(p.path);
     if (error) throw error;
     vjLoadBlob(data, '✂️ 클럽캠 클립 도착 — 슬로우·🤖 AI로 판독하세요');
+    cvClipPair('A', data, p.at);
     if (st) st.textContent = '⚖️ 클립이 아래 판독 센터에 열렸어요';
   } catch (e) {
     if (st) st.textContent = '클립 다운로드 실패: ' + (e.message || e);
   }
 }
 async function cvStop(silent) {
+  if (cvChanB) await cvStopB(true);
+  cvClipPend = {};
   if (cvChan) { try { await cvChan.unsubscribe(); } catch (e) {} cvChan = null; }
   if (cvTimer) { clearInterval(cvTimer); cvTimer = null; }
   cvCode = null;
