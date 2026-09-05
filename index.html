@@ -1182,6 +1182,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div id="cc-view-status" class="muted" style="font-size:12px;margin-top:6px">캠 화면을 기다리는 중…</div>
           <div id="cc-call-last" style="margin-top:6px"></div>
           <div id="cc-call-feed" style="margin-top:4px"></div>
+          <div id="cc-call-sum"></div>
           <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
         </div>
         <div class="row" style="gap:6px;margin-top:8px">
@@ -1884,7 +1885,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.63';
+const APP_VERSION = 'v0.64';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8945,21 +8946,57 @@ function clDetect(tw, th, v) {
   clLastCall = performance.now() / 1000; clNCalls++;
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
   const at = Date.now();
+  const shot = clShotInfo(pts, bi, sx, sy, px, py); // 🌀 스핀·속도·코스·깊이 (v0.64, 참고치)
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0 };
   clDraw();
-  clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls } });
+  clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth } });
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
     setTimeout(() => ccOnCut(), 1500); // 반등 후 장면까지 담기게 잠깐 뒤에 자름
   }
+}
+// ── 샷 정보 (v0.64) — 폰 1대 참고치: 스핀은 낙하각·반발로 종류만, 속도는 바운스 직전 코트 위 이동거리/시간(±20%), 코스·깊이는 코트 좌표 ──
+function clShotInfo(pts, bi, sx, sy, px, py) {
+  const out = { spin: null, kmh: null, course: null, depth: null };
+  try {
+    const sp = aiSpin(pts, bi); if (sp) out.spin = sp.label;
+    if (!clH) return out;
+    const a = pts[Math.max(0, bi - 2)], b = pts[bi];
+    const dt = b.t - a.t;
+    if (dt > 0.02) {
+      const m1 = aiMapPt(clH, a.x * sx, a.y * sy), m2 = aiMapPt(clH, b.x * sx, b.y * sy);
+      const dist = Math.hypot(m2[0] - m1[0], m2[1] - m1[1]);
+      const kmh = dist / dt * 3.6;
+      if (kmh >= 15 && kmh <= 250) out.kmh = Math.round(kmh);
+      const dxC = Math.abs(m2[0] - m1[0]), dyC = Math.abs(m2[1] - m1[1]);
+      if (dxC + dyC > 0.3) out.course = (Math.atan2(dxC, dyC) * 180 / Math.PI) > 20 ? '크로스' : '스트레이트';
+    }
+    const m = aiMapPt(clH, px, py);
+    const cy = m[1];
+    const fromBase = cy < AI_COURT_L / 2 ? cy : AI_COURT_L - cy; // 그 쪽 베이스라인까지
+    if (fromBase >= -0.5 && fromBase <= AI_COURT_L / 2 + 0.5) out.depth = fromBase <= 2.5 ? '깊음' : fromBase >= (AI_COURT_L / 2 - 6.40) ? '짧음' : '중간';
+  } catch (e) {}
+  return out;
+}
+function clShotText(sh) {
+  if (!sh) return '';
+  const parts = [];
+  if (sh.spin) parts.push('🌀 ' + sh.spin);
+  if (sh.kmh) parts.push('약 ' + sh.kmh + 'km/h');
+  if (sh.course) parts.push(sh.course);
+  if (sh.depth) parts.push(sh.depth);
+  return parts.length ? ' · ' + parts.join(' · ') : '';
 }
 // ── 뷰어 쪽 ──
 let cvCalls = [];
 function cvCall(p) {
   if (!p || typeof p !== 'object') return;
   const call = p.call === 'IN' ? 'IN' : p.call === 'OUT' ? 'OUT' : null;
-  cvCalls.unshift({ at: Number(p.at) || Date.now(), call, distCm: Number.isFinite(p.distCm) ? Math.round(p.distCm) : null, close: !!p.close, singles: !!p.singles, n: Number(p.n) || 0 });
+  const SPINS = ['탑스핀성', '슬라이스성', '플랫성'], COURSES = ['크로스', '스트레이트'], DEPTHS = ['깊음', '중간', '짧음'];
+  cvCalls.unshift({ at: Number(p.at) || Date.now(), call, distCm: Number.isFinite(p.distCm) ? Math.round(p.distCm) : null, close: !!p.close, singles: !!p.singles, n: Number(p.n) || 0,
+    spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh > 0 && p.kmh < 300 ? Math.round(p.kmh) : null,
+    course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null });
   cvCalls = cvCalls.slice(0, 30);
   cvRenderCalls();
   if (call && p.close) toast((call === 'IN' ? '🟢 IN' : '🔴 OUT') + '? 아슬아슬 — 캠이 클립을 올리는 중이면 곧 판독 센터에 열려요');
@@ -8967,12 +9004,29 @@ function cvCall(p) {
 function cvRenderCalls() {
   const last = $('cc-call-last'), feed = $('cc-call-feed');
   if (!last || !feed) return;
-  if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; return; }
+  if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; const su = $('cc-call-sum'); if (su) su.innerHTML = ''; return; }
   const fmt = at => { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
   const badge = c => c.call ? `<span class="ai-verdict ${c.close ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>';
   const c0 = cvCalls[0];
-  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>`;
-  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡')).join(' · ') + '</div>' : '';
+  const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
+  const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
+  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
+    (shotStr(c0) ? `<div style="font-size:12.5px;margin-top:3px">${shotStr(c0)} <span class="muted" style="font-size:11px">(폰 1대 참고치)</span></div>` : '');
+  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
+  // 누적 요약 (샷 정보 있는 것만)
+  const withShot = cvCalls.filter(c => c.spin || c.kmh);
+  const sum = $('cc-call-sum');
+  if (sum) {
+    if (withShot.length < 2) sum.innerHTML = '';
+    else {
+      const cnt = k => withShot.filter(c => c.spin === k).length;
+      const sp = withShot.filter(c => c.kmh); const avg = sp.length ? Math.round(sp.reduce((a, c) => a + c.kmh, 0) / sp.length) : null;
+      const mx = sp.length ? Math.max(...sp.map(c => c.kmh)) : null;
+      const deep = withShot.filter(c => c.depth === '깊음').length, cross = withShot.filter(c => c.course === '크로스').length;
+      sum.innerHTML = '<div class="muted" style="font-size:11.5px;margin-top:4px;border-top:1px dashed var(--line);padding-top:4px">📊 샷 ' + withShot.length + '개 · 🌀 탑스핀 ' + cnt('탑스핀성') + ' / 슬라이스 ' + cnt('슬라이스성') + ' / 플랫 ' + cnt('플랫성') +
+        (avg ? ' · 평균 ' + avg + 'km/h (최고 ' + mx + ')' : '') + ' · 깊은 공 ' + Math.round(deep / withShot.length * 100) + '% · 크로스 ' + Math.round(cross / withShot.length * 100) + '%</div>';
+    }
+  }
 }
 function cvFrame(p) {
   if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
