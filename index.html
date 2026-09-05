@@ -345,6 +345,21 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   .recap-cell .rv { font-size: 18px; font-weight: 800; color: var(--green); }
   .recap-cell .rl { font-size: 10px; color: var(--muted); margin-top: 2px; }
   /* v0.17: 플렉스 리그 & 라이브 스코어보드 */
+  /* 코트 모드 (v0.71): 라이브 점수판은 야외 햇빛에서 잘 보이게 코트 그린 + 흰 라인 + 라임 숫자 */
+  #modal-live .modal { background: #123a24; color: #fff; border-top: 3px solid rgba(255,255,255,.85); }
+  #modal-live h3, #modal-live b, #modal-live label { color: #fff; }
+  #modal-live .muted, #modal-live .dline { color: rgba(255,255,255,.72); }
+  #modal-live .dline { border-color: rgba(255,255,255,.25); }
+  #modal-live .live-pts { color: var(--lime); font-size: 44px; }
+  #modal-live .live-name { color: rgba(255,255,255,.8); font-weight: 700; }
+  #modal-live .live-grid > div:nth-child(2) { color: rgba(255,255,255,.5); font-size: 28px; }
+  #modal-live .btn { background: var(--lime); color: #123a24; }
+  #modal-live .btn.outline { background: transparent; color: #fff; border: 2px solid rgba(255,255,255,.8); }
+  #modal-live .pt-btn { padding: 18px 0; font-size: 16px; font-weight: 800; border-radius: 12px; }
+  #modal-live .tag-btn { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.35); }
+  #modal-live select, #modal-live input { background: rgba(255,255,255,.1); color: #fff; border: 1.5px solid rgba(255,255,255,.35); }
+  #modal-live select option { color: #1d2b22; }
+  #modal-live .empty { color: rgba(255,255,255,.7); }
   .live-grid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; text-align: center; margin: 12px 0 10px; }
   .live-pts { font-size: 38px; font-weight: 800; color: var(--green); line-height: 1.2; }
   .live-name { font-size: 12px; color: var(--muted); }
@@ -1174,33 +1189,35 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
                 <button type="button" onclick="clAutoCalib()">보정</button>
                 <button type="button" onclick="clManualStart()">수동</button>
                 <button type="button" id="cc-full-judge" onclick="clToggle()">판정 켜기</button>
-                <button type="button" onclick="ccHardReload()"></button>
+                <button type="button" onclick="ccHardReload()">새로고침</button>
                 <button type="button" onclick="ccFullToggle()">⛶ 나가기</button>
               </div>
             </div>
           </div>
-          <div class="row" style="gap:6px;margin-top:4px">
-            <button type="button" class="tag-btn" style="background:#1b5e20;color:#fff" onclick="ccFullToggle()">⛶ 전체 화면 (펜스에 걸 때)</button>
-            <button type="button" class="tag-btn" onclick="courtGuideToggle('cc-cam')">설치 가이드 접기/펴기</button>
-            <button type="button" class="tag-btn" onclick="ccReacquire('manual')">카메라 다시 켜기</button>
-            <button type="button" class="tag-btn" onclick="ccHardReload()">그래도 검으면 새로고침</button>
-          </div>
-          <div class="vj-ctrl" style="margin-top:6px">
+          <div class="row" style="gap:6px;margin-top:8px">
             <button type="button" class="btn small" style="flex:1" id="cl-auto-btn" onclick="clAutoCalib()">코트 자동 보정</button>
-            <button type="button" class="btn small outline" style="flex:1" id="cl-manual-btn" onclick="clManualStart()">수동 (4점 탭)</button>
-            <button type="button" class="tag-btn" onclick="clClearCal()">지우기</button>
+            <button type="button" class="btn small" style="flex:1.3;background:#1b5e20" id="cl-toggle-btn" onclick="clToggle()">라이브 판정 켜기</button>
+            <button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccFullToggle()">⛶ 전체 화면</button>
           </div>
-          <div class="row" style="gap:6px;margin-top:6px">
-            <select id="cl-calmode" style="flex:1" onchange="clCalModeChange(this.value)">
+          <details class="help" id="cc-settings" style="margin-top:8px"><summary>클럽캠 설정</summary>
+            <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
+              <button type="button" class="tag-btn" id="cl-manual-btn" onclick="clManualStart()">수동 보정 (4점 탭)</button>
+              <button type="button" class="tag-btn" onclick="clClearCal()">보정 지우기</button>
+              <button type="button" class="tag-btn" onclick="courtGuideToggle('cc-cam')">설치 가이드 접기/펴기</button>
+              <button type="button" class="tag-btn" onclick="ccReacquire('manual')">카메라 다시 켜기</button>
+              <button type="button" class="tag-btn" onclick="ccHardReload()">새로고침</button>
+            </div>
+            <div class="row" style="gap:6px;margin-top:8px">
+              <select id="cl-calmode" style="flex:1" onchange="clCalModeChange(this.value)">
               <option value="corners">보정 기준: 네 귀퉁이 (코트 전체가 보일 때)</option>
               <option value="service">보정 기준: 먼 귀퉁이 + 가까운 서비스라인 (가까운 쪽이 잘릴 때)</option>
             </select>
-          </div>
-          <button type="button" class="btn small full" id="cl-toggle-btn" style="margin-top:6px;background:#1b5e20" onclick="clToggle()">라이브 판정 켜기</button>
-          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
-          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
-          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
-          <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
+            </div>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
+          </details>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
           <div id="cc-diag" class="muted" style="font-size:11px;margin-top:2px;font-family:ui-monospace,monospace"></div>
@@ -1924,7 +1941,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.70';
+const APP_VERSION = 'v0.71';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
