@@ -93,6 +93,12 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   nav button { padding: 9px 4px 12px; }
   nav button.active { color: var(--green); font-weight: 700; }
 
+  details.help { margin: 2px 0 8px; }
+  details.help summary { list-style: none; cursor: pointer; font-size: 12.5px; color: var(--green); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; }
+  details.help summary::-webkit-details-marker { display: none; }
+  details.help summary::before { content: '?'; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--green); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; }
+  details.help[open] summary::before { content: '–'; }
+  details.help .muted { margin-top: 6px; }
   .more-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; min-height: 52px; }
   .more-row:last-child { border-bottom: none; }
   .more-row .chev { color: var(--muted); font-size: 20px; line-height: 1; }
@@ -623,7 +629,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       </div>
     </div>
     <div class="row" style="margin-bottom:2px">
-      <b style="font-size:14px">🏠 내 홈</b>
+      <b style="font-size:14px">내 홈</b>
       <button class="btn small outline" onclick="openHomeEdit()">홈 화면 편집</button>
     </div>
     <div id="home-sections">
@@ -824,9 +830,9 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div class="section-title">내 클럽</div>
     <div id="my-club-area"></div>
     <div class="section-title">클럽 래더 리그</div>
-    <div id="ladder-area"></div>
+    <div id="ladder-area" data-hide-empty="1"></div>
     <div class="section-title">정기 모임</div>
-    <div id="meeting-list"></div>
+    <div id="meeting-list" data-hide-empty="1"></div>
     <div class="section-title">클럽 대항전</div>
     <div id="vs-list"></div>
     <div class="section-title">클럽 둘러보기</div>
@@ -1000,7 +1006,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-judge">
     <div class="section-title" id="vj-sec">비디오 판독 센터</div>
     <div class="card">
-      <div class="muted">폰으로 찍은 경기 영상을 불러와 슬로모션·프레임 단위로 <b>인아웃 판독</b>을 하고, 두 지점을 찍어 <b>서브 구속</b>을 측정해보세요. 영상은 내 기기에서만 재생되고 어디에도 업로드·저장되지 않아요. 🤖 AI 자동 판정·궤적 추적은 백엔드 도입 후 제공 예정!</div>
+      <details class="help"><summary>판독 센터 사용법</summary><div class="muted">폰으로 찍은 경기 영상을 불러와 슬로모션·프레임 단위로 <b>인아웃 판독</b>을 하고, 두 지점을 찍어 <b>서브 구속</b>을 측정해보세요. 영상은 내 기기에서만 재생되고 어디에도 업로드·저장되지 않아요. 🤖 AI 자동 판정·궤적 추적은 백엔드 도입 후 제공 예정!</div></details>
       <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">영상 불러오기 / 촬영
         <input type="file" id="vj-file" accept="video/*" style="display:none" onchange="vjLoad(event)">
       </label>
@@ -1073,7 +1079,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div id="cov-result" class="muted" style="font-size:12.5px;margin-top:4px"></div>
       </div>
       <div class="vj-sub" style="margin-top:16px">⚖️ 비디오 챌린지 — 2영상 나란히 보기</div>
-      <div class="muted" style="font-size:12px">양쪽 베이스라인 뒤에서 각자 폰으로 찍었다면 두 영상을 나란히 돌려보세요. 각 영상에서 같은 순간(타구)을 찾아 싱크를 맞추면 재생·프레임 이동이 함께 움직여요. 판정은 공이 떨어진 쪽에 가까운 영상을 기준으로!</div>
+      <details class="help"><summary>2영상 나란히 보기 사용법</summary><div class="muted" style="font-size:12px">양쪽 베이스라인 뒤에서 각자 폰으로 찍었다면 두 영상을 나란히 돌려보세요. 각 영상에서 같은 순간(타구)을 찾아 싱크를 맞추면 재생·프레임 이동이 함께 움직여요. 판정은 공이 떨어진 쪽에 가까운 영상을 기준으로!</div></details>
       <div class="vj-ctrl">
         <label class="btn small outline" style="flex:1;text-align:center;cursor:pointer">영상 A
           <input type="file" id="vc-file-a" accept="video/*" style="display:none" onchange="vcLoad('a', event)">
@@ -1112,7 +1118,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div id="vc-status" class="muted" style="font-size:12px;margin-top:6px">싱크 지점을 A·B 모두 찍으면 동기 재생이 켜져요</div>
       </div>
       <div class="vj-sub" style="margin-top:16px">🏟️ 매치 룸 — 라이브 챌린지 (베타)</div>
-      <div class="muted" style="font-size:12px">둘 다 로그인해서 같은 방에 들어가고, 각자 폰을 코트 양쪽에 걸어두세요. 카메라는 최근 90초만 계속 버퍼에 담아둡니다(서버 업로드 없음). 시비가 나면 아무나 🚨 챌린지 — 두 폰이 직전 20초를 잘라 올리고, 잠시 후 양쪽 화면에 두 앵글이 자동 싱크로 나란히 열려요.</div>
+      <details class="help"><summary>매치 룸 사용법</summary><div class="muted" style="font-size:12px">둘 다 로그인해서 같은 방에 들어가고, 각자 폰을 코트 양쪽에 걸어두세요. 카메라는 최근 90초만 계속 버퍼에 담아둡니다(서버 업로드 없음). 시비가 나면 아무나 🚨 챌린지 — 두 폰이 직전 20초를 잘라 올리고, 잠시 후 양쪽 화면에 두 앵글이 자동 싱크로 나란히 열려요.</div></details>
       <div id="mr-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
       <div id="mr-main" style="display:none">
         <div class="vj-ctrl">
@@ -1140,7 +1146,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     </div>
     <div class="section-title">클럽캠 — 공기계 실시간 중계 (베타)</div>
     <div class="card">
-      <div class="muted" style="font-size:12px">남는 폰(공기계)을 펜스에 걸어 <b>클럽 전용 캠</b>으로 쓰세요. ① 공기계: 같은 계정으로 로그인 → <b>📡 클럽캠 시작</b> → 코드가 떠요 ② 내 폰: 코드 입력 → <b>👀 보기</b>로 라이브 확인, 시비 나면 <b>✂️</b> — 직전 20초가 판독 센터에 자동으로 열려요 ③ 영상은 공기계 안에 1분 단위로 계속 쌓이고(서버 업로드 없음), 끝나면 💾 전체 저장 → AI 학습데이터로! <b>데이터 사용량은 시간당 50~100MB</b> 정도예요.</div>
+      <details class="help"><summary>클럽캠 사용법</summary><div class="muted" style="font-size:12px">남는 폰(공기계)을 펜스에 걸어 <b>클럽 전용 캠</b>으로 쓰세요. ① 공기계: 같은 계정으로 로그인 → <b>📡 클럽캠 시작</b> → 코드가 떠요 ② 내 폰: 코드 입력 → <b>👀 보기</b>로 라이브 확인, 시비 나면 <b>✂️</b> — 직전 20초가 판독 센터에 자동으로 열려요 ③ 영상은 공기계 안에 1분 단위로 계속 쌓이고(서버 업로드 없음), 끝나면 💾 전체 저장 → AI 학습데이터로! <b>데이터 사용량은 시간당 50~100MB</b> 정도예요.</div></details>
       <div id="cc-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
       <div id="cc-main" style="display:none">
         <button type="button" class="btn small full" id="cc-start-btn" style="margin-top:8px" onclick="ccToggle()">이 폰을 클럽캠으로 (공기계에서 누르세요)</button>
@@ -1918,7 +1924,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.69';
+const APP_VERSION = 'v0.70';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2396,6 +2402,36 @@ let homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: !s.off })); // off: �
 // ===== 유틸 =====
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); // 사용자 입력 → HTML 안전
+// ── UI 정리 루틴 (v0.70): 코드가 그린 제목·버튼·라벨의 앞머리 이모지 제거(상태 이모지 🟢🔴🟡✂⛶ 유지), 빈 섹션 숨김 ──
+const UI_KEEP = ['🟢', '🔴', '🟡', '✂', '⛶'];
+const UI_LEAD = /^(\s*)((?:\p{Extended_Pictographic}|\p{Emoji_Presentation})(?:[\uFE0F\u200D]|\p{Extended_Pictographic}|\p{Emoji_Presentation}|[\u{1F3FB}-\u{1F3FF}])*)\s*/u;
+function uiStripText(t) { const m = t.match(UI_LEAD); if (!m || UI_KEEP.some(k => m[2].includes(k))) return t; return m[1] + t.slice(m[0].length); }
+function uiTidy(root) {
+  root = root || document;
+  try {
+    root.querySelectorAll('.section-title, button, .btn, label, summary, h3, h4, .vj-sub, .badge, .tag-btn, .dline, .live-name').forEach(el => {
+      if (el.closest('nav') || el.dataset.keepEmoji) return;
+      for (const n of el.childNodes) {
+        if (n.nodeType === 3) { if (n.nodeValue.trim()) { const v = uiStripText(n.nodeValue); if (v !== n.nodeValue) n.nodeValue = v; break; } continue; }
+        if (n.nodeType === 1 && (n.tagName === 'INPUT' || n.tagName === 'SVG' || n.tagName === 'svg')) continue;
+        break; // 첫 의미 있는 자식이 다른 요소면 손대지 않음
+      }
+    });
+    root.querySelectorAll('[data-hide-empty]').forEach(el => {
+      const empty = !el.children.length || (el.children.length === 1 && el.children[0].classList.contains('empty'));
+      el.style.display = empty ? 'none' : '';
+      let t = el.previousElementSibling;
+      while (t && !t.classList.contains('section-title') && t.classList.contains('muted')) { t.style.display = empty ? 'none' : ''; t = t.previousElementSibling; }
+      if (t && t.classList.contains('section-title')) t.style.display = empty ? 'none' : '';
+    });
+  } catch (e) {}
+}
+let uiTidyT = null;
+document.addEventListener('DOMContentLoaded', () => {
+  uiTidy();
+  const mo = new MutationObserver(() => { if (uiTidyT) return; uiTidyT = setTimeout(() => { uiTidyT = null; uiTidy(); }, 120); });
+  mo.observe(document.body, { childList: true, subtree: true });
+});
 function goSection(tab, id) { // 홈 바로가기: 탭 전환 후 해당 섹션으로 스크롤
   const btn = document.querySelector("nav button[onclick*=\"showTab('" + tab + "'\"]");
   showTab(tab, btn || document.createElement('button'));
@@ -9415,7 +9451,7 @@ function saveProfile() {
   }
 }
 function updateHeader() {
-  $('profile-chip').textContent = `🎾 나: ${ME.name} (NTRP ${ME.ntrp.toFixed(1)})`;
+  $('profile-chip').textContent = `나: ${ME.name} (NTRP ${ME.ntrp.toFixed(1)})`;
 }
 
 // ===== 토너먼트 =====
