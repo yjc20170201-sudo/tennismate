@@ -111,6 +111,7 @@ function joinRoom() {
     chan.on('broadcast', { event: 'state' }, function (p) { onState(p.payload); });
     chan.subscribe(function (st) {
       if (st === 'SUBSCRIBED') {
+        try { localStorage.setItem('tm-rc-last', code); } catch (e) {}
         $('join').style.display = 'none';
         $('play').style.display = 'flex';
         renderVoiceBtn();
@@ -166,6 +167,7 @@ function sendUndo() {
 }
 $('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinRoom(); });
 renderVoiceBtn();
+try { var lastCode = localStorage.getItem('tm-rc-last'); if (lastCode && /^[A-Z0-9]{6}$/.test(lastCode)) { $('code').value = lastCode; $('msg').textContent = '지난 코드 ' + lastCode + ' — 연결을 누르세요 (점수판 폰 코드는 고정이에요)'; } } catch (e) {}
 </script>
 </body>
 </html>

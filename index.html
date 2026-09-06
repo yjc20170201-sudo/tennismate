@@ -874,7 +874,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <button class="btn full" onclick="svCreateClub()">클럽 등록</button>
     </div>
     <div id="club-list"></div>
-    <div class="section-title" style="margin-top:14px">클럽 랭킹 — 누적 포인트</div>
+    <div class="section-title" style="margin-top:14px">클럽 랭킹 · 시상</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px"><b>복식</b> = 개인전(KDK)+청백전 합산 · <b>단식</b> = 단식 대전 따로. <b>참가 +10pt · 게임 승리 +10pt</b> (동점이면 승수 → 득실차)</div>
     <div id="club-rank"></div>
     <div class="card" style="margin-top:8px">
@@ -1183,6 +1183,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <button type="button" id="cc-tap" onclick="ccShowTap(false); ccReacquire('tap')" style="display:none;position:absolute;inset:12% 8%;align-items:center;justify-content:center;background:rgba(27,94,32,.92);color:#fff;border:none;border-radius:16px;font-size:20px;font-weight:800;z-index:3">탭해서 카메라 다시 켜기</button>
             <div id="cc-fullbar">
               <div id="cc-full-code" style="font-size:12px;opacity:.9"></div>
+              <div id="cc-full-score" style="display:none;font-size:26px;font-weight:800;color:#d4e94e;line-height:1.1"></div>
               <div id="cc-full-status">📡 클럽캠</div>
               <div id="cc-full-sub"></div>
               <div class="row">
@@ -1217,6 +1218,12 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
+            <div class="row" style="gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap">
+              <span class="muted" style="font-size:12px">하이라이트 클립 <b id="cc-hl-n">0</b>개 (본폰 점수판 포인트마다 직전 10초)</span>
+              <button type="button" class="btn small" style="flex:0 0 auto" onclick="ccBuildHighlight()">하이라이트 만들기</button>
+              <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
+            </div>
+            <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
           </details>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
@@ -1226,6 +1233,27 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div class="vj-ctrl" style="margin-top:8px">
             <div class="vj-mark set" id="cc-view-info" style="flex:1">캠 —</div>
             <button type="button" class="tag-btn" onclick="cvStop()">연결 끊기</button>
+          </div>
+          <div id="cv-score" style="margin-top:8px;background:#123a24;color:#fff;border-radius:14px;padding:10px 12px;border-top:3px solid rgba(255,255,255,.85)">
+            <div id="cv-score-empty" class="row" style="justify-content:space-between;align-items:center;gap:8px">
+              <span style="font-size:13px;opacity:.85">경기를 시작하면 여기서 점수를 넣고, 공기계 화면에도 점수가 떠요</span>
+              <button type="button" class="btn small" style="background:var(--lime);color:#123a24;flex:0 0 auto" onclick="cvStartMatch()">점수판 시작</button>
+            </div>
+            <div id="cv-score-live" style="display:none">
+              <div class="row" style="justify-content:space-between;font-size:12px;opacity:.85"><span id="cv-sc-names"></span><span id="cv-sc-games"></span></div>
+              <div id="cv-sc-pts" style="font-size:36px;font-weight:800;color:var(--lime);text-align:center;line-height:1.15;margin:2px 0 6px">0 : 0</div>
+              <div class="row" style="gap:6px">
+                <button type="button" class="btn" style="flex:1;background:var(--lime);color:#123a24;padding:14px 0;font-size:15px;font-weight:800" onclick="livePoint(0)">우리 포인트</button>
+                <button type="button" class="btn" style="flex:1;background:transparent;color:#fff;border:2px solid rgba(255,255,255,.8);padding:14px 0;font-size:15px;font-weight:800" onclick="livePoint(1)">상대 포인트</button>
+              </div>
+              <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="tag-btn" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)" onclick="liveUndo()">되돌리기</button>
+                <button type="button" class="tag-btn" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)" onclick="lvFault()">폴트</button>
+                <button type="button" class="tag-btn" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)" onclick="lvLet()">렛</button>
+                <button type="button" class="tag-btn" style="background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.35)" onclick="openModal('live')">점수판 크게</button>
+                <span id="cv-sc-rc" style="font-size:11px;opacity:.8;align-self:center"></span>
+              </div>
+            </div>
           </div>
           <div style="display:flex;gap:4px;margin-top:6px">
             <div style="flex:1;min-width:0"><div class="muted" style="font-size:11px">A 캠</div><img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 A 라이브"></div>
@@ -1941,7 +1969,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.71';
+const APP_VERSION = 'v0.73';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4320,9 +4348,36 @@ function lvRCInfo() {
     if (h) h.textContent = '📟 리모컨 모드 — 방 ' + lvRC.code + ' · 연결 ' + lvRC.peers + '대';
   }
 }
+function lvRCFixedCode() { // 이 폰의 리모컨 코드 고정 (v0.72) — 워치는 한 번 넣으면 계속 같은 코드
+  let c = ''; try { c = localStorage.getItem('tm-rccode') || ''; } catch (e) {}
+  if (!/^[A-Z0-9]{6}$/.test(c)) { c = mrGenCode(); try { localStorage.setItem('tm-rccode', c); } catch (e) {} }
+  return c;
+}
 function lvRCHostToggle() {
   if (lvRC) { lvRCStop(); return; }
-  lvRCJoin(mrGenCode(), 'host').catch(e => toast('리모컨 연결 실패: ' + (e.message || e)));
+  lvRCJoin(lvRCFixedCode(), 'host').catch(e => toast('리모컨 연결 실패: ' + (e.message || e)));
+}
+function cvStartMatch() { openModal('live'); openLive(); }
+function cvMark(side) {
+  if (!live) return;
+  const d = liveDisp();
+  const label = (side === 0 ? lvSideName(0) : '상대') + ' 포인트 · ' + d[0] + ':' + d[1] + ' · 게임 ' + live.g[0] + '-' + live.g[1];
+  const m = { type: 'broadcast', event: 'mark', payload: { at: Date.now(), label: label.slice(0, 60), side } };
+  if (typeof cvChan !== 'undefined' && cvChan) { try { cvChan.send(m); } catch (e) {} }
+  if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(m); } catch (e) {} }
+}
+function cvRenderScore() { // 뷰어 안 점수판 갱신 (v0.72)
+  const wrap = $('cv-score'); if (!wrap) return;
+  const on = !!(live && !live.done);
+  const em = $('cv-score-empty'), lv = $('cv-score-live');
+  if (em) em.style.display = on ? 'none' : 'flex';
+  if (lv) lv.style.display = on ? 'block' : 'none';
+  if (!on) return;
+  const d = liveDisp();
+  $('cv-sc-pts').textContent = d[0] + ' : ' + d[1];
+  $('cv-sc-names').textContent = liveTeams().mine + ' vs ' + liveTeams().theirs;
+  $('cv-sc-games').textContent = '게임 ' + live.g[0] + '-' + live.g[1] + (live.sets.length ? ' · 세트 ' + live.sets.map(x => x[0] + '-' + x[1]).join(' ') : '') + (live.tb ? ' · TB' : '') + ' · 서브 ' + lvSideName(live.srv || 0);
+  const rc = $('cv-sc-rc'); if (rc) rc.textContent = lvRC && lvRC.role === 'host' ? '워치 코드 ' + lvRC.code : '';
 }
 function lvRCRemoteJoin() {
   const c = ($('lvrc-code-in').value || '').trim().toUpperCase();
@@ -4339,6 +4394,13 @@ function lvRCUndo() {
   lvRC.chan.send({ type: 'broadcast', event: 'undo', payload: {} });
 }
 function lvRCPushState() {
+  try { cvRenderScore(); } catch (e) {}
+  if (live && typeof cvChan !== 'undefined') { // 공기계 전체 화면에 점수 표시 (v0.72)
+    const d = live.done ? ['✓', '✓'] : liveDisp();
+    const sc = { type: 'broadcast', event: 'score', payload: { d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1], sets: live.sets.map(x => x[0] + '-' + x[1]).join(' '), n0: liveTeams().mine, n1: liveTeams().theirs, done: !!live.done } };
+    if (cvChan) { try { cvChan.send(sc); } catch (e) {} }
+    if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sc); } catch (e) {} }
+  }
   if (!lvRC || lvRC.role !== 'host' || !lvRC.chan || !live) return;
   const d = live.done ? ['✓', '✓'] : liveDisp();
   lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
@@ -4637,6 +4699,9 @@ function startLive() {
   const noAd = !$('lv-noad') || $('lv-noad').value !== '0'; // 기본 노애드 (동호회 규칙) — v0.67
   live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd };
   lvSpeak('경기 시작. 서브 우리');
+  if (!lvRC && typeof serverMode === 'function' && serverMode() && TMAuth.isLoggedIn) { // 워치·다른 폰이 바로 붙게 리모컨 자동 연결 (고정 코드)
+    lvRCJoin(lvRCFixedCode(), 'host').catch(() => {});
+  }
   renderLive();
 }
 function liveDisp() {
@@ -4769,6 +4834,7 @@ function livePoint(side) {
   }
   const sNeed = live.sNeed || 2;
   lvAnnounce(before, side, myS === sNeed || opS === sNeed);
+  cvMark(side); // 공기계: 직전 10초를 하이라이트 클립으로 보관 (v0.72)
   if (myS === sNeed || opS === sNeed) finishLive(myS, opS);
   else renderLive();
 }
@@ -4921,6 +4987,7 @@ function finishLive(myS, opS) {
   renderLive();
 }
 function closeLive() {
+  setTimeout(() => { try { cvRenderScore(); } catch (e) {} }, 0);
   const bl = $('back-to-live'); if (bl) bl.style.display = 'none';
   if (lvRC && lvRC.role === 'host') lvRCStop(true);
   if (lvCam && lvCam.stream) lvCamStop();
@@ -6571,13 +6638,24 @@ function kdkEvKind(ev) {
   return n.includes('단식') ? 'singles' : n.includes('청백전') ? 'cw' : 'kdk';
 }
 let clubRankKind = 'doubles'; // 클럽 랭킹 탭: doubles(개인전+청백전) | singles(단식 대전)
-function clubRankEvents(kind) {
-  return [...svKdkEvents, ...CLUB_KDK_HISTORY].filter(ev => kind === 'singles' ? kdkEvKind(ev) === 'singles' : kdkEvKind(ev) !== 'singles');
+let clubRankPeriod = 'all'; // all | month | prev (v0.73)
+function clubRankMonthKey(period) {
+  if (period !== 'month' && period !== 'prev') return null;
+  const d = new Date(); if (period === 'prev') d.setMonth(d.getMonth() - 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function clubRankMonthLabel(period) { const k = clubRankMonthKey(period); return k ? k.slice(0, 4) + '년 ' + parseInt(k.slice(5), 10) + '월' : '누적'; }
+function clubRankEvents(kind, period) {
+  const key = clubRankMonthKey(period === undefined ? clubRankPeriod : period);
+  return [...svKdkEvents, ...CLUB_KDK_HISTORY]
+    .filter(ev => kind === 'singles' ? kdkEvKind(ev) === 'singles' : kdkEvKind(ev) !== 'singles')
+    .filter(ev => !key || String(ev.date || '').startsWith(key));
 }
 function setClubRankKind(k) { clubRankKind = k; renderClubRank(); }
-function clubRankData(kind) {
+function setClubRankPeriod(p) { clubRankPeriod = p; renderClubRank(); }
+function clubRankData(kind, period) {
   if (kind === undefined) kind = clubRankKind;
-  const events = clubRankEvents(kind);
+  const events = clubRankEvents(kind, period);
   const agg = {};
   events.forEach(ev => (ev.results || []).forEach(r => {
     if (!r || !r.name) return;
@@ -6590,17 +6668,28 @@ function clubRankData(kind) {
   }));
   return Object.values(agg).sort((x, y) => y.pts - x.pts || y.w - x.w || y.gd - x.gd);
 }
+function clubAwards(list) { // 시상: 1~3위 + 특별상 (v0.73)
+  if (!list.length) return null;
+  const by = (k) => [...list].sort((x, y) => y[k] - x[k] || y.pts - x.pts)[0];
+  return { top: list.slice(0, 3), mostEv: by('ev'), mostW: by('w'), bestGd: by('gd') };
+}
 function renderClubRank() {
   const el = $('club-rank');
   if (!el) return;
   const list = clubRankData(clubRankKind);
   const nD = clubRankEvents('doubles').length, nS = clubRankEvents('singles').length;
-  const tabs = `<div class="row" style="gap:6px;margin-bottom:8px">
-    <button type="button" class="btn small ${clubRankKind === 'doubles' ? '' : 'outline'}" style="flex:1" onclick="setClubRankKind('doubles')">복식 · 개인전+청백전 (${nD})</button>
-    <button type="button" class="btn small ${clubRankKind === 'singles' ? '' : 'outline'}" style="flex:1" onclick="setClubRankKind('singles')">단식 대전 (${nS})</button>
+  const pill = (on) => 'btn small ' + (on ? '' : 'outline');
+  const tabs = `<div class="row" style="gap:6px;margin-bottom:6px">
+    <button type="button" class="${pill(clubRankKind === 'doubles')}" style="flex:1" onclick="setClubRankKind('doubles')">복식 · 개인전+청백전 (${nD})</button>
+    <button type="button" class="${pill(clubRankKind === 'singles')}" style="flex:1" onclick="setClubRankKind('singles')">단식 대전 (${nS})</button>
+  </div>
+  <div class="row" style="gap:6px;margin-bottom:8px">
+    <button type="button" class="tag-btn ${clubRankPeriod === 'all' ? 'sel' : ''}" style="flex:1;${clubRankPeriod === 'all' ? 'background:var(--green);color:#fff;border-color:var(--green)' : ''}" onclick="setClubRankPeriod('all')">누적</button>
+    <button type="button" class="tag-btn" style="flex:1;${clubRankPeriod === 'month' ? 'background:var(--green);color:#fff;border-color:var(--green)' : ''}" onclick="setClubRankPeriod('month')">이번 달</button>
+    <button type="button" class="tag-btn" style="flex:1;${clubRankPeriod === 'prev' ? 'background:var(--green);color:#fff;border-color:var(--green)' : ''}" onclick="setClubRankPeriod('prev')">지난 달</button>
   </div>`;
   if (!list.length) {
-    el.innerHTML = tabs + '<div class="empty">' + (clubRankKind === 'singles' ? '아직 단식 대전 기록이 없어요 — 위 🎾 단식 대전을 치고 ☁️ 저장하면 여기 순위가 쌓여요' : '아직 기록이 없어요 — 개인전·청백전을 치고 ☁️ 저장하면 여기 순위가 쌓여요!') + '</div>';
+    el.innerHTML = tabs + '<div class="empty">' + (clubRankPeriod !== 'all' ? clubRankMonthLabel(clubRankPeriod) + '에는 저장된 미니게임이 없어요' : (clubRankKind === 'singles' ? '아직 단식 대전 기록이 없어요 — 위 단식 대전을 치고 결과 저장을 하면 여기 순위가 쌓여요' : '아직 기록이 없어요 — 개인전·청백전을 치고 결과 저장을 하면 여기 순위가 쌓여요!')) + '</div>';
     return;
   }
   let lastPts = null, lastRank = 0;
@@ -6609,16 +6698,63 @@ function renderClubRank() {
     lastPts = r.pts; lastRank = rank;
     return { ...r, rank };
   });
+  const aw = clubAwards(list);
+  const medal = ['1위', '2위', '3위'];
+  const awardsHtml = clubRankPeriod === 'all' ? '' : `<div class="card" style="margin-top:8px;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;border:none">
+    <div class="row" style="justify-content:space-between;align-items:baseline">
+      <div style="font-size:15px;font-weight:800">${clubRankMonthLabel(clubRankPeriod)} ${clubRankKind === 'singles' ? '단식' : '복식'} 시상</div>
+      <div style="font-size:11px;opacity:.8">미니게임 ${clubRankKind === 'singles' ? nS : nD}개 기준</div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px">
+      ${aw.top.map((r, i) => `<div style="background:rgba(255,255,255,.12);border-radius:10px;padding:10px 6px;text-align:center"><div style="font-size:11px;opacity:.8">${medal[i]}</div><div style="font-size:16px;font-weight:800;margin-top:2px">${esc(r.name)}</div><div style="font-size:12px;color:var(--lime);font-weight:700">${r.pts}pt</div></div>`).join('')}
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:6px;font-size:12px">
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:8px 6px;text-align:center"><div style="opacity:.75;font-size:11px">개근상</div><b>${esc(aw.mostEv.name)}</b> <span style="opacity:.8">${aw.mostEv.ev}회</span></div>
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:8px 6px;text-align:center"><div style="opacity:.75;font-size:11px">최다승</div><b>${esc(aw.mostW.name)}</b> <span style="opacity:.8">${aw.mostW.w}승</span></div>
+      <div style="background:rgba(255,255,255,.08);border-radius:10px;padding:8px 6px;text-align:center"><div style="opacity:.75;font-size:11px">득실왕</div><b>${esc(aw.bestGd.name)}</b> <span style="opacity:.8">${aw.bestGd.gd >= 0 ? '+' : ''}${aw.bestGd.gd}</span></div>
+    </div>
+    <button type="button" class="btn small full" style="margin-top:10px;background:var(--lime);color:#123a24" onclick="clubAwardImage()">시상 이미지 만들기 · 공유</button>
+  </div>`;
   el.innerHTML = tabs + `<div class="card"><table style="width:100%;font-size:12.5px">
     <thead><tr><th>순위</th><th style="text-align:left">이름</th><th>포인트</th><th>전적</th><th>참가</th></tr></thead><tbody>` +
     rows.map(r => `<tr style="${r.name === ME.name || r.name === '정철' ? 'background:rgba(47,158,95,.12)' : ''}">
       <td class="${r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : r.rank === 3 ? 'rank-3' : ''}">${r.rank}</td>
-      <td style="text-align:left">${r.rank === 1 ? '👑 ' : ''}${r.name}</td>
+      <td style="text-align:left">${esc(r.name)}</td>
       <td><b>${r.pts.toLocaleString()}pt</b></td>
       <td class="muted">${r.w}승 ${r.l}패</td>
       <td class="muted">${r.ev}회</td></tr>`).join('') +
   `</tbody></table>
-  <div class="muted" style="font-size:11.5px;margin-top:6px">${clubRankKind === 'singles' ? '단식 대전 ' + nS + '개' : '개인전·청백전 ' + nD + '개'} 반영 · 새 결과를 ☁️ 저장하면 자동 갱신</div></div>`;
+  <div class="muted" style="font-size:11.5px;margin-top:6px">${clubRankMonthLabel(clubRankPeriod)} · ${clubRankKind === 'singles' ? '단식 대전 ' + nS + '개' : '개인전·청백전 ' + nD + '개'} 반영 · 참가 +10 · 승당 +10</div></div>` + awardsHtml;
+}
+async function clubAwardImage() { // 시상 이미지 PNG (1080×1350) → 공유 시트 또는 다운로드 (v0.73)
+  const list = clubRankData(clubRankKind); const aw = clubAwards(list);
+  if (!aw) { toast('시상할 기록이 없어요'); return; }
+  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1350;
+  const g = cv.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, 1080, 1350); grad.addColorStop(0, '#1b7a43'); grad.addColorStop(1, '#0f3a22');
+  g.fillStyle = grad; g.fillRect(0, 0, 1080, 1350);
+  g.strokeStyle = 'rgba(255,255,255,.55)'; g.lineWidth = 6; g.strokeRect(70, 70, 940, 1210); // 코트 라인
+  g.beginPath(); g.moveTo(70, 675); g.lineTo(1010, 675); g.stroke();
+  const club = (typeof myClub === 'function' && myClub() && myClub().name) || 'SBC';
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 40px sans-serif'; g.fillText(club + ' 클럽 ' + (clubRankKind === 'singles' ? '단식' : '복식') + ' 랭킹', 540, 170);
+  g.fillStyle = '#d4e94e'; g.font = 'bold 72px sans-serif'; g.fillText(clubRankMonthLabel(clubRankPeriod) + ' 시상', 540, 270);
+  const ys = [430, 560, 690]; const labels = ['1위', '2위', '3위']; const sizes = [96, 72, 60];
+  aw.top.forEach((r, i) => {
+    g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold 30px sans-serif'; g.fillText(labels[i], 540, ys[i] - sizes[i] * 0.85);
+    g.fillStyle = i === 0 ? '#d4e94e' : '#fff'; g.font = 'bold ' + sizes[i] + 'px sans-serif'; g.fillText(r.name, 540, ys[i]);
+    g.fillStyle = 'rgba(255,255,255,.8)'; g.font = '28px sans-serif'; g.fillText(r.pts + 'pt · ' + r.w + '승 ' + r.l + '패', 540, ys[i] + 40);
+  });
+  const sp = [['개근상', aw.mostEv.name, aw.mostEv.ev + '회'], ['최다승', aw.mostW.name, aw.mostW.w + '승'], ['득실왕', aw.bestGd.name, (aw.bestGd.gd >= 0 ? '+' : '') + aw.bestGd.gd]];
+  sp.forEach((x, i) => { const cx = 260 + i * 280; g.fillStyle = 'rgba(255,255,255,.12)'; g.fillRect(cx - 120, 860, 240, 170); g.fillStyle = 'rgba(255,255,255,.8)'; g.font = '26px sans-serif'; g.fillText(x[0], cx, 905); g.fillStyle = '#fff'; g.font = 'bold 40px sans-serif'; g.fillText(x[1], cx, 960); g.fillStyle = '#d4e94e'; g.font = 'bold 28px sans-serif'; g.fillText(x[2], cx, 1005); });
+  g.fillStyle = 'rgba(255,255,255,.6)'; g.font = '24px sans-serif'; g.fillText('테니스메이트 · 참가 +10 · 승당 +10 · ' + todayStr(), 540, 1230);
+  const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+  if (!blob) { toast('이미지 생성 실패'); return; }
+  const file = new File([blob], club + '_' + clubRankMonthLabel(clubRankPeriod).replace(/\s/g, '') + '_시상.png', { type: 'image/png' });
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: club + ' 시상' }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+  toast('시상 이미지를 저장했어요 — 단톡방에 올려 보세요');
 }
 document.addEventListener('DOMContentLoaded', renderClubRank);
 function renderClubList() {
@@ -8587,8 +8723,8 @@ function ccRenderSegInfo() {
 // --- 폰 내부 저장(IndexedDB) — 서버로는 ✂️ 클립만 올라감 ---
 function ccOpenDb() {
   return new Promise((res, rej) => {
-    const rq = indexedDB.open('tm-clubcam', 1);
-    rq.onupgradeneeded = () => rq.result.createObjectStore('segs', { keyPath: 'at' });
+    const rq = indexedDB.open('tm-clubcam', 2);
+    rq.onupgradeneeded = () => { const db = rq.result; if (!db.objectStoreNames.contains('segs')) db.createObjectStore('segs', { keyPath: 'at' }); if (!db.objectStoreNames.contains('hl')) db.createObjectStore('hl', { keyPath: 'at' }); };
     rq.onsuccess = () => res(rq.result);
     rq.onerror = () => rej(rq.error);
   });
@@ -8641,6 +8777,7 @@ async function ccToggle() {
   } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
   let code = '';
   try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
   if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} } // 이 폰의 고정 코드 (v0.54)
@@ -8648,6 +8785,8 @@ async function ccToggle() {
   chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
   chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
+  chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
+  chan.on('broadcast', { event: 'mark' }, p => ccKeepClip(p.payload)); // 포인트 하이라이트 클립 보관 (v0.72)
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
       if (st === 'SUBSCRIBED') res();
@@ -8809,6 +8948,87 @@ async function ccStop(silent) {
   const b = $('cc-start-btn'); if (b) b.textContent = '📡 이 폰을 클럽캠으로 (공기계에서 누르세요)';
   if (!silent) toast('클럽캠을 껐어요 — 💾 전체 저장으로 오늘 영상을 내려받으세요');
 }
+// ── 하이라이트 (v0.72): 포인트마다 직전 10초를 'hl' 저장소에 보관 → 캔버스로 이어붙여 한 편 ──
+const CC_HL_SEC = 10, CC_HL_MAX = 60;
+let ccHlN = 0;
+function ccScore(p) {
+  const el = $('cc-full-score'); if (!el || !p || typeof p !== 'object') return;
+  const d0 = String(p.d0 == null ? '' : p.d0).slice(0, 4), d1 = String(p.d1 == null ? '' : p.d1).slice(0, 4);
+  el.style.display = 'block';
+  el.textContent = (p.done ? '경기 종료 · ' : '') + d0 + ' : ' + d1 + '  ·  게임 ' + (Number(p.g0) || 0) + '-' + (Number(p.g1) || 0) + (p.sets ? '  ·  세트 ' + String(p.sets).slice(0, 20) : '');
+}
+function ccHlPut(rec) { return new Promise((res, rej) => { const tx = ccDb.transaction('hl', 'readwrite'); tx.objectStore('hl').put(rec); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+function ccHlAll() { return new Promise((res, rej) => { const rq = ccDb.transaction('hl', 'readonly').objectStore('hl').getAll(); rq.onsuccess = () => res((rq.result || []).sort((a, b) => a.at - b.at)); rq.onerror = () => rej(rq.error); }); }
+function ccHlClear() { return new Promise((res, rej) => { const tx = ccDb.transaction('hl', 'readwrite'); tx.objectStore('hl').clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+function ccHlRender() { const el = $('cc-hl-n'); if (el) el.textContent = ccHlN; }
+async function ccKeepClip(p) { // 본폰 점수판이 포인트를 넣으면: 직전 10초 청크를 라벨과 함께 보관 (업로드 없음)
+  if (ccBusy || !ccStream || !ccDb || !p || typeof p !== 'object') return; ccBusy = true;
+  try {
+    const chunks = await ccSealSeg();
+    const cutoff = Date.now() - CC_HL_SEC * 1000;
+    const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff);
+    if (cut.length >= 2) {
+      const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
+      await ccHlPut({ at: Date.now(), label: String(p.label || '').replace(/[<>]/g, '').slice(0, 60), side: p.side === 1 ? 1 : 0, blob });
+      ccHlN++; ccHlRender();
+      const all = await ccHlAll(); if (all.length > CC_HL_MAX) { const tx = ccDb.transaction('hl', 'readwrite'); all.slice(0, all.length - CC_HL_MAX).forEach(r => tx.objectStore('hl').delete(r.at)); }
+    }
+  } catch (e) {}
+  finally { ccBusy = false; if (ccStream) ccStartRec(); }
+}
+async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생하며 캔버스에 그려 한 편으로 재인코딩 → 저장 + 본폰 전송
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
+  const clips = await ccHlAll().catch(() => []);
+  if (!clips.length) { toast('하이라이트 클립이 아직 없어요 — 본폰 점수판에서 포인트를 넣으면 쌓여요'); return; }
+  const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+  if (!cv.captureStream || typeof MediaRecorder === 'undefined') { toast('이 폰은 영상 합치기를 지원하지 않아요 — 클립을 낱개로 저장할게요'); for (const c of clips) { const a = document.createElement('a'); a.href = URL.createObjectURL(c.blob); a.download = '하이라이트_' + c.at + '.' + ccFmt.ext; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 500)); } return; }
+  const g = cv.getContext('2d');
+  const stream = cv.captureStream(30);
+  const fmt = recPick(false);
+  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: 3000000 } : undefined);
+  const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+  const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
+  rec.start(1000);
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.style.position = 'fixed'; v.style.opacity = '0.01'; v.style.width = '2px'; document.body.appendChild(v);
+  try {
+    for (let i = 0; i < clips.length; i++) {
+      const c = clips[i];
+      status('하이라이트 만드는 중 ' + (i + 1) + '/' + clips.length + ' — 화면을 끄지 마세요');
+      const url = URL.createObjectURL(c.blob); v.src = url;
+      await new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; setTimeout(res, 3000); });
+      try { await v.play(); } catch (e) {}
+      await new Promise((res) => {
+        const t0 = performance.now();
+        const draw = () => {
+          if (v.ended || v.paused && v.currentTime > 0 || performance.now() - t0 > (CC_HL_SEC + 3) * 1000) return res();
+          const fit = aiFitRect(v.videoWidth || 16, v.videoHeight || 9, 640, 360);
+          g.fillStyle = '#000'; g.fillRect(0, 0, 640, 360);
+          if (fit) { try { g.drawImage(v, fit.x, fit.y, fit.w, fit.h); } catch (e) {} }
+          g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 320, 640, 40);
+          g.fillStyle = '#d4e94e'; g.font = 'bold 18px sans-serif'; g.fillText(c.label, 14, 347);
+          g.fillStyle = '#fff'; g.font = '13px sans-serif'; g.textAlign = 'right'; g.fillText((i + 1) + ' / ' + clips.length, 626, 347); g.textAlign = 'left';
+          requestAnimationFrame(draw);
+        };
+        draw();
+      });
+      URL.revokeObjectURL(url);
+    }
+  } finally { v.remove(); }
+  await new Promise(res => { rec.onstop = res; rec.stop(); });
+  const out = new Blob(parts, { type: fmt.type });
+  status('하이라이트 완성 ' + Math.round(out.size / 1048576) + 'MB — 저장 중');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(out); a.download = '하이라이트_' + new Date().toISOString().slice(0, 10) + '.' + fmt.ext; document.body.appendChild(a); a.click(); a.remove();
+  if (ccChan && out.size < 45 * 1048576) { // 본폰으로 전송 (판독 센터에 자동 오픈)
+    try {
+      const path = 'cam/' + (ccCode || 'X') + '/hl-' + Date.now() + '.' + fmt.ext;
+      const { error } = await svClient().storage.from('clips').upload(path, out, { contentType: fmt.type, upsert: true });
+      if (!error) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { path, at: Date.now(), hl: true } }); status('하이라이트를 본폰으로 보냈어요 (' + clips.length + '개 장면)'); }
+      else status('저장은 됐고 본폰 전송은 실패: ' + error.message);
+    } catch (e) { status('저장은 됐고 본폰 전송은 실패'); }
+  } else status('하이라이트 저장 완료 (' + clips.length + '개 장면)');
+}
+async function ccHlClearAll() { if (!ccDb) return; if (!confirm('하이라이트 클립 ' + ccHlN + '개를 지울까요?')) return; await ccHlClear().catch(() => {}); ccHlN = 0; ccHlRender(); toast('하이라이트 클립을 지웠어요'); }
 async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 (의미 없는 녹화분 정리 — v0.60)
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
