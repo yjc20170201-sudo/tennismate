@@ -1971,7 +1971,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.76';
+const APP_VERSION = 'v0.77';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7680,6 +7680,81 @@ function aiDetectCourt(d, w, h) { // → [farL, farR, nearR, nearL] 코너 4개 
   if (botW < w * 0.3 || topW <= 0 || topW > botW * 1.05 || hgt < h * 0.2) return null;
   return [c1, c2, c3, c4];
 }
+// ── v0.77: 실코트용 자동 보정 (서비스라인 기준) ──
+function aiLineMask2(d, w, h) { // 얇은 흰 라인: 밝은 무채색 + (양옆 또는 위아래) K px가 모두 충분히 어둡고 서로 비슷 — 창문·벽·네트 띠 제외
+  const pts = [];
+  const K = Math.max(3, Math.round(w / 128));
+  const lum = i => { const p = i * 4; return (d[p] + d[p + 1] + d[p + 2]) / 3; };
+  for (let y = 2 * K; y < h - 2 * K; y++) for (let x = 2 * K; x < w - 2 * K; x++) {
+    const i = y * w + x, p = i * 4;
+    const r = d[p], g = d[p + 1], b = d[p + 2];
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if (mn < 140 || mx - mn > 50) continue;
+    const me = (r + g + b) / 3;
+    const side = (a, b2) => { const la = lum(a), lb = lum(b2); return me - la >= 40 && Math.abs(la - lb) <= 35; };
+    if ((side(i - K, i - 2 * K) && side(i + K, i + 2 * K)) || (side(i - K * w, i - 2 * K * w) && side(i + K * w, i + 2 * K * w))) pts.push([x, y]);
+  }
+  return pts;
+}
+function aiSegSupportV(grid, l, y0, y1, w) { // 직선 위 y0~y1 구간에 마스크 점이 있는 비율
+  let hit = 0, tot = 0;
+  for (let y = Math.round(Math.min(y0, y1)); y <= Math.max(y0, y1); y += 2) {
+    const x = aiLineX(l, y); if (x === null || x < 0 || x >= w) continue; tot++;
+    for (let dx = -3; dx <= 3; dx++) if (grid.has(y * w + Math.round(x + dx))) { hit++; break; }
+  }
+  return tot ? hit / tot : 0;
+}
+function aiSegSupportH(grid, l, x0, x1, w, h) {
+  let hit = 0, tot = 0; const c = Math.cos(l.th), sn = Math.sin(l.th);
+  for (let x = Math.round(Math.max(0, Math.min(x0, x1))); x <= Math.min(w - 1, Math.max(x0, x1)); x += 2) {
+    const y = Math.abs(sn) < 1e-6 ? null : (l.rho - x * c) / sn; if (y === null || y < 0 || y >= h) continue; tot++;
+    for (let dy = -3; dy <= 3; dy++) if (grid.has(Math.round(y + dy) * w + x)) { hit++; break; }
+  }
+  return tot ? hit / tot : 0;
+}
+function aiRefineLine(pts, l, yA, yB) { // 직선 ±4px 안의 마스크 점으로 최소자승 재적합
+  const c = Math.cos(l.th), sn = Math.sin(l.th);
+  const sel = pts.filter(p => p[1] >= yA && p[1] <= yB && Math.abs(p[0] * c + p[1] * sn - l.rho) <= 4);
+  if (sel.length < 20) return l;
+  let mx = 0, my = 0; sel.forEach(p => { mx += p[0]; my += p[1]; }); mx /= sel.length; my /= sel.length;
+  let sxx = 0, sxy = 0, syy = 0; sel.forEach(p => { const dx = p[0] - mx, dy = p[1] - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; });
+  const th = ((0.5 * Math.atan2(2 * sxy, sxx - syy) + Math.PI / 2) % Math.PI + Math.PI) % Math.PI;
+  return { th, rho: mx * Math.cos(th) + my * Math.sin(th), votes: l.votes, tdeg: th * 180 / Math.PI };
+}
+function aiDetectCourtSvc(d, w, h) { // → [svcL, svcR, nearR, nearL] (복식 사이드라인 ∩ 서비스라인/베이스라인) | null
+  const pts = aiLineMask2(d, w, h);
+  if (pts.length < 80) return null;
+  const grid = new Set(pts.map(p => p[1] * w + p[0]));
+  const lines = aiHough(pts, w, h);
+  const H = lines.filter(l => l.tdeg >= 75 && l.tdeg <= 105), S = lines.filter(l => l.tdeg < 70 || l.tdeg > 110);
+  if (H.length < 1 || S.length < 2) return null;
+  const yOf = l => Math.abs(Math.sin(l.th)) < 1e-6 ? null : (l.rho - (w / 2) * Math.cos(l.th)) / Math.sin(l.th);
+  // 가까운 베이스라인 = 화면 아래쪽 수평선 중 전폭 지지율 25% 이상인 가장 아래 것
+  const Hs = H.map(l => ({ l, y: yOf(l) })).filter(o => o.y !== null && o.y > h * 0.3 && o.y < h - 2)
+    .map(o => ({ ...o, sup: aiSegSupportH(grid, o.l, 0, w - 1, w, h) })).filter(o => o.sup > 0.25).sort((a, b) => b.y - a.y);
+  if (!Hs.length) return null;
+  const near = Hs[0];
+  // 사이드라인: 베이스라인과의 교점이 화면 근처, 베이스라인 위 구간 지지율 30% 이상. 왼쪽/오른쪽 각각 지지율 최대
+  const cand = S.map(l => { const c = aiIntersect(l, near.l); if (!c) return null; return { l, cx: c[0], sup: aiSegSupportV(grid, l, near.y - h * 0.35, near.y - 4, w) }; })
+    .filter(o => o && o.cx > -0.7 * w && o.cx < 1.7 * w && o.sup > 0.3);
+  const L = cand.filter(o => o.cx < w * 0.45).sort((a, b) => b.sup - a.sup)[0], R = cand.filter(o => o.cx > w * 0.55).sort((a, b) => b.sup - a.sup)[0];
+  if (!L || !R) return null;
+  // 서비스라인: 베이스라인과 같은 기울기의 직선을 y로 훑어 사이드라인 사이 지지율 최대 (허프에 안 잡혀도 됨)
+  let svc = null; const th0 = near.l.th;
+  for (let yy = Math.round(near.y - h * 0.5); yy <= near.y - h * 0.12; yy++) {
+    const l = { th: th0, rho: (w / 2) * Math.cos(th0) + yy * Math.sin(th0) };
+    const xa = aiLineX(L.l, yy), xb = aiLineX(R.l, yy); if (xa === null || xb === null) continue;
+    const s2 = aiSegSupportH(grid, l, xa + 4, xb - 4, w, h);
+    if (!svc || s2 > svc.sup) svc = { l, y: yy, sup: s2 };
+  }
+  if (!svc || svc.sup < 0.3) return null;
+  const nl = aiRefineLine(pts, near.l, near.y - 6, near.y + 6), sl = aiRefineLine(pts, svc.l, svc.y - 6, svc.y + 6);
+  const Ll = aiRefineLine(pts, L.l, svc.y - 10, near.y + 6), Rl = aiRefineLine(pts, R.l, svc.y - 10, near.y + 6);
+  const c1 = aiIntersect(sl, Ll), c2 = aiIntersect(sl, Rl), c3 = aiIntersect(nl, Rl), c4 = aiIntersect(nl, Ll);
+  if (!c1 || !c2 || !c3 || !c4) return null;
+  if (c3[0] - c4[0] < w * 0.5 || c2[0] - c1[0] <= 0 || c2[0] - c1[0] > c3[0] - c4[0]) return null;
+  return [c1, c2, c3, c4];
+}
 async function aiAutoCalib() {
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
@@ -9238,7 +9313,28 @@ function cvClipPair(slot, blob, at) { // 20초 안에 A·B 클립이 다 오면 
 // 캠 폰: 카메라 스트림 프레임 → 축소(320px) → 3프레임 차분 공 후보(aiExtractCands) → 1.6초 창 트랙 연결(aiBuildTracks)
 //        → 바운스(aiBounceIdx·aiRefineBounce) → 캠 보정(clH)으로 IN/OUT(aiVerdict) → 채널 'call' 송신 → 아슬아슬하면 자동 ✂️
 // 되감기 없이 프레임을 바로 받으므로 지연 1~2초. 폰이 뜨거워지므로 보조배터리 권장. 참고 의견일 뿐 공식 판정 아님.
-const CL_TW = 320, CL_WIN = 1.6, CL_MIN_GAP = 1.5, CL_MAX_BLOB = 80, CL_AUTOCUT_GAP = 25000;
+const CL_TW = 640, CL_WIN = 1.6, CL_MIN_GAP = 1.5, CL_MAX_BLOB = 40, CL_AUTOCUT_GAP = 25000; // v0.77: 320→640 (실코트에서 공이 320px에선 2px라 사람만 추적됨)
+function clFilterCands(cands, tw) { // 사람 = 주변(폭의 8%)에 후보가 뭉쳐 있음 → 군집 전체 제거, 공 = 외딴 작은 덩어리
+  const R = tw * 0.08;
+  return cands.filter(a => {
+    let tot = a.n, cnt = 1;
+    cands.forEach(o => { if (o !== a && Math.hypot(o.x - a.x, o.y - a.y) < R) { tot += o.n; cnt++; } });
+    return !(tot > 60 || cnt >= 3) && a.n >= 2 && a.n <= CL_MAX_BLOB;
+  });
+}
+function clPickTrack(frames, tw) { // 이동거리 큰(폭의 10% 이상) 매끈한 트랙 우선 — 제자리 흔들림(사람) 배제
+  aiBuildTracks(frames);
+  const all = (aiBuildTracks._all || []).filter(tr => tr.pts.length >= 7);
+  let best = null, bs = 0;
+  all.forEach(tr => {
+    const p = tr.pts; const disp = Math.hypot(p[p.length - 1].x - p[0].x, p[p.length - 1].y - p[0].y);
+    if (disp < tw * 0.10) return;
+    let jumpy = 0; for (let i = 1; i < p.length; i++) if (Math.hypot(p[i].x - p[i - 1].x, p[i].y - p[i - 1].y) > tw * 0.1) jumpy++;
+    if (jumpy > 1) return;
+    const sc = disp * Math.sqrt(p.length); if (sc > bs) { bs = sc; best = tr; }
+  });
+  return best;
+}
 const CL_SAMPLE_MAX_PER_DAY = 400; // 무료 저장 한도 보호 (팩당 ~0.1MB → 하루 40MB)
 let clRing = [], clSampleOn = true, clSampleN = 0, clSampleBusy = false;
 try { clSampleOn = localStorage.getItem('tm-clsample') !== '0'; } catch (e) {}
@@ -9294,11 +9390,13 @@ let clCalMode = 'corners'; // corners: 복식 네 귀퉁이 | service: 먼 귀�
 const CL_SVC_Y = AI_COURT_L / 2 + 6.40; // 가까운 서비스라인: 네트에서 6.40m (라인 중심 기준 근사)
 function clCourtDst(mode) {
   if ((mode || clCalMode) === 'service') return [[0, 0], [AI_COURT_W, 0], [AI_COURT_W - AI_SINGLES_IN, CL_SVC_Y], [AI_SINGLES_IN, CL_SVC_Y]];
+  if ((mode || clCalMode) === 'auto-svc') return [[0, CL_SVC_Y], [AI_COURT_W, CL_SVC_Y], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]]; // v0.77 자동: 복식 사이드라인 ∩ 서비스라인 2 + 베이스라인 2
   return [[0, 0], [AI_COURT_W, 0], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]];
 }
 function clCalModeChange(v) {
-  clCalMode = v === 'service' ? 'service' : 'corners';
-  const sel = $('cl-calmode'); if (sel && sel.value !== clCalMode) sel.value = clCalMode;
+  clCalMode = v === 'service' ? 'service' : v === 'auto-svc' ? 'auto-svc' : 'corners';
+  const sel = $('cl-calmode'); if (sel && sel.value !== clCalMode) sel.value = clCalMode === 'auto-svc' ? 'corners' : clCalMode;
+  if (clCalMode === 'auto-svc') return;
   clStatus(clCalMode === 'service' ? '📐 서비스라인 기준 — 수동 보정에서 ① 먼 왼쪽 귀퉁이 ② 먼 오른쪽 귀퉁이 ③ 가까운 서비스라인 오른쪽 끝 ④ 왼쪽 끝을 탭' : '📐 네 귀퉁이 기준 — ✨ 자동 보정 또는 수동 4점 탭');
 }
 function clSaveCal(vw, vh) { try { localStorage.setItem('tm-clcal', JSON.stringify({ vw, vh, corners: clCorners, mode: clCalMode })); } catch (e) {} }
@@ -9307,7 +9405,7 @@ function clRestoreCal() {
   try {
     const d = JSON.parse(localStorage.getItem('tm-clcal') || 'null');
     if (d && d.vw === v.videoWidth && d.vh === v.videoHeight && Array.isArray(d.corners) && d.corners.length === 4) {
-      clCalModeChange(d.mode === 'service' ? 'service' : 'corners');
+      clCalModeChange(d.mode === 'service' ? 'service' : d.mode === 'auto-svc' ? 'auto-svc' : 'corners');
       clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst());
       if (clH) { clStatus('📐 지난 보정을 복원했어요 (카메라 위치가 바뀌었으면 ✨ 자동 보정 다시) — 🤖 라이브 판정을 켜세요'); clDraw(); }
     }
@@ -9322,14 +9420,16 @@ function clAutoCalib() {
     const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2;
     const cx = cv.getContext('2d', { willReadFrequently: true });
     cx.drawImage(v, 0, 0, w2, h2);
-    const q = aiDetectCourt(cx.getImageData(0, 0, w2, h2).data, w2, h2);
-    if (!q) { clStatus('자동 인식 실패 — 네 귀퉁이가 다 안 보이면 보정 기준을 "서비스라인"으로 바꾸고 📐 수동으로 4점을 탭하세요 (가까운 베이스라인 없어도 됨)'); return; }
+    const data = cx.getImageData(0, 0, w2, h2).data;
+    let q = aiDetectCourtSvc(data, w2, h2), mode = 'auto-svc'; // v0.77: 실코트 검증된 서비스라인 기준 우선
+    if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; }
+    if (!q) { clStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이게 잡거나, 📐 수동으로 4점을 탭하세요'); return; }
     const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
-    clCalModeChange('corners');
+    clCalModeChange(mode);
     clCorners = q.map(c => [c[0] * sx, c[1] * sy]);
     clH = aiHomography(clCorners, clCourtDst());
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
-    if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✨ 자동 보정 완료 — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
+    if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✨ 자동 보정 완료' + (mode === 'auto-svc' ? ' (베이스라인·서비스라인 기준)' : '') + ' — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
     else clStatus('보정 계산 실패 — 📐 수동으로 4점을 탭하세요');
     clDraw();
   } catch (e) { clStatus('자동 보정 오류: ' + (e.message || e)); }
@@ -9421,7 +9521,7 @@ function clLoop() {
     if (clSampleOn) { clRing.push(cur); while (clRing.length > 45) clRing.shift(); } // 🧪 학습 샘플용 프레임 보관 (v0.68)
     if (clPrev2 && clPrev) { // 3프레임 차분: 가운데(prev) 프레임의 후보
       const r = aiExtractCands(clPrev2.d, clPrev.d, cur.d, tw, th);
-      clFrames.push({ t: clPrev.t, cands: r.shake ? [] : r.cands.filter(c => c.n <= CL_MAX_BLOB) });
+      clFrames.push({ t: clPrev.t, cands: r.shake ? [] : clFilterCands(r.cands, tw) });
       while (clFrames.length && clFrames[0].t < now - CL_WIN) clFrames.shift();
     }
     clPrev2 = clPrev; clPrev = cur;
@@ -9430,7 +9530,7 @@ function clLoop() {
   next();
 }
 function clDetect(tw, th, v) {
-  const track = aiBuildTracks(clFrames);
+  const track = clPickTrack(clFrames, tw);
   if (!track || track.pts.length < 6) return;
   const pts = track.pts;
   const bi = aiBounceIdx(pts.map(p => p.y));
