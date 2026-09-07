@@ -54,16 +54,22 @@ window.WASB = (function () {
     const hm = out.heatmaps.data; // [3,H,W]
     const plane = W * H, sx = vw / W, sy = vh / H;
     const res = [];
+    const K = opts.topk || 3; // 프레임당 후보 최대 3개 (바닥에 놓인 공·오탐과 진짜 공을 앱에서 움직임으로 가림, v0.81)
     for (let k = 0; k < 3; k++) {
-      const o = k * plane; let best = 0, bi = -1;
-      for (let i = 0; i < plane; i++) { const v = hm[o + i]; if (v > best) { best = v; bi = i; } }
-      if (best < thr) { res.push(null); continue; }
-      // 최고점 주변 ±12px 안의 임계 초과 픽셀 무게중심 (멀리 떨어진 오탐 덩어리 배제)
-      const bx = bi % W, by = (bi / W) | 0; let wx = 0, wy = 0, ws = 0;
-      for (let y = Math.max(0, by - 12); y <= Math.min(H - 1, by + 12); y++) for (let x = Math.max(0, bx - 12); x <= Math.min(W - 1, bx + 12); x++) {
-        const v = hm[o + y * W + x]; if (v > thr) { wx += x * v; wy += y * v; ws += v; }
+      const o = k * plane; const cands = [];
+      const h2 = hm.subarray(o, o + plane); const taken = new Uint8Array(plane);
+      for (let c = 0; c < K; c++) {
+        let best = 0, bi = -1;
+        for (let i = 0; i < plane; i++) { const v = h2[i]; if (v > best && !taken[i]) { best = v; bi = i; } }
+        if (best < thr) break;
+        // 최고점 주변 ±12px 안의 임계 초과 픽셀 무게중심 (멀리 떨어진 오탐 덩어리 배제) + 그 영역은 다음 후보에서 제외
+        const bx = bi % W, by = (bi / W) | 0; let wx = 0, wy = 0, ws = 0;
+        for (let y = Math.max(0, by - 12); y <= Math.min(H - 1, by + 12); y++) for (let x = Math.max(0, bx - 12); x <= Math.min(W - 1, bx + 12); x++) {
+          const j = y * W + x; taken[j] = 1; const v = h2[j]; if (v > thr) { wx += x * v; wy += y * v; ws += v; }
+        }
+        cands.push({ x: (wx / ws) * sx, y: (wy / ws) * sy, conf: best });
       }
-      res.push({ x: (wx / ws) * sx, y: (wy / ws) * sy, conf: best });
+      res.push(cands.length ? Object.assign({}, cands[0], { cands }) : null);
     }
     return opts.all ? res : res[2];
   }

@@ -1972,7 +1972,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.80';
+const APP_VERSION = 'v0.81';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7554,10 +7554,11 @@ function aiRefineBounce(traj, bi) {
   const yStar = q.a * (tStar - t0) * (tStar - t0) + q.b * (tStar - t0) + q.c;
   return { t: tStar, x: xStar, y: yStar };
 }
-function aiBounceIdx(ys) { // 화면 y(아래로 증가)의 최대점 = 바운스 추정
+function aiBounceIdx(ys) { // 화면 y(아래로 증가)의 최대점 = 바운스 추정 (v0.81: 5점 이상이면 3점 이동평균으로 잡음 완화 — 먼 코트의 작은 바운스)
   if (!ys || ys.length < 3) return -1;
+  const sm = ys.length >= 5 ? ys.map((y, i) => i === 0 || i === ys.length - 1 ? y : (ys[i - 1] + y + ys[i + 1]) / 3) : ys;
   let bi = 0;
-  for (let i = 1; i < ys.length; i++) if (ys[i] > ys[bi]) bi = i;
+  for (let i = 1; i < sm.length; i++) if (sm[i] > sm[bi]) bi = i;
   return (bi === 0 || bi === ys.length - 1) ? -1 : bi; // 구간 끝이면 바운스가 구간 밖 — 판정 불가
 }
 function aiVerdict(cx, cy, singles) { // 코트 좌표(m, 라인 중심 기준) → 판정 {call, distCm, close}
@@ -8061,6 +8062,33 @@ async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web C
   await WASB.load('', t => aiStatus('🎯 ' + t));
   return true;
 }
+function aiTrackCands(frames, vw) { // v0.81: frames [{t, cands:[{x,y,conf}]}] → 움직이는 공 궤적 [{t,x,y,s}]
+  // 1) 놓인 공: 반경 vw*1%(≈13px) 안에 전체 프레임의 40% 이상 나타나는 위치는 정적 → 제거
+  const R = vw * 0.01, N = frames.length; const clusters = [];
+  frames.forEach(f => f.cands.forEach(c => { let cl = clusters.find(k => Math.hypot(k.x - c.x, k.y - c.y) <= R); if (cl) { cl.n++; cl.x = (cl.x * (cl.n - 1) + c.x) / cl.n; cl.y = (cl.y * (cl.n - 1) + c.y) / cl.n; } else clusters.push({ x: c.x, y: c.y, n: 1 }); }));
+  const statics = clusters.filter(k => k.n >= Math.max(6, N * 0.4));
+  const isStatic = c => statics.some(k => Math.hypot(k.x - c.x, k.y - c.y) <= R * 1.5);
+  // 2) 연결: 예측 위치(마지막 점 + 속도) 근처의 후보를 우선, 반경 = 폭 12%/프레임
+  const tracks = [];
+  frames.forEach(f => {
+    const cands = f.cands.filter(c => !isStatic(c));
+    const used = new Set();
+    tracks.forEach(tr => {
+      if (tr.dead) return;
+      const last = tr.pts[tr.pts.length - 1]; const steps = Math.max(1, Math.round((f.t - last.t) * 30));
+      if (f.t - last.t > 0.4) { tr.dead = true; return; }
+      const px = last.x + tr.vx * steps, py = last.y + tr.vy * steps; let best = null, bd = vw * 0.12 * steps;
+      cands.forEach((c, i) => { if (used.has(i)) return; const d = Math.hypot(c.x - px, c.y - py); if (d < bd) { bd = d; best = i; } });
+      if (best != null) { const c = cands[best]; used.add(best); tr.vx = (c.x - last.x) / steps; tr.vy = (c.y - last.y) / steps; tr.pts.push({ t: f.t, x: c.x, y: c.y, s: c.conf }); tr.miss = 0; }
+      else if (++tr.miss > 6) tr.dead = true;
+    });
+    cands.forEach((c, i) => { if (!used.has(i)) tracks.push({ pts: [{ t: f.t, x: c.x, y: c.y, s: c.conf }], vx: 0, vy: 0, miss: 0, dead: false }); });
+  });
+  // 3) 최고 트랙: 길이 × 이동거리 (제자리 흔들림 배제)
+  let best = null, bs = 0;
+  tracks.forEach(tr => { const p = tr.pts; if (p.length < 4) return; const xs = p.map(q => q.x), ys = p.map(q => q.y); const span = Math.hypot(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)); if (span < vw * 0.03) return; const sc = p.length * Math.sqrt(span); if (sc > bs) { bs = sc; best = tr; } });
+  return best ? best.pts : [];
+}
 function aiCleanTraj(traj, vw) { // v0.80: 시간순 점들을 "한 프레임에 폭 12% 이내"로 이어 가장 긴 트랙만 (먼 코트·관중 오탐 제거)
   if (traj.length < 4) return traj;
   const sorted = traj.slice().sort((a, b) => a.t - b.t);
@@ -8087,26 +8115,27 @@ async function aiAnalyzeDeepWasb(v) { // 현재 시점 앞 1.2초~뒤 0.8초를 
   const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
   const grab = () => { const c = document.createElement('canvas'); c.width = WASB.W; c.height = WASB.H; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); return c; };
   const tStart = performance.now();
-  let t = t0, k = 0; const ring = [];
+  let t = t0, k = 0; const ring = []; const frames = []; // frames: 후보 전부 (v0.81)
+  const rebuild = () => { aiTraj = aiCleanTraj(aiTrackCands(frames, v.videoWidth), v.videoWidth); };
   while (t <= t1 + 1e-6) {
     await seekTo(t);
     ring.push({ t, c: grab() });
     if (ring.length === 3) { // 겹치지 않는 3프레임 묶음 → 출력 3장 전부 사용 (추론 횟수 1/3)
-      const ds = await WASB.detectFrames(ring.map(r => r.c), v.videoWidth, v.videoHeight, { all: true });
-      ds.forEach((d, i) => { if (d) aiTraj.push({ t: ring[i].t, x: d.x, y: d.y, s: d.conf }); });
-      ring.length = 0;
+      const ds = await WASB.detectFrames(ring.map(r => r.c), v.videoWidth, v.videoHeight, { all: true, topk: 3 });
+      ds.forEach((d, i) => { frames.push({ t: ring[i].t, cands: d ? d.cands : [] }); });
+      ring.length = 0; rebuild();
     }
     if (k % 3 === 0) { aiStatus('🎯 공 탐지 ' + t.toFixed(1) + '/' + t1.toFixed(1) + '초 · 공 발견 ' + aiTraj.length + '회 · ' + Math.round((performance.now() - tStart) / 1000) + '초 경과 (' + (WASB.backend || '') + ')'); aiSyncCanvas(); aiDraw(); }
     k++; t = t0 + k * STEP;
     if (t > t1 && t1 < tMax) { // 구간 끝: 바운스 없고 공이 아직 내려가는 중이면 0.5초 연장
-      const tr = aiCleanTraj(aiTraj, v.videoWidth);
+      rebuild(); const tr = aiTraj;
       const bi = aiBounceIdx(tr.map(p => p.y));
       const tail = tr.slice(-3);
       const descending = tail.length === 3 && tail[2].y > tail[1].y && tail[1].y > tail[0].y && tail[2].t > t1 - 0.25;
       if (bi < 0 && descending) { t1 = Math.min(tMax, t1 + 0.5); aiStatus('🎯 공이 아직 내려가는 중 — ' + t1.toFixed(1) + '초까지 더 봐요'); }
     }
   }
-  aiTraj = aiCleanTraj(aiTraj, v.videoWidth);
+  rebuild();
   return { t0, t1 };
 }
 async function aiAnalyzeDeep() { // 🎯 딥러닝 추적: WASB(v0.79) 우선, 실패 시 TrackNet
