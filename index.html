@@ -1970,7 +1970,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.74';
+const APP_VERSION = 'v0.75';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8752,6 +8752,16 @@ async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS
   });
   ccStatus('🧹 오래된 구간 ' + drop.length + '개를 지웠어요 (최근 ' + CC_MAX_SEGS + '분만 보관)');
 }
+async function ccLoadSegInfo() { // 저장된 세그먼트 개수·용량을 DB에서 읽어 표시 (v0.75 — 재시작 후 0개로 보이던 버그)
+  try {
+    if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+    if (!ccDb) return;
+    const segs = await ccAllSegs();
+    ccSegN = segs.length; ccSegBytes = segs.reduce((a, x) => a + ((x.blob && x.blob.size) || 0), 0);
+    ccRenderSegInfo();
+  } catch (e) {}
+}
+document.addEventListener('DOMContentLoaded', () => { setTimeout(ccLoadSegInfo, 800); });
 function ccAllSegs() {
   return new Promise((res, rej) => {
     const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAll();
@@ -8779,6 +8789,7 @@ async function ccToggle() {
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
+  await ccLoadSegInfo();
   let code = '';
   try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
   if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} } // 이 폰의 고정 코드 (v0.54)
