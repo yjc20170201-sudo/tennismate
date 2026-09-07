@@ -1216,6 +1216,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             </select>
             </div>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocall" checked onchange="clAutoCallSet(this.checked)"> 라이브 자동 콜 — 확실한 아웃(15cm↑)과 폴트(포인트 시작 첫 바운스가 서비스 박스 밖)만 소리로 (캠·본폰)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
@@ -1972,7 +1973,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.83';
+const APP_VERSION = 'v0.84';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8831,12 +8832,30 @@ function ccRenderGate() {
 function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
 let ccVoiceOn = true; try { ccVoiceOn = localStorage.getItem('tm-cc-voice') !== '0'; } catch (e) {}
 function ccVoiceSet(on) { ccVoiceOn = !!on; try { localStorage.setItem('tm-cc-voice', ccVoiceOn ? '1' : '0'); } catch (e) {} if (ccVoiceOn) ccSay({ text: '콜 소리 켬' }); }
+let clAutoCall = true; try { clAutoCall = localStorage.getItem('tm-cl-autocall') !== '0'; } catch (e) {}
+function clAutoCallSet(on) { clAutoCall = !!on; try { localStorage.setItem('tm-cl-autocall', clAutoCall ? '1' : '0'); } catch (e) {} }
+let ccLastScoreAt = 0, clCallsSinceScore = 99; // 점수판 이벤트 이후 바운스 수 (첫 바운스 = 서브)
+function clAutoCallFor(vd, mC, isServe) { // v0.84: 확실한 것만 → 'OUT' | 'FAULT' | null
+  if (!vd || !mC) return null;
+  const cx = mC[0], cy = mC[1];
+  if (isServe) { // 서비스 박스 4개 합집합: x 1.37~9.60, y 5.485~18.285 (라인 폭·공 반지름 여유 + 20cm)
+    const M = 0.2 + AI_LINE_W / 2 + AI_BALL_R;
+    const inBoxes = cx >= AI_SINGLES_IN - M && cx <= AI_COURT_W - AI_SINGLES_IN + M && cy >= AI_COURT_L / 2 - 6.40 - M && cy <= AI_COURT_L / 2 + 6.40 + M;
+    return inBoxes ? null : 'FAULT';
+  }
+  if (vd.call === 'OUT' && !vd.close && vd.distCm >= 15) return 'OUT';
+  return null;
+}
+function clCallSay(text) { // 자동 콜 음성 (토글 cl-autocall) — 캠·뷰어 공용
+  if (!clAutoCall || !text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+}
 function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   if (!ccVoiceOn || !p || typeof p.text !== 'string' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
 }
-document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); });
+document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
   const v = $('cc-cam'); if (!v || !stream) return;
   try {
@@ -9230,6 +9249,7 @@ async function ccStop(silent) {
 const CC_HL_SEC = 10, CC_HL_MAX = 60;
 let ccHlN = 0;
 function ccScore(p) {
+  ccLastScoreAt = Date.now(); clCallsSinceScore = 0; // v0.84: 다음 바운스가 서브
   const el = $('cc-full-score'); if (!el || !p || typeof p !== 'object') return;
   const d0 = String(p.d0 == null ? '' : p.d0).slice(0, 4), d1 = String(p.d1 == null ? '' : p.d1).slice(0, 4);
   el.style.display = 'block';
@@ -9735,15 +9755,19 @@ function clDetect(tw, th, v) {
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
   const at = Date.now();
   const shot = clShotInfo(pts, bi, sx, sy, px, py); // 🌀 스핀·속도·코스·깊이 (v0.64, 참고치)
-  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot };
+  const sinceScore = (at - ccLastScoreAt) / 1000;
+  const isServe = clCallsSinceScore === 0 && sinceScore >= 3 && sinceScore <= 45; clCallsSinceScore++;
+  const auto = clAutoCallFor(vd, mC, isServe); // v0.84
+  if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
+  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto };
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
   [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
   const trailN = pts.map(p => [Math.round(p.x * sx / v.videoWidth * 1000) / 1000, Math.round(p.y * sy / v.videoHeight * 1000) / 1000]); // 뷰어용 정규화 좌표
   const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
   const trail = trailN.filter((_, i) => i % trailStep === 0 || i === bi || i === trailN.length - 1);
   clDraw();
-  clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
+  clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + (isServe ? ' · 서브' : '') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
   clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
@@ -9798,7 +9822,8 @@ function cvCall(p, slot) {
     spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh >= 15 && p.kmh <= 170 ? Math.round(p.kmh) : null,
     trail: Array.isArray(p.trail) ? p.trail.slice(0, 40).filter(q => Array.isArray(q) && q.length === 2 && q.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) : [],
     course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
-    slot, cy: Number.isFinite(p.cy) ? p.cy : null, alt: null, conflict: false });
+    slot, cy: Number.isFinite(p.cy) ? p.cy : null, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve });
+  if (cvCalls[0].auto) { clCallSay(cvCalls[0].auto === 'OUT' ? '아웃!' : '폴트!'); toast(cvCalls[0].auto === 'OUT' ? '📣 아웃!' : '📣 폴트!'); } // v0.84 본폰도 외침
   // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
   if (cvChanB || cvCalls.some(c => c.slot === 'B')) {
     const me = cvCalls[0];
@@ -9828,7 +9853,7 @@ function cvRenderCalls() {
   if (!last || !feed) return;
   if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; const su = $('cc-call-sum'); if (su) su.innerHTML = ''; return; }
   const fmt = at => { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
-  const badge = c => c.call ? `<span class="ai-verdict ${c.close ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>';
+  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${c.close ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
   const c0 = cvCalls[0];
   const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
   const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
