@@ -8064,7 +8064,7 @@ async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web C
 function aiCleanTraj(traj, vw) { // v0.80: 시간순 점들을 "한 프레임에 폭 12% 이내"로 이어 가장 긴 트랙만 (먼 코트·관중 오탐 제거)
   if (traj.length < 4) return traj;
   const sorted = traj.slice().sort((a, b) => a.t - b.t);
-  const pts = sorted.filter((p, i) => i === 0 || Math.hypot(p.x - sorted[i - 1].x, p.y - sorted[i - 1].y) > 0.5); // 씨크가 같은 프레임을 두 번 준 중복점 제거 (스핀·속도 계산 왜곡 방지)
+  const pts = sorted.filter((p, i) => i === 0 || !(Math.hypot(p.x - sorted[i - 1].x, p.y - sorted[i - 1].y) <= 2.5 && p.t - sorted[i - 1].t <= 0.05)); // 씨크가 같은 프레임을 두 번 준 중복점(2.5px·1프레임 이내) 제거 (스핀·속도 계산 왜곡 방지)
   if (pts.length < 4) return pts;
   const chains = []; let cur = [pts[0]];
   for (let i = 1; i < pts.length; i++) {
