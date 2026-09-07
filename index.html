@@ -1224,7 +1224,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
-            <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="tag-btn" onclick="ccSaveAll()">캠 영상 파일로 다운로드 (파일 앱)</button></div>
+            <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="tag-btn" onclick="ccSaveAll()">캠 영상 파일로 다운로드 (파일 앱)</button><button type="button" class="tag-btn" onclick="ccShowLog()">저장·삭제 이력 보기</button></div>
+            <pre id="cc-log" hidden class="muted" style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;max-height:220px;overflow:auto"></pre>
           </details>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
@@ -1970,7 +1971,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.75';
+const APP_VERSION = 'v0.76';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8737,6 +8738,34 @@ function ccPutSeg(at, blob) {
     tx.oncomplete = res; tx.onerror = () => rej(tx.error);
   });
 }
+let ccQuota = null; // {used, quota} MB (v0.76)
+function ccLog(kind, detail) { // 저장·삭제 이력 (v0.76 — 영상이 사라진 원인 추적용, 최근 80건)
+  try {
+    const arr = JSON.parse(localStorage.getItem('tm-cclog') || '[]');
+    arr.push({ t: Date.now(), k: kind, d: detail || '' });
+    while (arr.length > 80) arr.shift();
+    localStorage.setItem('tm-cclog', JSON.stringify(arr));
+  } catch (e) {}
+}
+async function ccStorageInfo() { // 브라우저 저장 공간 사용량/한도 + 영구 보관 요청
+  try {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().then(ok => ccLog('persist', ok ? 'granted' : 'denied')).catch(() => {});
+    if (navigator.storage && navigator.storage.estimate) {
+      const e = await navigator.storage.estimate();
+      ccQuota = { used: Math.round((e.usage || 0) / 1048576), quota: Math.round((e.quota || 0) / 1048576) };
+    }
+  } catch (e) {}
+  return ccQuota;
+}
+function ccShowLog() { // 설정 › 저장 이력 보기
+  const el = $('cc-log'); if (!el) return;
+  if (!el.hidden) { el.hidden = true; return; }
+  let arr = []; try { arr = JSON.parse(localStorage.getItem('tm-cclog') || '[]'); } catch (e) {}
+  const name = { boot: '앱 시작', start: '캠 시작', stop: '캠 종료', save: '구간 저장', 'save-fail': '저장 실패', prune: '자동 정리(오래된 구간 삭제)', 'clear-all': '전부 지우기(버튼)', 'clear-export': '내보내기 후 지우기', persist: '영구 보관 요청' };
+  const pad = x => String(x).padStart(2, '0');
+  el.textContent = (ccQuota ? '저장 공간 ' + ccQuota.used + ' / ' + ccQuota.quota + 'MB\n' : '') + (arr.length ? arr.slice().reverse().map(x => { const d = new Date(x.t); return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + (name[x.k] || x.k) + (x.d ? ' — ' + x.d : ''); }).join('\n') : '이력이 없어요 (v0.76부터 기록)');
+  el.hidden = false;
+}
 async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS 이내 유지 (무한 증가 방지)
   if (!ccDb) return;
   const keys = await new Promise((res, rej) => {
@@ -8750,7 +8779,7 @@ async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS
     drop.forEach(k => st.delete(k));
     tx.oncomplete = res; tx.onerror = () => rej(tx.error);
   });
-  ccStatus('🧹 오래된 구간 ' + drop.length + '개를 지웠어요 (최근 ' + CC_MAX_SEGS + '분만 보관)');
+  ccStatus('🧹 오래된 구간 ' + drop.length + '개를 지웠어요 (최근 ' + CC_MAX_SEGS + '분만 보관)'); ccLog('prune', drop.length + '개 삭제, ' + CC_MAX_SEGS + '개 유지');
 }
 async function ccLoadSegInfo() { // 저장된 세그먼트 개수·용량을 DB에서 읽어 표시 (v0.75 — 재시작 후 0개로 보이던 버그)
   try {
@@ -8759,6 +8788,8 @@ async function ccLoadSegInfo() { // 저장된 세그먼트 개수·용량을 DB�
     const segs = await ccAllSegs();
     ccSegN = segs.length; ccSegBytes = segs.reduce((a, x) => a + ((x.blob && x.blob.size) || 0), 0);
     ccRenderSegInfo();
+    const q = await ccStorageInfo();
+    ccLog('boot', segs.length + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB' + (q ? ' (공간 ' + q.used + '/' + q.quota + 'MB)' : ''));
   } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { setTimeout(ccLoadSegInfo, 800); });
@@ -8790,6 +8821,7 @@ async function ccToggle() {
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
   await ccLoadSegInfo();
+  ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
   let code = '';
   try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
   if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} } // 이 폰의 고정 코드 (v0.54)
@@ -8850,8 +8882,9 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
       const blob = new Blob(chunks.map(c => c.blob), { type: ccFmt.type });
       await ccPutSeg(Date.now(), blob);
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
+      if (ccSegN % 5 === 1) ccLog('save', ccSegN + '개째 ' + Math.round(blob.size / 1048576) + 'MB/구간, 누적 ' + Math.round(ccSegBytes / 1048576) + 'MB');
       await ccPrune();
-    } catch (e) { ccStatus('⚠️ 폰 저장 공간 부족 — 이 구간은 저장되지 않았어요. 💾 전체 저장 후 비우거나 공간을 확보하세요 (' + ((e && e.message) || e) + ')'); }
+    } catch (e) { ccStatus('⚠️ 폰 저장 공간 부족 — 이 구간은 저장되지 않았어요. 💾 전체 저장 후 비우거나 공간을 확보하세요 (' + ((e && e.message) || e) + ')'); ccLog('save-fail', String((e && e.message) || e)); }
   }
   return chunks;
 }
@@ -8913,7 +8946,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
     ' · 영상 ' + (v ? v.videoWidth + '×' + v.videoHeight : '-') +
     ' · ' + (v ? (v.paused ? '정지' : '재생') + ' rs' + v.readyState : '') +
     ' · 녹화 ' + (ccRec ? ccRec.state : '-') + (v && v.srcObject ? '' : ' · src없음') + (ccPreviewOn ? ' · 대체표시' : '') +
-    (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '');
+    (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '') + (ccQuota ? ' · 저장 ' + ccQuota.used + '/' + ccQuota.quota + 'MB' : '');
 }
 function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   if (!ccChan || !ccStream) return;
@@ -8945,6 +8978,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
   ccPreviewStop();
   if (ccFull) ccFullToggle();
   clStop(true); // 🤖 라이브 판정도 함께 종료
@@ -9068,7 +9102,7 @@ async function ccShareAll() { // 💾 캠 영상 내보내기 — 5개씩 공유
     if (r === 'cancel') { toast('공유를 중단했어요 (' + i + '개까지 보냄)'); return; }
     if (r === 'download') break;
   }
-  if (confirm('내보내기가 끝났으면 폰 안의 캠 영상을 지울까요? (용량 확보)')) { await ccClearSegs().catch(() => {}); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); toast('정리 완료'); }
+  if (confirm('폰 안의 캠 영상 ' + files.length + '개를 지울까요?\n\n사진 앨범이나 드라이브에 저장된 걸 확인한 뒤에만 "확인"을 누르세요. 되돌릴 수 없어요. (나중에 🗑️ 버튼으로 지워도 돼요)')) { ccLog('clear-export', files.length + '개'); await ccClearSegs().catch(() => {}); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); toast('정리 완료'); }
 }
 async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 (의미 없는 녹화분 정리 — v0.60)
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
@@ -9076,6 +9110,7 @@ async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 
   const n = ccSegN, mb = Math.round(ccSegBytes / 1048576);
   if (!confirm('폰에 저장된 캠 영상 ' + n + '개(' + mb + 'MB)를 전부 지울까요?\n되돌릴 수 없어요. (학습용으로 쓸 영상이면 먼저 💾 저장)')) return;
   try {
+    ccLog('clear-all', n + '개 ' + mb + 'MB');
     await ccClearSegs();
     ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo();
     toast('🗑️ 캠 영상을 모두 지웠어요' + (ccStream ? ' — 녹화는 계속돼요' : ''));
