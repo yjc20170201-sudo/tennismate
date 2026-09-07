@@ -1224,6 +1224,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
+            <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="tag-btn" onclick="ccSaveAll()">캠 영상 파일로 다운로드 (파일 앱)</button></div>
           </details>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
@@ -1266,7 +1267,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
         </div>
         <div class="row" style="gap:6px;margin-top:8px">
-          <button type="button" class="btn small outline" style="flex:1" onclick="ccSaveAll()">캠 영상 전체 저장 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB)</button>
+          <button type="button" class="btn small outline" style="flex:1" onclick="ccShareAll()">캠 영상 내보내기 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 사진 앨범·드라이브로</button>
           <button type="button" class="btn small outline" style="flex:0 0 auto;color:#c0392b;border-color:#c0392b" onclick="ccClearAll()">지우기</button>
         </div>
       </div>
@@ -1969,7 +1970,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.73';
+const APP_VERSION = 'v0.74';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9018,7 +9019,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   await new Promise(res => { rec.onstop = res; rec.stop(); });
   const out = new Blob(parts, { type: fmt.type });
   status('하이라이트 완성 ' + Math.round(out.size / 1048576) + 'MB — 저장 중');
-  const a = document.createElement('a'); a.href = URL.createObjectURL(out); a.download = '하이라이트_' + new Date().toISOString().slice(0, 10) + '.' + fmt.ext; document.body.appendChild(a); a.click(); a.remove();
+  await ccExportFiles([new File([out], '하이라이트_' + todayStr() + '.' + fmt.ext, { type: fmt.type })], '하이라이트');
   if (ccChan && out.size < 45 * 1048576) { // 본폰으로 전송 (판독 센터에 자동 오픈)
     try {
       const path = 'cam/' + (ccCode || 'X') + '/hl-' + Date.now() + '.' + fmt.ext;
@@ -9029,6 +9030,35 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   } else status('하이라이트 저장 완료 (' + clips.length + '개 장면)');
 }
 async function ccHlClearAll() { if (!ccDb) return; if (!confirm('하이라이트 클립 ' + ccHlN + '개를 지울까요?')) return; await ccHlClear().catch(() => {}); ccHlN = 0; ccHlRender(); toast('하이라이트 클립을 지웠어요'); }
+async function ccExportFiles(files, title) { // 공유 시트 우선 (아이폰: 비디오 저장→사진 앨범 / 드라이브), 안 되면 다운로드 (v0.74)
+  if (!files.length) return 'none';
+  try {
+    if (navigator.share && navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, title: title || '테니스메이트' }); return 'shared'; }
+  } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+  for (const f of files) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
+    await new Promise(r => setTimeout(r, 600)); URL.revokeObjectURL(a.href);
+  }
+  return 'download';
+}
+async function ccShareAll() { // 💾 캠 영상 내보내기 — 5개씩 공유 시트로 (아이폰은 한 번에 너무 많으면 실패)
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
+  const segs = await ccAllSegs().catch(() => []);
+  if (!segs.length) { toast('저장된 캠 영상이 없어요'); return; }
+  const pad = x => String(x).padStart(2, '0');
+  const files = segs.map(seg => { const d = new Date(seg.at); const ext = seg.blob && seg.blob.type && seg.blob.type.includes('mp4') ? 'mp4' : 'webm'; return new File([seg.blob], '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.' + ext, { type: seg.blob.type || 'video/mp4' }); });
+  const canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: files.slice(0, 1) }));
+  if (!canShare) { toast('이 폰은 공유 시트를 지원하지 않아 다운로드로 저장해요'); return ccSaveAll(); }
+  const BATCH = 5;
+  toast('📤 ' + files.length + '개를 ' + Math.ceil(files.length / BATCH) + '번에 나눠 공유해요 — "비디오 저장"(사진 앨범) 또는 드라이브를 고르세요');
+  for (let i = 0; i < files.length; i += BATCH) {
+    const r = await ccExportFiles(files.slice(i, i + BATCH), '클럽캠 영상 ' + (i / BATCH + 1) + '/' + Math.ceil(files.length / BATCH));
+    if (r === 'cancel') { toast('공유를 중단했어요 (' + i + '개까지 보냄)'); return; }
+    if (r === 'download') break;
+  }
+  if (confirm('내보내기가 끝났으면 폰 안의 캠 영상을 지울까요? (용량 확보)')) { await ccClearSegs().catch(() => {}); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); toast('정리 완료'); }
+}
 async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 (의미 없는 녹화분 정리 — v0.60)
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
