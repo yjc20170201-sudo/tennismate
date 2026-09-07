@@ -1258,7 +1258,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             </div>
           </div>
           <div style="display:flex;gap:4px;margin-top:6px">
-            <div style="flex:1;min-width:0"><div class="muted" style="font-size:11px">A 캠</div><img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 A 라이브"></div>
+            <div style="flex:1;min-width:0"><div class="muted" style="font-size:11px">A 캠</div><div style="position:relative"><img id="cc-live" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 A 라이브"><canvas id="cc-live-ov" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></canvas></div></div>
             <div id="cc-live-b-wrap" style="flex:1;min-width:0;display:none"><div class="muted" style="font-size:11px">B 캠(반대편) <button type="button" class="tag-btn" style="padding:0 6px;font-size:10px" onclick="cvStopB()">끊기</button></div><img id="cc-live2" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 B 라이브"></div>
           </div>
           <div id="cc-view-status" class="muted" style="font-size:12px;margin-top:6px">캠 화면을 기다리는 중…</div>
@@ -1971,7 +1971,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.77';
+const APP_VERSION = 'v0.78';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9466,7 +9466,36 @@ function clCanvasClick(ev) {
   } else clStatus('📐 ' + clCorners.length + '/4 — 다음 점을 탭하세요' + (clCalMode === 'service' ? (clCorners.length === 2 ? ' (이제 가까운 서비스라인 오른쪽 끝)' : clCorners.length === 3 ? ' (가까운 서비스라인 왼쪽 끝)' : '') : ''));
   clDraw();
 }
-function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스 마커
+let clTrail = null; // v0.78: 마지막 샷 궤적 {at, pts:[[x,y]...](비디오 좌표), bi}
+function clShotPanelLines(c) { // 구질 패널 줄들 (캠·뷰어 공용)
+  if (!c) return [];
+  const l1 = c.call ? ((c.call === 'IN' ? 'IN' : 'OUT') + (c.close ? '?' : '') + (c.distCm != null ? ' · ' + c.distCm + 'cm' : '')) : '바운스';
+  const sh = c.shot || c;
+  const l2 = [sh.spin || '', sh.kmh ? '약 ' + sh.kmh + 'km/h' : '', sh.course || '', sh.depth || ''].filter(Boolean).join(' · ');
+  return l2 ? [l1, l2] : [l1];
+}
+function clDrawTrail(g, pts, bi, scale, at) { // 꼬리: 오래될수록 옅게, 바운스 점은 노란 원
+  if (!pts || pts.length < 2) return;
+  const age = Math.max(0, Math.min(1, (Date.now() - at) / 4000)); const alpha = 1 - age * 0.85;
+  g.save(); g.globalAlpha = alpha; g.lineWidth = 3; g.lineJoin = 'round'; g.lineCap = 'round';
+  for (let i = 1; i < pts.length; i++) {
+    const t = i / (pts.length - 1); g.strokeStyle = 'rgba(255, 235, 59, ' + (0.25 + 0.75 * t) + ')';
+    const a = scale(pts[i - 1]), b = scale(pts[i]); g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+  }
+  if (bi != null && pts[bi]) { const q = scale(pts[bi]); g.fillStyle = '#ffeb3b'; g.beginPath(); g.arc(q[0], q[1], 5, 0, Math.PI * 2); g.fill(); }
+  g.restore();
+}
+function clDrawPanel(g, W, lines, color) { // 화면 오른쪽 위 구질 패널
+  if (!lines.length) return;
+  g.save(); g.font = 'bold 13px sans-serif';
+  const pw = Math.max(...lines.map(t => g.measureText(t).width)) + 20, ph = 10 + lines.length * 18;
+  const x = W - pw - 8, y = 8;
+  g.fillStyle = 'rgba(0,0,0,.62)'; g.beginPath(); g.roundRect ? g.roundRect(x, y, pw, ph, 8) : g.rect(x, y, pw, ph); g.fill();
+  g.fillStyle = color || '#fff'; g.fillText(lines[0], x + 10, y + 18);
+  g.fillStyle = '#fff'; g.font = '12px sans-serif'; lines.slice(1).forEach((t, i) => g.fillText(t, x + 10, y + 36 + i * 18));
+  g.restore();
+}
+function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스 마커 + 꼬리·구질 패널(v0.78)
   const c = $('cc-cam-overlay'); const f = clFit();
   if (!c) return;
   const r = c.getBoundingClientRect();
@@ -9479,6 +9508,8 @@ function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스
     if (clCorners.length === 4) { g.beginPath(); clCorners.forEach((pt, i) => { const q = P(pt); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); g.stroke(); }
     clCorners.forEach((pt, i) => { const q = P(pt); g.beginPath(); g.arc(q[0], q[1], 4, 0, Math.PI * 2); g.fill(); g.font = 'bold 11px sans-serif'; g.fillText(String(i + 1), q[0] + 6, q[1] - 6); });
   }
+  if (clTrail && Date.now() - clTrail.at < 4000) clDrawTrail(g, clTrail.pts, clTrail.bi, P, clTrail.at);
+  if (clLast && clOn) clDrawPanel(g, c.width, clShotPanelLines(clLast), clLast.call === 'IN' ? '#2ecc71' : clLast.call === 'OUT' ? '#ff6b6b' : '#f1c40f');
   if (clLast && Date.now() - clLast.at < 4000) {
     const q = P([clLast.px, clLast.py]);
     const col = clLast.call === 'IN' ? '#2ecc71' : clLast.call === 'OUT' ? '#e74c3c' : '#f1c40f';
@@ -9547,10 +9578,15 @@ function clDetect(tw, th, v) {
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
   const at = Date.now();
   const shot = clShotInfo(pts, bi, sx, sy, px, py); // 🌀 스핀·속도·코스·깊이 (v0.64, 참고치)
-  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0 };
+  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot };
+  clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
+  [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
+  const trailN = pts.map(p => [Math.round(p.x * sx / v.videoWidth * 1000) / 1000, Math.round(p.y * sy / v.videoHeight * 1000) / 1000]); // 뷰어용 정규화 좌표
+  const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
+  const trail = trailN.filter((_, i) => i % trailStep === 0 || i === bi || i === trailN.length - 1);
   clDraw();
   clStatus((vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
   clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
@@ -9563,13 +9599,18 @@ function clShotInfo(pts, bi, sx, sy, px, py) {
   try {
     const sp = aiSpin(pts, bi); if (sp) out.spin = sp.label;
     if (!clH) return out;
-    const a = pts[Math.max(0, bi - 2)], b = pts[bi];
-    const dt = b.t - a.t;
-    if (dt > 0.02) {
+    // 공이 떠 있는 점을 지면 좌표로 사상하면 거리가 부풀어 200km/h가 나옴 → 지면에 가장 가까운 구간만: 바운스 직전 1구간 + 직후 2구간의 중앙값, 15~170km/h 밖이면 표시 안 함
+    const pairKmh = (a, b) => { const dt = b.t - a.t; if (dt < 0.015) return null; const m1 = aiMapPt(clH, a.x * sx, a.y * sy), m2 = aiMapPt(clH, b.x * sx, b.y * sy); return Math.hypot(m2[0] - m1[0], m2[1] - m1[1]) / dt * 3.6; };
+    const spd = [pairKmh(pts[bi - 1], pts[bi]), pts[bi + 1] ? pairKmh(pts[bi], pts[bi + 1]) : null, pts[bi + 2] ? pairKmh(pts[bi + 1], pts[bi + 2]) : null].filter(v => v != null && v > 0).sort((a, b) => a - b);
+    if (spd.length >= 2) {
+      let med = spd[Math.floor(spd.length / 2)];
+      if (spd[spd.length - 1] > spd[0] * 2.5) med = (spd[0] + spd[1]) / 2; // 구간끼리 너무 다르면 작은 쪽 (부풀린 값 배제)
+      if (med >= 15 && med <= 170) out.kmh = Math.round(med);
+    }
+    const seg = pts.slice(Math.max(0, bi - 3), bi + 1);
+    if (seg.length >= 2) {
+      const a = seg[0], b = seg[seg.length - 1];
       const m1 = aiMapPt(clH, a.x * sx, a.y * sy), m2 = aiMapPt(clH, b.x * sx, b.y * sy);
-      const dist = Math.hypot(m2[0] - m1[0], m2[1] - m1[1]);
-      const kmh = dist / dt * 3.6;
-      if (kmh >= 15 && kmh <= 250) out.kmh = Math.round(kmh);
       const dxC = Math.abs(m2[0] - m1[0]), dyC = Math.abs(m2[1] - m1[1]);
       if (dxC + dyC > 0.3) out.course = (Math.atan2(dxC, dyC) * 180 / Math.PI) > 20 ? '크로스' : '스트레이트';
     }
@@ -9597,7 +9638,8 @@ function cvCall(p, slot) {
   const call = p.call === 'IN' ? 'IN' : p.call === 'OUT' ? 'OUT' : null;
   const SPINS = ['탑스핀성', '슬라이스성', '플랫성'], COURSES = ['크로스', '스트레이트'], DEPTHS = ['깊음', '중간', '짧음'];
   cvCalls.unshift({ at: Number(p.at) || Date.now(), call, distCm: Number.isFinite(p.distCm) ? Math.round(p.distCm) : null, close: !!p.close, singles: !!p.singles, n: Number(p.n) || 0,
-    spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh > 0 && p.kmh < 300 ? Math.round(p.kmh) : null,
+    spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh >= 15 && p.kmh <= 170 ? Math.round(p.kmh) : null,
+    trail: Array.isArray(p.trail) ? p.trail.slice(0, 40).filter(q => Array.isArray(q) && q.length === 2 && q.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) : [],
     course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
     slot, cy: Number.isFinite(p.cy) ? p.cy : null, alt: null, conflict: false });
   // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
@@ -9616,6 +9658,11 @@ function cvCall(p, slot) {
     }
   }
   cvCalls = cvCalls.slice(0, 30);
+  if (slot === 'A' && cvCalls[0] && cvCalls[0].trail && cvCalls[0].trail.length >= 2) { // v0.78 꼬리
+    const bi = Number.isInteger(p.bi) && p.bi >= 0 && p.bi < cvCalls[0].trail.length ? p.bi : null;
+    cvTrail = { at: Date.now(), pts: cvCalls[0].trail, bi };
+    [0, 900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { cvDrawOverlay(); } catch (e) {} }, ms));
+  }
   cvRenderCalls();
   if (call && p.close) toast((call === 'IN' ? '🟢 IN' : '🔴 OUT') + '? 아슬아슬 — 캠이 클립을 올리는 중이면 곧 판독 센터에 열려요');
 }
@@ -9647,10 +9694,21 @@ function cvRenderCalls() {
     }
   }
 }
+let cvTrail = null; // v0.78: A캠 마지막 샷 꼬리 {at, pts(정규화), bi}
+function cvDrawOverlay() { // 라이브 썸네일 위: 꼬리(4초) + 구질 패널(다음 판정까지)
+  const c = $('cc-live-ov'), img = $('cc-live'); if (!c || !img) return;
+  const W = Math.max(1, Math.round(img.clientWidth)), H = Math.max(1, Math.round(img.clientHeight));
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const g = c.getContext('2d'); g.clearRect(0, 0, W, H);
+  if (!cvChan) return;
+  if (cvTrail && Date.now() - cvTrail.at < 4000) clDrawTrail(g, cvTrail.pts, cvTrail.bi, q => [q[0] * W, q[1] * H], cvTrail.at);
+  const c0 = cvCalls.find(x => x.slot === 'A') || cvCalls[0];
+  if (c0) clDrawPanel(g, W, clShotPanelLines(c0), c0.call === 'IN' ? '#2ecc71' : c0.call === 'OUT' ? '#ff6b6b' : '#f1c40f');
+}
 function cvFrame(p) {
   if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
   cvLastFrame = Date.now(); cvHelloN = 0;
-  const img = $('cc-live'); if (img) img.src = p.d;
+  const img = $('cc-live'); if (img) { img.onload = () => { try { cvDrawOverlay(); } catch (e) {} }; img.src = p.d; }
   const st = $('cc-view-status');
   if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
 }
