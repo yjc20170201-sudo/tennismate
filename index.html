@@ -844,6 +844,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-club">
     <div class="section-title">내 클럽</div>
     <div id="my-club-area"></div>
+    <div class="section-title">지금 진행 중인 경기</div>
+    <div id="club-live-boards" data-hide-empty="1"></div>
     <div class="section-title">클럽 래더 리그</div>
     <div id="ladder-area" data-hide-empty="1"></div>
     <div class="section-title">정기 모임</div>
@@ -891,7 +893,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <textarea id="namecfg-map" rows="4" style="width:100%;font-size:13px;box-sizing:border-box" placeholder="럭키=정철&#10;알카=도희" oninput="nameCfgEdit()"></textarea>
       <div class="muted" id="namecfg-status" style="font-size:12px;margin-top:4px"></div>
     </div>
-    <div class="section-title" id="kdk-sec" style="margin-top:14px">클럽 미니게임 — 개인전 (KDK)</div>
+    <label class="muted" style="display:flex;align-items:center;gap:8px;font-size:12.5px;margin-top:14px;cursor:pointer"><input type="checkbox" id="board-share" checked onchange="boardShareSet(this.checked)"> 내가 진행하는 미니게임 대진표·점수를 <b>클럽 회원에게 실시간 공유</b> (회원은 클럽 탭 맨 위에서 봄)</label>
+    <div class="section-title" id="kdk-sec" style="margin-top:8px">클럽 미니게임 — 개인전 (KDK)</div>
     <div class="muted" style="margin:-4px 0 8px;font-size:12px">번호 뽑고 정해진 조합으로 파트너를 바꿔가며 4게임씩 — 서부테니스장 보드의 대진표 그대로예요. 승 → 득실차 → 득점 순으로 개인 순위!</div>
     <div id="kdk-area"></div>
     <div class="section-title" style="margin-top:14px">클럽 미니게임 — 청백전</div>
@@ -1974,7 +1977,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.93';
+const APP_VERSION = 'v0.94';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2767,6 +2770,7 @@ async function svLoadClubs() { // 실전 모드: 서버 클럽으로 교체 (전
       if (myUid && rows.some(m => m.user_id === myUid)) myClubId = lid;
     });
     try { renderClubs(); renderMap(); renderHome(); } catch (e) {}
+    try { boardsInit(); } catch (e) {} // v0.94 진행 중 경기 보기
   } catch (e) { /* 실패 시 기존 목록 유지 */ }
 }
 async function svCreateClub() {
@@ -6115,7 +6119,7 @@ function kdkLabel(i) { return KDK_NUM[i]; }
 function renderKdk() {
   const el = $('kdk-area');
   if (!el) return;
-  if (!kdk) { // 참가자 선택 화면
+  if (!kdk) { boardPublish('kdk'); // 참가자 선택 화면 (진행 중이던 보드는 끝난 것으로)
     const all = rosterNames();
     kdkOrder = [realName(ME.name)]; // 체크하는 순서 = 번호 (제비뽑기 순서대로 체크!)
     el.innerHTML = `<div class="card">
@@ -6167,6 +6171,7 @@ function renderKdk() {
     st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${kdkLabel(r.idx)} ${r.name}</td><td>${r.w}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
   `</tbody></table>
   <div class="muted" style="font-size:11.5px;margin-top:6px">순위 기준: 승 → 득실차 → 득점 (보드 방식 그대로)</div></div>`;
+  boardPublish('kdk');
 }
 let kdkOrder = []; // 체크 순서 = 번호 순서
 function kdkToggle(cb) {
@@ -6254,7 +6259,7 @@ let cw = null; // { stage:'team'|'play', blue:[], white:[], games:[{bp:[n,n], wp
 function renderCw() {
   const el = $('cw-area');
   if (!el) return;
-  if (!cw) { // 참가자 선택
+  if (!cw) { boardPublish('cw'); // 참가자 선택
     const all = rosterNames();
     el.innerHTML = `<div class="card">
       <div class="muted" style="margin-bottom:6px">참가자 선택 (4명 이상) — 선택 순서대로 청·백 번갈아 배정돼요 (나중에 옮길 수 있어요)</div>
@@ -6316,6 +6321,7 @@ function renderCw() {
     </div>`;
   }).join('') +
   `<button class="btn small outline full" style="margin-top:4px" onclick="cwAddGame()">+ 게임 추가 (🔵 두 명 vs ⚪ 두 명)</button>`;
+  boardPublish('cw');
 }
 function cwAdd() {
   const inp = $('cw-add');
@@ -6417,7 +6423,7 @@ let ss = null; // { names: [], games: [{p1, p2, s1, s2}] }
 function renderSs() {
   const el = $('ss-area');
   if (!el) return;
-  if (!ss) {
+  if (!ss) { boardPublish('ss');
     const all = rosterNames();
     el.innerHTML = `<div class="card">
       <div class="muted" style="margin-bottom:6px">참가자 선택 (2명 이상)</div>
@@ -6461,6 +6467,7 @@ function renderSs() {
     <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th><th>득실</th></tr></thead><tbody>` +
     st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${r.name}</td><td>${r.w}</td><td>${r.l}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
   `</tbody></table></div>` : '');
+  boardPublish('ss');
 }
 function ssAdd() {
   const inp = $('ss-add');
@@ -6545,6 +6552,120 @@ function clubCamOpen() {
   toast('📹 촬영 모드를 켜두세요 — 시비 나면 ✂️ 방금 장면 저장 → 🚨 판독!');
 }
 let svKdkEvents = []; // 서버에 저장된 개인전 기록
+// ── v0.94 진행 중 보드 공유 (club_boards) ──
+let boardShare = true; try { boardShare = localStorage.getItem('tm-board-share') !== '0'; } catch (e) {}
+function boardShareSet(on) { boardShare = !!on; try { localStorage.setItem('tm-board-share', boardShare ? '1' : '0'); } catch (e) {} if (boardShare) ['kdk', 'cw', 'ss'].forEach(k => boardPublish(k)); }
+document.addEventListener('DOMContentLoaded', () => { const c = $('board-share'); if (c) c.checked = boardShare; });
+const boardIds = {}; try { Object.assign(boardIds, JSON.parse(localStorage.getItem('tm-board-ids') || '{}')); } catch (e) {}
+const boardTimers = {};
+function boardStateOf(kind) { return kind === 'kdk' ? kdk : kind === 'cw' ? cw : ss; }
+function boardTitleOf(kind, st) {
+  if (kind === 'kdk') return 'KDK 개인전 ' + st.names.length + '명';
+  if (kind === 'cw') return '청백전 청 ' + st.blue.length + ' vs 백 ' + st.white.length;
+  return '단식 대전 ' + st.names.length + '명';
+}
+function boardPublish(kind) { // 렌더마다 호출 — 1.2초 뒤 한 번만 서버에 씀
+  clearTimeout(boardTimers[kind]);
+  boardTimers[kind] = setTimeout(() => boardPublishNow(kind).catch(() => {}), 1200);
+}
+async function boardPublishNow(kind) {
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  const club = (typeof myClub === 'function' && myClub() && myClub().name) || '';
+  if (!club) return;
+  const st = boardStateOf(kind);
+  const active = st && (kind !== 'cw' || st.stage === 'play');
+  const sv = svClient();
+  if (!active) { // 초기화·저장 완료 → 끝난 것으로
+    if (boardIds[kind]) { try { await sv.from('club_boards').update({ status: 'done', updated_at: new Date().toISOString() }).eq('id', boardIds[kind]); } catch (e) {} delete boardIds[kind]; try { localStorage.setItem('tm-board-ids', JSON.stringify(boardIds)); } catch (e) {} }
+    return;
+  }
+  if (!boardShare) return;
+  const row = { club, kind, title: boardTitleOf(kind, st), state: st, status: 'live', host: kdkMyUid(), host_name: realName(ME.name), updated_at: new Date().toISOString() };
+  try {
+    if (boardIds[kind]) {
+      const { error } = await sv.from('club_boards').update(row).eq('id', boardIds[kind]);
+      if (!error) return;
+      delete boardIds[kind]; // 지워졌거나 권한 없음 → 새로
+    }
+    const { data, error } = await sv.from('club_boards').insert(row).select('id').single();
+    if (error) throw error;
+    boardIds[kind] = data.id; try { localStorage.setItem('tm-board-ids', JSON.stringify(boardIds)); } catch (e) {}
+  } catch (e) { /* 공유 실패는 진행에 영향 없음 */ }
+}
+// ── 회원: 보기 ──
+let boardsChan = null, boardsTimer = null, boardsList = [];
+async function boardsInit() { // 로그인·클럽 로드 뒤
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  const club = (typeof myClub === 'function' && myClub() && myClub().name) || '';
+  if (!club) return;
+  await boardsLoad();
+  try {
+    if (boardsChan) { try { await boardsChan.unsubscribe(); } catch (e) {} boardsChan = null; }
+    boardsChan = svClient().channel('boards:' + club)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'club_boards', filter: 'club=eq.' + club }, () => boardsLoad())
+      .subscribe();
+  } catch (e) {}
+  if (boardsTimer) clearInterval(boardsTimer);
+  boardsTimer = setInterval(() => { if (document.visibilityState === 'visible') boardsLoad(); }, 30000);
+}
+async function boardsLoad() {
+  if (typeof svLogged !== 'function' || !svLogged()) return;
+  const club = (typeof myClub === 'function' && myClub() && myClub().name) || '';
+  if (!club) return;
+  try {
+    const since = new Date(Date.now() - 12 * 3600 * 1000).toISOString();
+    const { data, error } = await svClient().from('club_boards').select('id, kind, title, state, status, host, host_name, updated_at')
+      .eq('club', club).eq('status', 'live').gte('updated_at', since).order('updated_at', { ascending: false }).limit(6);
+    if (error) throw error;
+    boardsList = (data || []).filter(b => b && b.state && typeof b.state === 'object');
+    boardsRender();
+  } catch (e) { /* 보조 기능 */ }
+}
+function boardsRender() {
+  const el = $('club-live-boards'); if (!el) return;
+  const me = kdkMyUid();
+  const list = boardsList.filter(b => b.host !== me); // 내 보드는 아래 미니게임 카드에서 편집 중
+  if (!list.length) { el.innerHTML = ''; try { uiTidy(); } catch (e) {} return; }
+  const ago = t => { const m = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000)); return m < 1 ? '방금' : m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전'; };
+  el.innerHTML = list.map(b => {
+    let body = '';
+    try {
+      if (b.kind === 'kdk') body = boardHtmlKdk(b.state);
+      else if (b.kind === 'cw') body = boardHtmlCw(b.state);
+      else body = boardHtmlSs(b.state);
+    } catch (e) { body = '<div class="muted">표시 오류</div>'; }
+    return `<div class="card" style="border-left:3px solid var(--court, #1b7a43)">
+      <div class="row"><b>🟢 ${esc(b.title)}</b><span class="muted" style="font-size:12px">진행: ${esc(b.host_name || '')} · ${ago(b.updated_at)}</span></div>
+      ${body}
+    </div>`;
+  }).join('');
+}
+function boardHtmlKdk(st) {
+  const names = (st.names || []).map(String), games = st.games || [];
+  const rows = names.map((name, idx) => ({ name, idx, w: 0, p: 0, gf: 0, ga: 0 }));
+  games.forEach(g => { if (g.sa == null || g.sb == null) return; const aw = g.sa > g.sb; (g.a || []).forEach(i => { if (rows[i]) { rows[i].gf += g.sa; rows[i].ga += g.sb; rows[i].p++; if (aw) rows[i].w++; } }); (g.b || []).forEach(i => { if (rows[i]) { rows[i].gf += g.sb; rows[i].ga += g.sa; rows[i].p++; if (!aw) rows[i].w++; } }); });
+  rows.sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  const done = games.filter(g => g.sa != null).length;
+  return `<div class="muted" style="font-size:12px;margin:4px 0">${names.map((n, i) => esc(kdkLabel(i)) + '=' + esc(n)).join(' · ')}</div>
+    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sa != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.a || []).map(i => esc(names[i])).join('·')} <span class="muted">vs</span> ${(g.b || []).map(i => esc(names[i])).join('·')}</span><b>${g.sa != null ? g.sa + ' : ' + g.sb : '—'}</b></div>`).join('')}</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">${done}/${games.length}게임 완료</div>
+    <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>득실</th></tr></thead><tbody>${rows.map((r, i) => `<tr style="${r.name === realName(ME.name) ? 'background:rgba(47,158,95,.12)' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(kdkLabel(r.idx))} ${esc(r.name)}</td><td>${r.w}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('')}</tbody></table>`;
+}
+function boardHtmlCw(st) {
+  const games = st.games || []; let bw = 0, ww = 0;
+  games.forEach(g => { if (g.sb == null) return; if (g.sb > g.sw) bw++; else ww++; });
+  return `<div style="font-size:12.5px;margin:4px 0"><b style="color:#2b6cb0">🔵 청</b> ${(st.blue || []).map(esc).join(', ')}<br><b>⚪ 백</b> ${(st.white || []).map(esc).join(', ')}</div>
+    <div style="font-size:14px;margin:4px 0"><b>청 ${bw} : ${ww} 백</b> <span class="muted" style="font-size:12px">(게임 승수)</span></div>
+    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sb != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.bp || []).filter(Boolean).map(esc).join('·') || '?'} <span class="muted">vs</span> ${(g.wp || []).filter(Boolean).map(esc).join('·') || '?'}</span><b>${g.sb != null ? g.sb + ' : ' + g.sw : '—'}</b></div>`).join('')}</div>`;
+}
+function boardHtmlSs(st) {
+  const games = st.games || []; const stat = {};
+  (st.names || []).forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
+  games.forEach(g => { if (g.s1 == null || !g.p1 || !g.p2 || !stat[g.p1] || !stat[g.p2]) return; stat[g.p1].gf += g.s1; stat[g.p1].ga += g.s2; stat[g.p2].gf += g.s2; stat[g.p2].ga += g.s1; if (g.s1 > g.s2) { stat[g.p1].w++; stat[g.p2].l++; } else { stat[g.p2].w++; stat[g.p1].l++; } });
+  const rows = Object.values(stat).sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+  return `<div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.s1 != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${esc(g.p1 || '?')} <span class="muted">vs</span> ${esc(g.p2 || '?')}</span><b>${g.s1 != null ? g.s1 + ' : ' + g.s2 : '—'}</b></div>`).join('')}</div>
+    ${rows.some(r => r.w + r.l > 0) ? `<table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td style="text-align:left">${esc(r.name)}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join('')}</tbody></table>` : ''}`;
+}
 function kdkMyUid() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
 async function kdkSaveServer() { // ☁️ 완료된 개인전을 서버에 저장 → 클럽 멤버 전원에게 보임
   if (!kdk) return;
