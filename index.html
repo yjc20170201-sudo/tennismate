@@ -1974,7 +1974,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.87';
+const APP_VERSION = 'v0.88';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8062,8 +8062,10 @@ function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx$/i.test(v) ? v : 'wasb
 document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
 async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델). v0.87: 모델 선택
   if (!window.WASB) {
-    await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js'; sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패')); document.head.appendChild(sc); });
+    await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js?v=' + encodeURIComponent(APP_VERSION); sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패')); document.head.appendChild(sc); });
   }
+  if (typeof WASB.resetStats !== 'function') throw new Error('구버전 wasb.js가 캐시돼 있어요 — 앱을 완전히 닫았다 다시 열어 주세요');
+  aiStatus('🎯 모델 내려받는 중… (' + aiModelFile.replace('.onnx', '') + ')');
   await WASB.load('', t => aiStatus('🎯 ' + t), aiModelFile);
   WASB.resetStats(); aiDeepFrames = 0;
   return true;
@@ -8365,7 +8367,7 @@ function aiFinish(t0, t1) {
     res.innerHTML = ''; aiDraw(); return;
   }
   const bi = aiBounceIdx(aiTraj.map(p => p.y));
-  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + WASB.model.replace('.onnx', '') + ' · ' + WASB.backend + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
+  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + String(WASB.model || 'wasb').replace('.onnx', '') + ' · ' + WASB.backend + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs || 0) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
   let say = '';
   if (bi < 0) {
     const flying = aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.35;
