@@ -3,7 +3,7 @@
 window.WASB = (function () {
   const W = 512, H = 288, MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
   const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-  let session = null, backend = null, loading = null, modelFile = 'wasb_tennis.onnx'; // v0.87: 모델 파일 선택 + 추론 시간 통계
+  let session = null, backend = null, loading = null, modelFile = 'wasb_tennis.onnx', batchOK = false; // v0.87: 모델 파일 선택 + 추론 시간 통계 / v0.92: 배치 자가 검증
   const stats = { n: 0, ms: 0 };
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const cx = cv.getContext('2d', { willReadFrequently: true });
@@ -30,8 +30,21 @@ window.WASB = (function () {
           backend = eps[0]; return s;
         } catch (e) { console.warn("WASB EP " + eps[0] + " 실패:", e && e.message || e); return null; }
       };
-      session = epPref === 'wasm' ? await tryEP(['wasm']) : ((gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']) || await tryEP(['wasm']));
-      if (!session) throw new Error('onnxruntime 세션 생성 실패');
+      // v0.92: 자가 검증 — GPU 백엔드 출력을 wasm 기준과 비교(틀리면 wasm), 배치(2묶음) 출력이 단일과 같아야 배치 사용 (폴드3 WebGPU가 배치에서 빈 결과)
+      const plane = W * H; const probe = new Float32Array(9 * plane); let seed = 12345; for (let i = 0; i < probe.length; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; probe[i] = (seed / 0x7fffffff) * 2 - 1; }
+      const runOn = async (s, nb) => { const inp = new Float32Array(nb * 9 * plane); for (let b = 0; b < nb; b++) inp.set(probe, b * 9 * plane); const o = await s.run({ frames: new ort.Tensor('float32', inp, [nb, 9, H, W]) }); return o.heatmaps.data; };
+      const maxDiff = (a, b, n) => { let m = 0; for (let i = 0; i < n; i += 7) { const d = Math.abs(a[i] - b[i]); if (d > m) m = d; } return m; };
+      const wasmS = await tryEP(['wasm']); if (!wasmS) throw new Error('onnxruntime 세션 생성 실패');
+      const ref = await runOn(wasmS, 1);
+      let chosen = wasmS; backend = 'wasm';
+      if (epPref !== 'wasm') {
+        const gpuS = (gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']);
+        if (gpuS) { try { const out1 = await runOn(gpuS, 1); const d1 = maxDiff(out1, ref, 3 * plane); if (out1.length === 3 * plane && d1 < 0.05) { chosen = gpuS; } else console.warn('WASB ' + backend + ' 단일 출력이 wasm과 다름(diff ' + d1.toFixed(3) + ') → wasm 사용'); } catch (e) { console.warn('WASB GPU 검증 실패:', e && e.message || e); } }
+        if (chosen === wasmS) backend = 'wasm';
+      }
+      session = chosen;
+      try { const out2 = await runOn(session, 2); batchOK = out2.length === 6 * plane && maxDiff(out2, ref, 3 * plane) < 0.05 && maxDiff(out2.subarray(3 * plane), ref, 3 * plane) < 0.05; } catch (e) { batchOK = false; }
+      if (!batchOK) console.warn('WASB 배치 미사용 (' + backend + ')');
       stats.n = 0; stats.ms = 0;
       if (onStatus) onStatus('모델 준비 완료 (' + modelFile.replace('.onnx', '') + ' · ' + backend + ')');
       return session;
@@ -56,6 +69,7 @@ window.WASB = (function () {
     const plane0 = W * H;
     let hm;
     try {
+      if (nb > 1 && !batchOK) throw new Error('batch disabled');
       const arr = new Float32Array(nb * 9 * plane0);
       sources.slice(0, nb * 3).forEach((s, i) => frameToArray(s, arr.subarray(Math.floor(i / 3) * 9 * plane0, (Math.floor(i / 3) + 1) * 9 * plane0), i % 3));
       const tRun = performance.now();
@@ -90,5 +104,5 @@ window.WASB = (function () {
     }
     return opts.all ? res : res[res.length - 1];
   }
-  return { load, detectFrames, get backend() { return backend; }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
+  return { load, detectFrames, get backend() { return backend; }, get batchOK() { return batchOK; }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
 })();
