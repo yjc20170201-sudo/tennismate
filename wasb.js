@@ -47,22 +47,31 @@ window.WASB = (function () {
       for (let i = 0, p = c; i < plane; i++, p += 4) out[o + i] = (d[p] / 255 - m) / s;
     }
   }
-  // sources: [f(t-2), f(t-1), f(t)] 드로어블 3개 → 마지막 프레임 공 위치 {x, y, conf} (원본 좌표) | null. all=true면 3프레임 결과 배열
+  // sources: 드로어블 3k개(3프레임 묶음 k개, v0.90 배치) → all=true면 프레임별 결과 배열(길이 3k), 아니면 마지막 프레임 결과. 모델이 고정 배치(1)면 묶음마다 따로 실행
   async function detectFrames(sources, vw, vh, opts) {
     opts = opts || {};
     const thr = opts.thr || 0.5;
     if (!session) await load(opts.base);
-    const arr = new Float32Array(9 * W * H);
-    sources.forEach((s, k) => frameToArray(s, arr, k));
-    const input = new ort.Tensor('float32', arr, [1, 9, H, W]);
-    const tRun = performance.now();
-    const out = await session.run({ frames: input });
-    stats.n++; stats.ms += performance.now() - tRun;
-    const hm = out.heatmaps.data; // [3,H,W]
+    const nb = Math.max(1, Math.floor(sources.length / 3));
+    const plane0 = W * H;
+    let hm;
+    try {
+      const arr = new Float32Array(nb * 9 * plane0);
+      sources.slice(0, nb * 3).forEach((s, i) => frameToArray(s, arr.subarray(Math.floor(i / 3) * 9 * plane0, (Math.floor(i / 3) + 1) * 9 * plane0), i % 3));
+      const tRun = performance.now();
+      const out = await session.run({ frames: new ort.Tensor('float32', arr, [nb, 9, H, W]) });
+      stats.n += nb; stats.ms += performance.now() - tRun;
+      hm = out.heatmaps.data; // [nb*3,H,W]
+    } catch (e) { // 고정 배치 모델(WASB): 묶음마다 따로
+      if (nb === 1) throw e;
+      const parts = [];
+      for (let b = 0; b < nb; b++) { const arr = new Float32Array(9 * plane0); sources.slice(b * 3, b * 3 + 3).forEach((s, k) => frameToArray(s, arr, k)); const tRun = performance.now(); const out = await session.run({ frames: new ort.Tensor('float32', arr, [1, 9, H, W]) }); stats.n++; stats.ms += performance.now() - tRun; parts.push(out.heatmaps.data); }
+      hm = new Float32Array(nb * 3 * plane0); parts.forEach((p, b) => hm.set(p, b * 3 * plane0));
+    }
     const plane = W * H, sx = vw / W, sy = vh / H;
     const res = [];
     const K = opts.topk || 3; // 프레임당 후보 최대 3개 (바닥에 놓인 공·오탐과 진짜 공을 앱에서 움직임으로 가림, v0.81)
-    for (let k = 0; k < 3; k++) {
+    for (let k = 0; k < nb * 3; k++) {
       const o = k * plane; const cands = [];
       const h2 = hm.subarray(o, o + plane); const taken = new Uint8Array(plane);
       for (let c = 0; c < K; c++) {
@@ -78,7 +87,7 @@ window.WASB = (function () {
       }
       res.push(cands.length ? Object.assign({}, cands[0], { cands }) : null);
     }
-    return opts.all ? res : res[2];
+    return opts.all ? res : res[res.length - 1];
   }
   return { load, detectFrames, get backend() { return backend; }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
 })();
