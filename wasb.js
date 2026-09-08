@@ -11,8 +11,10 @@ window.WASB = (function () {
   function loadScript(src) {
     return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('스크립트 로드 실패: ' + src)); document.head.appendChild(s); });
   }
-  async function load(base, onStatus, file) {
-    if (file && file !== modelFile) { modelFile = file; session = null; backend = null; }
+  let epPref = 'auto';
+  async function load(base, onStatus, file, ep) { // ep: auto | wasm (v0.89 백엔드 강제)
+    ep = ep || 'auto';
+    if ((file && file !== modelFile) || ep !== epPref) { modelFile = file || modelFile; epPref = ep; session = null; backend = null; }
     if (session) return session;
     if (loading) return loading;
     loading = (async () => {
@@ -28,7 +30,7 @@ window.WASB = (function () {
           backend = eps[0]; return s;
         } catch (e) { return null; }
       };
-      session = (gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']) || await tryEP(['wasm']);
+      session = epPref === 'wasm' ? await tryEP(['wasm']) : ((gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']) || await tryEP(['wasm']));
       if (!session) throw new Error('onnxruntime 세션 생성 실패');
       stats.n = 0; stats.ms = 0;
       if (onStatus) onStatus('모델 준비 완료 (' + modelFile.replace('.onnx', '') + ' · ' + backend + ')');

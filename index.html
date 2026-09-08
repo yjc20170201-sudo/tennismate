@@ -1065,7 +1065,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (WASB 테니스 모델 · 첫 실행 5MB)</button>
-        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="wasb_tennis.onnx">WASB 테니스 — 정확 (5MB)</option><option value="ball_tiny_xl_v1.onnx">소형 v1 — 빠름·실험 (0.8MB, 우리 영상 학습)</option></select></div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="wasb_tennis.onnx">WASB 테니스 — 정확 (5MB)</option><option value="ball_tiny_xl_v1.onnx">소형 v1 — 빠름·실험 (0.8MB, 우리 영상 학습)</option><option value="ball_tiny_xl_v1.onnx|wasm">소형 v1 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
         <div class="muted" style="font-size:11px;margin-top:3px">WASB-SBDT (NTT Communications, MIT) — 실코트 검증(2026-09-07). 소형 v1 = WASB를 선생님으로 우리 영상 7분 학습(재현율 94%·정밀도 89%). 실패 시 TrackNet으로 대체</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
@@ -1974,7 +1974,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.88';
+const APP_VERSION = 'v0.89';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8058,15 +8058,16 @@ async function aiAnalyze() {
   }
 }
 let aiModelFile = 'wasb_tennis.onnx'; try { aiModelFile = localStorage.getItem('tm-ball-model') || aiModelFile; } catch (e) {}
-function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
+function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx(\|wasm)?$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
 document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
 async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델). v0.87: 모델 선택
   if (!window.WASB) {
     await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js?v=' + encodeURIComponent(APP_VERSION); sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패')); document.head.appendChild(sc); });
   }
   if (typeof WASB.resetStats !== 'function') throw new Error('구버전 wasb.js가 캐시돼 있어요 — 앱을 완전히 닫았다 다시 열어 주세요');
-  aiStatus('🎯 모델 내려받는 중… (' + aiModelFile.replace('.onnx', '') + ')');
-  await WASB.load('', t => aiStatus('🎯 ' + t), aiModelFile);
+  const [mf, ep] = aiModelFile.split('|');
+  aiStatus('🎯 모델 내려받는 중… (' + mf.replace('.onnx', '') + (ep ? ' · ' + ep : '') + ')');
+  await WASB.load('', t => aiStatus('🎯 ' + t), mf, ep || 'auto');
   WASB.resetStats(); aiDeepFrames = 0;
   return true;
 }
@@ -8119,7 +8120,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
   const STEP = 1 / 30;
   const more = !!(opts.more && aiDeep.frames.length);
   const dur = v.duration || 1e9;
-  const t0 = more ? Math.min(dur, aiDeep.t1 + STEP) : Math.max(0, v.currentTime - 1.2);
+  let t0 = more ? Math.min(dur, aiDeep.t1 + STEP) : Math.max(0, v.currentTime - 1.5);
   let t1 = more ? Math.min(dur, t0 + 2.0) : Math.min(dur, v.currentTime + 0.8);
   const tMax = more ? Math.min(dur, t0 + 3.5) : Math.min(dur, v.currentTime + 3.3);
   aiTraj = [];
@@ -8133,7 +8134,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
   const crops = [];
   const tStart = performance.now();
   const frames = more ? aiDeep.frames : []; // frames: 후보 전부 (v0.81), 이어서면 기존 유지
-  const rebuild = () => { aiTraj = aiCleanTraj(aiTrackCands(frames, v.videoWidth), v.videoWidth); };
+  const rebuild = () => { frames.sort((p, q) => p.t - q.t); aiTraj = aiCleanTraj(aiTrackCands(frames, v.videoWidth), v.videoWidth); };
   // v0.86: 구간을 "재생하며" 프레임 받기 (rVFC). 없으면 seek 폴백
   const captureRange = async (tA, tB) => {
     const out = [];
@@ -8176,6 +8177,17 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
     const inFlight = aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.3;
     if (bi < 0 && inFlight && t1 < tMax && caps.length) { capT0 = t1 + STEP / 2; t1 = Math.min(tMax, t1 + 0.5); aiStatus('🎯 공이 아직 날아가는 중 — ' + t1.toFixed(1) + '초까지 더 봐요'); continue; }
     break;
+  }
+  // v0.89: 바운스 없고 구간 "시작"부터 공이 올라가는 중(= 정지 지점보다 앞에서 튐)이면 뒤로 0.8초씩 최대 2번
+  for (let backN = 0; !more && backN < 2 && t0 > 0.05; backN++) {
+    const bi = aiBounceIdx(aiTraj.map(p => p.y)); const head = aiTraj.slice(0, 4);
+    const risingAtStart = head.length === 4 && head[0].t < t0 + 0.35 && head[3].y < head[0].y - 2;
+    if (bi >= 0 || !risingAtStart) break;
+    const nt0 = Math.max(0, t0 - 0.8);
+    aiStatus('🎯 공이 이미 튄 뒤부터 보였어요 — ' + nt0.toFixed(1) + '초부터 다시 봐요');
+    const capsB = await captureRange(nt0, t0 - STEP / 2);
+    capsB.forEach(f => crops.push({ t: f.t, c: f.far })); aiDeepFrames += capsB.length;
+    await inferCaps(capsB); t0 = nt0; rebuild();
   }
   // v0.82: 궤적이 위쪽(먼 코트)이거나 거의 없으면 확대 크롭으로 2차 추론 → 후보 합치기
   const bi0 = aiBounceIdx(aiTraj.map(p => p.y)); const bounceY = bi0 >= 0 ? aiTraj[bi0].y : 0;
