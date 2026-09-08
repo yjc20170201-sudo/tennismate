@@ -22,13 +22,13 @@ window.WASB = (function () {
       if (!window.ort) await loadScript(ORT_BASE + (gpu ? 'ort.webgpu.min.js' : 'ort.min.js'));
       ort.env.wasm.wasmPaths = ORT_BASE;
       ort.env.wasm.numThreads = 1; // GitHub Pages는 COOP/COEP 헤더가 없어 멀티스레드 불가
-      const buf = await fetch((base || '') + modelFile).then(r => { if (!r.ok) throw new Error('모델 다운로드 실패 ' + r.status); return r.arrayBuffer(); });
+      const buf = await fetch((base || '') + modelFile + '?v=' + encodeURIComponent(typeof APP_VERSION !== 'undefined' ? APP_VERSION : Date.now())) /* v0.91: 모델 파일도 캐시 버스터 */.then(r => { if (!r.ok) throw new Error('모델 다운로드 실패 ' + r.status); return r.arrayBuffer(); });
       const tryEP = async eps => { // 세션 생성 + 워밍업 1회 (webgl은 생성은 되고 실행에서 미지원 연산이 터질 수 있음 → wasm으로 폴백)
         try {
           const s = await ort.InferenceSession.create(buf, { executionProviders: eps, graphOptimizationLevel: 'all' });
           await s.run({ frames: new ort.Tensor('float32', new Float32Array(9 * W * H), [1, 9, H, W]) });
           backend = eps[0]; return s;
-        } catch (e) { return null; }
+        } catch (e) { console.warn("WASB EP " + eps[0] + " 실패:", e && e.message || e); return null; }
       };
       session = epPref === 'wasm' ? await tryEP(['wasm']) : ((gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']) || await tryEP(['wasm']));
       if (!session) throw new Error('onnxruntime 세션 생성 실패');
@@ -62,7 +62,8 @@ window.WASB = (function () {
       const out = await session.run({ frames: new ort.Tensor('float32', arr, [nb, 9, H, W]) });
       stats.n += nb; stats.ms += performance.now() - tRun;
       hm = out.heatmaps.data; // [nb*3,H,W]
-    } catch (e) { // 고정 배치 모델(WASB): 묶음마다 따로
+      if (!hm || hm.length !== nb * 3 * plane0) throw new Error('batch output size mismatch ' + (hm ? hm.length : 0)); // 고정 배치 모델이 잘못된 크기를 내면 폴백
+    } catch (e) { // 고정 배치 모델(WASB) 또는 배치 실패: 묶음마다 따로
       if (nb === 1) throw e;
       const parts = [];
       for (let b = 0; b < nb; b++) { const arr = new Float32Array(9 * plane0); sources.slice(b * 3, b * 3 + 3).forEach((s, k) => frameToArray(s, arr, k)); const tRun = performance.now(); const out = await session.run({ frames: new ort.Tensor('float32', arr, [1, 9, H, W]) }); stats.n++; stats.ms += performance.now() - tRun; parts.push(out.heatmaps.data); }
