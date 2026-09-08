@@ -1065,7 +1065,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (WASB 테니스 모델 · 첫 실행 5MB)</button>
-        <div class="muted" style="font-size:11px;margin-top:3px">공 탐지 모델: WASB-SBDT (NTT Communications, MIT 라이선스) — 실코트 검증(2026-09-07). 실패 시 TrackNet으로 대체</div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="wasb_tennis.onnx">WASB 테니스 — 정확 (5MB)</option><option value="ball_tiny_xl_v1.onnx">소형 v1 — 빠름·실험 (0.8MB, 우리 영상 학습)</option></select></div>
+        <div class="muted" style="font-size:11px;margin-top:3px">WASB-SBDT (NTT Communications, MIT) — 실코트 검증(2026-09-07). 소형 v1 = WASB를 선생님으로 우리 영상 7분 학습(재현율 94%·정밀도 89%). 실패 시 TrackNet으로 대체</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
@@ -1973,7 +1974,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.86';
+const APP_VERSION = 'v0.87';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8056,11 +8057,15 @@ async function aiAnalyze() {
     aiBusy = false; $('ai-run-btn').disabled = false;
   }
 }
-async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델)
+let aiModelFile = 'wasb_tennis.onnx'; try { aiModelFile = localStorage.getItem('tm-ball-model') || aiModelFile; } catch (e) {}
+function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
+document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
+async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델). v0.87: 모델 선택
   if (!window.WASB) {
     await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js'; sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패')); document.head.appendChild(sc); });
   }
-  await WASB.load('', t => aiStatus('🎯 ' + t));
+  await WASB.load('', t => aiStatus('🎯 ' + t), aiModelFile);
+  WASB.resetStats(); aiDeepFrames = 0;
   return true;
 }
 function aiTrackCands(frames, vw) { // v0.81: frames [{t, cands:[{x,y,conf}]}] → 움직이는 공 궤적 [{t,x,y,s}]
@@ -8106,7 +8111,7 @@ function aiCleanTraj(traj, vw) { // v0.80: 시간순 점들을 "한 프레임에
   chains.sort((a, b) => b.length - a.length);
   return chains[0];
 }
-let aiDeep = { frames: [], t0: 0, t1: 0 }, aiDeepMs = 0; // v0.83: 이어서 분석용 (후보 프레임 보관)
+let aiDeep = { frames: [], t0: 0, t1: 0 }, aiDeepMs = 0, aiDeepFrames = 0; // v0.83: 이어서 분석용 (후보 프레임 보관)
 async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8초를 1/30초 간격으로 3프레임씩 → 공 위치 (원본 좌표). 공이 계속 날아가면 최대 +2.5초 자동 연장(v0.83), [2초 더 보기]로 이어서 가능
   opts = opts || {};
   const STEP = 1 / 30;
@@ -8135,7 +8140,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
       return out;
     }
     await seekTo(tA);
-    const wasMuted = v.muted, rate = v.playbackRate; v.muted = true; v.playbackRate = 1;
+    const wasMuted = v.muted, rate = v.playbackRate; v.muted = true; v.playbackRate = 0.5; // 0.5배속: 폰이 캔버스 2장 그리는 동안 프레임 안 놓치게 (v0.87)
     await new Promise(res => {
       let done = false; const finish = () => { if (done) return; done = true; try { v.pause(); } catch (e) {} res(); };
       const cb = (now, meta) => {
@@ -8145,7 +8150,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
       };
       v.requestVideoFrameCallback(cb);
       v.play().catch(() => finish());
-      setTimeout(finish, (tB - tA) * 1000 + 5000); // 안전 타임아웃
+      setTimeout(finish, (tB - tA) * 2000 + 5000); // 안전 타임아웃 (0.5배속 기준)
     });
     v.muted = wasMuted; v.playbackRate = rate;
     out.sort((p, q) => p.t - q.t);
@@ -8162,7 +8167,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
   let capT0 = t0;
   while (true) {
     const caps = await captureRange(capT0, t1);
-    caps.forEach(f => crops.push({ t: f.t, c: f.far }));
+    caps.forEach(f => crops.push({ t: f.t, c: f.far })); aiDeepFrames += caps.length;
     await inferCaps(caps);
     rebuild();
     const bi = aiBounceIdx(aiTraj.map(p => p.y));
@@ -8360,7 +8365,7 @@ function aiFinish(t0, t1) {
     res.innerHTML = ''; aiDraw(); return;
   }
   const bi = aiBounceIdx(aiTraj.map(p => p.y));
-  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + WASB.backend + ' ' + (aiDeepMs / 1000).toFixed(1) + '초' : ''}</div>`;
+  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + WASB.model.replace('.onnx', '') + ' · ' + WASB.backend + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
   let say = '';
   if (bi < 0) {
     const flying = aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.35;

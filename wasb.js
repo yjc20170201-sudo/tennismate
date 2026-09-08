@@ -3,14 +3,16 @@
 window.WASB = (function () {
   const W = 512, H = 288, MEAN = [0.485, 0.456, 0.406], STD = [0.229, 0.224, 0.225];
   const ORT_BASE = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
-  let session = null, backend = null, loading = null;
+  let session = null, backend = null, loading = null, modelFile = 'wasb_tennis.onnx'; // v0.87: 모델 파일 선택 + 추론 시간 통계
+  const stats = { n: 0, ms: 0 };
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const cx = cv.getContext('2d', { willReadFrequently: true });
 
   function loadScript(src) {
     return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('스크립트 로드 실패: ' + src)); document.head.appendChild(s); });
   }
-  async function load(base, onStatus) {
+  async function load(base, onStatus, file) {
+    if (file && file !== modelFile) { modelFile = file; session = null; backend = null; }
     if (session) return session;
     if (loading) return loading;
     loading = (async () => {
@@ -18,7 +20,7 @@ window.WASB = (function () {
       if (!window.ort) await loadScript(ORT_BASE + (gpu ? 'ort.webgpu.min.js' : 'ort.min.js'));
       ort.env.wasm.wasmPaths = ORT_BASE;
       ort.env.wasm.numThreads = 1; // GitHub Pages는 COOP/COEP 헤더가 없어 멀티스레드 불가
-      const buf = await fetch((base || '') + 'wasb_tennis.onnx').then(r => { if (!r.ok) throw new Error('모델 다운로드 실패 ' + r.status); return r.arrayBuffer(); });
+      const buf = await fetch((base || '') + modelFile).then(r => { if (!r.ok) throw new Error('모델 다운로드 실패 ' + r.status); return r.arrayBuffer(); });
       const tryEP = async eps => { // 세션 생성 + 워밍업 1회 (webgl은 생성은 되고 실행에서 미지원 연산이 터질 수 있음 → wasm으로 폴백)
         try {
           const s = await ort.InferenceSession.create(buf, { executionProviders: eps, graphOptimizationLevel: 'all' });
@@ -28,7 +30,8 @@ window.WASB = (function () {
       };
       session = (gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']) || await tryEP(['wasm']);
       if (!session) throw new Error('onnxruntime 세션 생성 실패');
-      if (onStatus) onStatus('모델 준비 완료 (' + backend + ')');
+      stats.n = 0; stats.ms = 0;
+      if (onStatus) onStatus('모델 준비 완료 (' + modelFile.replace('.onnx', '') + ' · ' + backend + ')');
       return session;
     })();
     try { return await loading; } finally { loading = null; }
@@ -50,7 +53,9 @@ window.WASB = (function () {
     const arr = new Float32Array(9 * W * H);
     sources.forEach((s, k) => frameToArray(s, arr, k));
     const input = new ort.Tensor('float32', arr, [1, 9, H, W]);
+    const tRun = performance.now();
     const out = await session.run({ frames: input });
+    stats.n++; stats.ms += performance.now() - tRun;
     const hm = out.heatmaps.data; // [3,H,W]
     const plane = W * H, sx = vw / W, sy = vh / H;
     const res = [];
@@ -73,5 +78,5 @@ window.WASB = (function () {
     }
     return opts.all ? res : res[2];
   }
-  return { load, detectFrames, get backend() { return backend; }, W, H };
+  return { load, detectFrames, get backend() { return backend; }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
 })();
