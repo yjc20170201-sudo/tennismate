@@ -1230,6 +1230,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
+            <div class="muted" style="font-size:11.5px;margin-top:4px">한 번에 옮기려면: [캠 영상 파일로 다운로드] → 파일 앱 › 다운로드 폴더 › 선택 › 전체 선택 › 공유 › "비디오 저장" — 사진 앨범으로 한 번에 들어가요. 그다음 USB로 PC에서 <b>아이폰_영상_가져오기</b> 실행.</div>
             <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="tag-btn" onclick="ccSaveAll()">캠 영상 파일로 다운로드 (파일 앱)</button><button type="button" class="tag-btn" onclick="ccShowLog()">저장·삭제 이력 보기</button></div>
             <pre id="cc-log" hidden class="muted" style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;max-height:220px;overflow:auto"></pre>
           </details>
@@ -1977,7 +1979,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.94';
+const APP_VERSION = 'v0.95';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9006,6 +9008,8 @@ function ccRenderGate() {
 }
 function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
 let ccVoiceOn = true; try { ccVoiceOn = localStorage.getItem('tm-cc-voice') !== '0'; } catch (e) {}
+function ccBatchSet(v) { try { localStorage.setItem('tm-cc-batch', String(parseInt(v, 10) || 0)); } catch (e) {} }
+document.addEventListener('DOMContentLoaded', () => { const b = $('cc-batch'); if (b) { try { const v = localStorage.getItem('tm-cc-batch'); if (v != null) b.value = v; } catch (e) {} } });
 function ccVoiceSet(on) { ccVoiceOn = !!on; try { localStorage.setItem('tm-cc-voice', ccVoiceOn ? '1' : '0'); } catch (e) {} if (ccVoiceOn) ccSay({ text: '콜 소리 켬' }); }
 let clAutoCall = true; try { clAutoCall = localStorage.getItem('tm-cl-autocall') !== '0'; } catch (e) {}
 function clAutoCallSet(on) { clAutoCall = !!on; try { localStorage.setItem('tm-cl-autocall', clAutoCall ? '1' : '0'); } catch (e) {} }
@@ -9522,8 +9526,9 @@ async function ccShareAll() { // 💾 캠 영상 내보내기 — 5개씩 공유
   const files = segs.map(seg => { const d = new Date(seg.at); const ext = seg.blob && seg.blob.type && seg.blob.type.includes('mp4') ? 'mp4' : 'webm'; return new File([seg.blob], '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.' + ext, { type: seg.blob.type || 'video/mp4' }); });
   const canShare = !!(navigator.share && navigator.canShare && navigator.canShare({ files: files.slice(0, 1) }));
   if (!canShare) { toast('이 폰은 공유 시트를 지원하지 않아 다운로드로 저장해요'); return ccSaveAll(); }
-  const BATCH = 5;
-  toast('📤 ' + files.length + '개를 ' + Math.ceil(files.length / BATCH) + '번에 나눠 공유해요 — "비디오 저장"(사진 앨범) 또는 드라이브를 고르세요');
+  let BATCH = 10; try { BATCH = parseInt(localStorage.getItem('tm-cc-batch') || '10', 10) || 10; } catch (e) {} // v0.95: 묶음 크기 선택 (0 = 전부)
+  if (BATCH <= 0 || BATCH > files.length) BATCH = files.length;
+  toast('📤 ' + files.length + '개를 ' + Math.ceil(files.length / BATCH) + '번에 나눠 공유해요 — "비디오 저장"(사진 앨범) 또는 드라이브를 고르세요' + (BATCH >= 20 ? ' (한 번에 많이 보내면 아이폰이 실패할 수 있어요 — 실패하면 묶음을 줄이세요)' : ''));
   for (let i = 0; i < files.length; i += BATCH) {
     const r = await ccExportFiles(files.slice(i, i + BATCH), '클럽캠 영상 ' + (i / BATCH + 1) + '/' + Math.ceil(files.length / BATCH));
     if (r === 'cancel') { toast('공유를 중단했어요 (' + i + '개까지 보냄)'); return; }
