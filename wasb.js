@@ -31,19 +31,23 @@ window.WASB = (function () {
         } catch (e) { console.warn("WASB EP " + eps[0] + " 실패:", e && e.message || e); return null; }
       };
       // v0.92: 자가 검증 — GPU 백엔드 출력을 wasm 기준과 비교(틀리면 wasm), 배치(2묶음) 출력이 단일과 같아야 배치 사용 (폴드3 WebGPU가 배치에서 빈 결과)
-      const plane = W * H; const probe = new Float32Array(9 * plane); let seed = 12345; for (let i = 0; i < probe.length; i++) { seed = (seed * 1103515245 + 12345) & 0x7fffffff; probe[i] = (seed / 0x7fffffff) * 2 - 1; }
-      const runOn = async (s, nb) => { const inp = new Float32Array(nb * 9 * plane); for (let b = 0; b < nb; b++) inp.set(probe, b * 9 * plane); const o = await s.run({ frames: new ort.Tensor('float32', inp, [nb, 9, H, W]) }); return o.heatmaps.data; };
-      const maxDiff = (a, b, n) => { let m = 0; for (let i = 0; i < n; i += 7) { const d = Math.abs(a[i] - b[i]); if (d > m) m = d; } return m; };
+      const plane = W * H;
+      // v1.01: 배치 검증은 서로 다른 입력이어야 의미 있음 — 밝은 공 하나가 다른 위치에 있는 합성 장면 2개 (같은 입력 2묶음은 첫 묶음 복제 버그를 못 잡음)
+      const mkProbe = (cxp, cyp) => { const p = new Float32Array(9 * plane); for (let k = 0; k < 9; k++) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const dx = x - cxp - (k % 3) * 4, dy = y - cyp; p[k * plane + y * W + x] = (dx * dx + dy * dy < 30) ? 2.2 : -0.6 + ((x * 7 + y * 13 + k * 3) % 11) / 40; } return p; };
+      const probeA = mkProbe(W * 0.3, H * 0.4), probeB = mkProbe(W * 0.7, H * 0.65);
+      const runOn = async (s, probes) => { const nb = probes.length; const inp = new Float32Array(nb * 9 * plane); probes.forEach((p, b) => inp.set(p, b * 9 * plane)); const o = await s.run({ frames: new ort.Tensor('float32', inp, [nb, 9, H, W]) }); return o.heatmaps.data; };
       const wasmS = await tryEP(['wasm']); if (!wasmS) throw new Error('onnxruntime 세션 생성 실패');
-      const ref = await runOn(wasmS, 1);
+      const ref = await runOn(wasmS, [probeA]); const refB = await runOn(wasmS, [probeB]);
+      const probesDiffer = maxDiff(ref, refB, 3 * plane) > 0.05; // 두 합성 장면의 출력이 실제로 다른가 (아니면 배치 검증이 무의미 → 실제 프레임 검증에 더 의존)
       let chosen = wasmS; backend = 'wasm';
       if (epPref !== 'wasm') {
         const gpuS = (gpu ? await tryEP(['webgpu']) : null) || await tryEP(['webgl']);
-        if (gpuS) { try { const out1 = await runOn(gpuS, 1); const d1 = maxDiff(out1, ref, 3 * plane); if (out1.length === 3 * plane && d1 < 0.05) { chosen = gpuS; } else console.warn('WASB ' + backend + ' 단일 출력이 wasm과 다름(diff ' + d1.toFixed(3) + ') → wasm 사용'); } catch (e) { console.warn('WASB GPU 검증 실패:', e && e.message || e); } }
+        if (gpuS) { try { const out1 = await runOn(gpuS, [probeA]); const d1 = maxDiff(out1, ref, 3 * plane); if (out1.length === 3 * plane && d1 < 0.05) { chosen = gpuS; } else console.warn('WASB ' + backend + ' 단일 출력이 wasm과 다름(diff ' + d1.toFixed(3) + ') → wasm 사용'); } catch (e) { console.warn('WASB GPU 검증 실패:', e && e.message || e); } }
         if (chosen === wasmS) backend = 'wasm';
       }
       session = chosen;
-      try { const out2 = await runOn(session, 2); batchOK = out2.length === 6 * plane && maxDiff(out2, ref, 3 * plane) < 0.05 && maxDiff(out2.subarray(3 * plane), ref, 3 * plane) < 0.05; } catch (e) { batchOK = false; }
+      try { const out2 = await runOn(session, [probeA, probeB]); batchOK = out2.length === 6 * plane && maxDiff(out2, ref, 3 * plane) < 0.05 && maxDiff(out2.subarray(3 * plane), refB, 3 * plane) < 0.05; } catch (e) { batchOK = false; }
+      batchChecksLeft = probesDiffer ? 2 : 4; // 실제 프레임으로 추가 검증할 배치 호출 횟수
       if (!batchOK) console.warn('WASB 배치 미사용 (' + backend + ')');
       stats.n = 0; stats.ms = 0;
       if (onStatus) onStatus('모델 준비 완료 (' + modelFile.replace('.onnx', '') + ' · ' + backend + ')');
@@ -51,6 +55,8 @@ window.WASB = (function () {
     })();
     try { return await loading; } finally { loading = null; }
   }
+  const maxDiff = (a, b, n) => { let m = 0; for (let i = 0; i < n; i += 7) { const d = Math.abs(a[i] - b[i]); if (d > m) m = d; } return m; };
+  let batchChecksLeft = 0, batchFailReason = '';
   function frameToArray(src, out, k) { // src: video/img/canvas → out[k*3+c][H][W]
     cx.drawImage(src, 0, 0, W, H);
     const d = cx.getImageData(0, 0, W, H).data;
@@ -77,6 +83,13 @@ window.WASB = (function () {
       stats.n += nb; stats.ms += performance.now() - tRun;
       hm = out.heatmaps.data; // [nb*3,H,W]
       if (!hm || hm.length !== nb * 3 * plane0) throw new Error('batch output size mismatch ' + (hm ? hm.length : 0)); // 고정 배치 모델이 잘못된 크기를 내면 폴백
+      if (nb > 1 && batchChecksLeft > 0) { // v1.01: 실제 프레임으로 마지막 묶음을 단일 추론과 대조 (폴드3 WebGPU: 12묶음에서 첫 묶음 결과 복제)
+        batchChecksLeft--;
+        const b = nb - 1; const one = new Float32Array(9 * plane0); sources.slice(b * 3, b * 3 + 3).forEach((s, k) => frameToArray(s, one, k));
+        const o1 = await session.run({ frames: new ort.Tensor('float32', one, [1, 9, H, W]) });
+        const d = maxDiff(o1.heatmaps.data, hm.subarray(b * 3 * plane0, (b + 1) * 3 * plane0), 3 * plane0);
+        if (d > 0.05) { batchOK = false; batchFailReason = backend + ' 배치 ' + nb + '묶음 출력이 단일과 다름(diff ' + d.toFixed(3) + ')'; console.warn('WASB ' + batchFailReason + ' → 묶음별로 실행'); throw new Error(batchFailReason); }
+      }
     } catch (e) { // 고정 배치 모델(WASB) 또는 배치 실패: 묶음마다 따로
       if (nb === 1) throw e;
       const parts = [];
@@ -104,5 +117,9 @@ window.WASB = (function () {
     }
     return opts.all ? res : res[res.length - 1];
   }
-  return { load, detectFrames, get backend() { return backend; }, get batchOK() { return batchOK; }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
+  return { load, detectFrames, get backend() { return backend; }, get batchOK() { return batchOK; }, get batchFailReason() { return batchFailReason; },
+    __testBreakBatch() { // 테스트 전용: 배치 입력에 첫 묶음 결과를 복제해 돌려주는 고장 난 GPU 흉내
+      const real = session.run.bind(session);
+      session.run = async (feeds) => { const t = feeds.frames; const nb = t.dims[0]; if (nb === 1) return real(feeds); const plane = W * H; const first = await real({ frames: new ort.Tensor('float32', t.data.slice(0, 9 * plane), [1, 9, H, W]) }); const out = new Float32Array(nb * 3 * plane); for (let b = 0; b < nb; b++) out.set(first.heatmaps.data, b * 3 * plane); return { heatmaps: { data: out } }; };
+    }, get model() { return modelFile; }, get avgMs() { return stats.n ? stats.ms / stats.n : 0; }, resetStats() { stats.n = 0; stats.ms = 0; }, W, H };
 })();
