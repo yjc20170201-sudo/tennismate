@@ -1270,6 +1270,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div id="cc-live-b-wrap" style="flex:1;min-width:0;display:none"><div class="muted" style="font-size:11px">B 캠(반대편) <button type="button" class="tag-btn" style="padding:0 6px;font-size:10px" onclick="cvStopB()">끊기</button></div><img id="cc-live2" style="width:100%;border-radius:10px;background:#000;min-height:100px;display:block" alt="클럽캠 B 라이브"></div>
           </div>
           <div id="cc-view-status" class="muted" style="font-size:12px;margin-top:6px">캠 화면을 기다리는 중…</div>
+          <div class="row" style="gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap"><button type="button" class="tag-btn" onclick="cvPullAll()">캠 영상 전부 PC로 받기 (같은 와이파이)</button><label class="muted" style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="cv-pull-clear"> 받은 뒤 캠에서 지우기</label></div>
+          <div id="cv-pull-status" class="muted" style="font-size:12px;margin-top:4px"></div>
           <div id="cc-call-last" style="margin-top:6px"></div>
           <div id="cc-call-feed" style="margin-top:4px"></div>
           <div id="cc-call-sum"></div>
@@ -1979,7 +1981,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.95';
+const APP_VERSION = 'v0.96';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9223,6 +9225,102 @@ async function ccLoadSegInfo() { // 저장된 세그먼트 개수·용량을 DB�
   } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { setTimeout(ccLoadSegInfo, 800); });
+// ── v0.96 📥 캠 영상 → PC (WebRTC 데이터 채널) ──
+const RTC_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+function ccSegName(seg) {
+  const d = new Date(seg.at), pad = x => String(x).padStart(2, '0');
+  const ext = seg.blob && seg.blob.type && seg.blob.type.includes('mp4') ? 'mp4' : 'webm';
+  return '클럽캠_' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + '_' + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds()) + '.' + ext;
+}
+let ccRtc = null;
+async function ccRtcHandle(p) { // 캠: 뷰어(PC)의 offer/ice 수신 → answer
+  if (!p || typeof p !== 'object' || typeof p.sid !== 'string' || !window.RTCPeerConnection) return;
+  try {
+    if (p.offer && p.offer.sdp) {
+      if (ccRtc && ccRtc.pc) { try { ccRtc.pc.close(); } catch (e) {} }
+      const pc = new RTCPeerConnection(RTC_CFG);
+      ccRtc = { sid: p.sid, pc, clear: !!p.clear, pend: [] };
+      pc.onicecandidate = e => { if (e.candidate && ccChan) { try { ccChan.send({ type: 'broadcast', event: 'rtc', payload: { sid: p.sid, ice: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate } }); } catch (x) {} } };
+      pc.ondatachannel = ev => { const dc = ev.channel; dc.binaryType = 'arraybuffer'; dc.onopen = () => ccRtcSend(dc).catch(e => ccStatus('PC 전송 실패: ' + (e.message || e))); };
+      await pc.setRemoteDescription({ type: 'offer', sdp: String(p.offer.sdp) });
+      const ans = await pc.createAnswer(); await pc.setLocalDescription(ans);
+      ccChan.send({ type: 'broadcast', event: 'rtc', payload: { sid: p.sid, answer: { type: ans.type, sdp: ans.sdp } } });
+      ccStatus('📥 PC가 영상을 받으러 연결 중…');
+    } else if (p.ice && ccRtc && ccRtc.sid === p.sid) {
+      try { await ccRtc.pc.addIceCandidate(p.ice); } catch (e) {}
+    }
+  } catch (e) { ccStatus('PC 연결 실패: ' + (e.message || e)); }
+}
+async function ccRtcSend(dc) { // 캠: 세그먼트 전부를 순서대로 (meta JSON → 16KB 조각들 → end JSON) … → done
+  if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
+  const segs = ccDb ? await ccAllSegs().catch(() => []) : [];
+  const CH = 16384; dc.bufferedAmountLowThreshold = 256 * 1024;
+  const waitLow = () => new Promise(res => { if (dc.bufferedAmount < 1024 * 1024) return res(); const h = () => { dc.removeEventListener('bufferedamountlow', h); res(); }; dc.addEventListener('bufferedamountlow', h); });
+  for (let i = 0; i < segs.length; i++) {
+    const seg = segs[i]; if (!seg || !seg.blob) continue;
+    dc.send(JSON.stringify({ t: 'meta', name: ccSegName(seg), size: seg.blob.size, type: seg.blob.type || 'video/mp4', i, n: segs.length }));
+    const buf = await seg.blob.arrayBuffer();
+    for (let o = 0; o < buf.byteLength; o += CH) { if (dc.readyState !== 'open') return; await waitLow(); dc.send(buf.slice(o, o + CH)); }
+    dc.send(JSON.stringify({ t: 'end', i }));
+    ccStatus('📥 PC로 보내는 중 ' + (i + 1) + '/' + segs.length + ' · ' + Math.round(seg.blob.size / 1048576) + 'MB');
+  }
+  await waitLow(); dc.send(JSON.stringify({ t: 'done', n: segs.length }));
+  ccStatus('📥 PC로 ' + segs.length + '개 보냈어요');
+  if (ccRtc && ccRtc.clear && segs.length) { try { await ccClearSegs(); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); ccLog('clear-pc', segs.length + '개'); ccStatus('📥 PC로 ' + segs.length + '개 보내고 폰에서 지웠어요'); } catch (e) {} }
+}
+let cvPull = null;
+function cvPullStatus(t) { const el = $('cv-pull-status'); if (el) el.textContent = t; }
+async function cvPullAll() { // PC(뷰어): 폴더 고르고 캠에 offer
+  if (!cvChan) { toast('먼저 캠 코드로 👀 보기 연결을 해주세요'); return; }
+  if (!window.RTCPeerConnection) { toast('이 브라우저는 직접 전송을 지원하지 않아요'); return; }
+  let dir = null;
+  if (window.showDirectoryPicker) { try { dir = await showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { if (e && e.name === 'AbortError') return; dir = null; } }
+  if (cvPull && cvPull.pc) { try { cvPull.pc.close(); } catch (e) {} }
+  const sid = mrGenCode();
+  const pc = new RTCPeerConnection(RTC_CFG);
+  const dc = pc.createDataChannel('segs', { ordered: true }); dc.binaryType = 'arraybuffer';
+  cvPull = { sid, pc, dc, dir, cur: null, writer: null, chunks: [], got: 0, files: 0, bytes: 0, q: Promise.resolve(), done: false };
+  pc.onicecandidate = e => { if (e.candidate && cvChan) { try { cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, ice: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate } }); } catch (x) {} } };
+  dc.onopen = () => cvPullStatus('연결됨 — 캠이 보내기 시작해요');
+  dc.onclose = () => { if (!cvPull.done) cvPullStatus('연결이 끊겼어요 (' + cvPull.files + '개 받음)'); };
+  dc.onmessage = ev => cvPullMsg(ev.data);
+  const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+  cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, offer: { type: offer.type, sdp: offer.sdp }, clear: !!($('cv-pull-clear') && $('cv-pull-clear').checked) } });
+  cvPullStatus('캠 응답 기다리는 중… (캠 폰과 같은 와이파이여야 해요)' + (dir ? '' : ' — 폴더 선택을 지원하지 않는 브라우저라 파일마다 다운로드돼요'));
+}
+async function cvPullRtc(p) { // PC: 캠의 answer/ice
+  if (!cvPull || !p || p.sid !== cvPull.sid) return;
+  try {
+    if (p.answer && p.answer.sdp) await cvPull.pc.setRemoteDescription({ type: 'answer', sdp: String(p.answer.sdp) });
+    else if (p.ice) { try { await cvPull.pc.addIceCandidate(p.ice); } catch (e) {} }
+  } catch (e) { cvPullStatus('연결 실패: ' + (e.message || e)); }
+}
+function cvPullMsg(data) {
+  const P = cvPull; if (!P) return;
+  if (typeof data === 'string') {
+    let m; try { m = JSON.parse(data); } catch (e) { return; }
+    if (m.t === 'meta') {
+      const name = String(m.name || ('seg' + m.i + '.mp4')).replace(/[\\/:*?"<>|]/g, '_');
+      P.cur = { name, size: Number(m.size) || 0, type: String(m.type || 'video/mp4'), i: m.i, n: m.n }; P.got = 0; P.chunks = [];
+      if (P.dir) P.q = P.q.then(async () => { const fh = await P.dir.getFileHandle(name, { create: true }); P.writer = await fh.createWritable(); });
+      cvPullStatus('받는 중 ' + (m.i + 1) + '/' + m.n + ' — ' + name);
+    } else if (m.t === 'end') {
+      const cur = P.cur;
+      P.q = P.q.then(async () => {
+        if (P.writer) { await P.writer.close(); P.writer = null; }
+        else { const blob = new Blob(P.chunks, { type: cur ? cur.type : 'video/mp4' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cur ? cur.name : 'seg.mp4'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+        P.chunks = []; P.files++; P.bytes += P.got;
+        cvPullStatus('받음 ' + P.files + (cur ? '/' + cur.n : '') + ' · ' + Math.round(P.bytes / 1048576) + 'MB');
+      });
+    } else if (m.t === 'done') {
+      P.q = P.q.then(() => { P.done = true; cvPullStatus('완료 — ' + P.files + '개 ' + Math.round(P.bytes / 1048576) + 'MB' + (P.dir ? ' (선택한 폴더에 저장)' : ' (다운로드 폴더)')); try { P.pc.close(); } catch (e) {} });
+    }
+    return;
+  }
+  P.got += data.byteLength;
+  if (P.dir) P.q = P.q.then(() => P.writer ? P.writer.write(data) : null);
+  else P.chunks.push(data);
+}
 function ccAllSegs() {
   return new Promise((res, rej) => {
     const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAll();
@@ -9261,6 +9359,7 @@ async function ccToggle() {
   chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
   chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
   chan.on('broadcast', { event: 'mark' }, p => ccKeepClip(p.payload)); // 포인트 하이라이트 클립 보관 (v0.72)
+  chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload)); // 📥 PC로 영상 전송 신호 (v0.96)
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
       if (st === 'SUBSCRIBED') res();
@@ -9581,6 +9680,7 @@ async function cvWatch() {
   chan.on('broadcast', { event: 'frame' }, p => cvFrame(p.payload));
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload)); // 🤖 라이브 판정 피드
+  chan.on('broadcast', { event: 'rtc' }, p => cvPullRtc(p.payload)); // 📥 PC로 받기 응답 (v0.96)
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
       if (st === 'SUBSCRIBED') res();
