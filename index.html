@@ -1170,6 +1170,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div id="cc-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
       <div id="cc-main" style="display:none">
         <button type="button" class="btn small full" id="cc-start-btn" style="margin-top:8px" onclick="ccToggle()">이 폰을 클럽캠으로 (공기계에서 누르세요)</button>
+        <div class="row" style="gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap"><button type="button" class="btn small outline" style="flex:1" id="cc-send-btn" onclick="ccSendOnly()">PC로 영상 보내기 대기 (카메라 안 켬)</button><span class="muted" style="font-size:12px" id="cc-mycode"></span></div>
+        <div id="cc-send-status" class="muted" style="font-size:12px;margin-top:4px"></div>
         <div class="vj-ctrl" style="margin-top:6px">
           <input id="cc-code-in" placeholder="캠 코드 6자리" maxlength="6" style="flex:1;text-transform:uppercase">
           <button type="button" class="btn small outline" id="cc-watch-btn" onclick="cvWatch()">보기</button>
@@ -1981,7 +1983,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.97';
+const APP_VERSION = 'v0.98';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9008,7 +9010,7 @@ function ccRenderGate() {
     }).catch(() => {});
   }
 }
-function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; }
+function ccStatus(t) { const el = $('cc-cam-status'); if (el) el.textContent = t; const f = $('cc-full-sub'); if (f) f.textContent = t; const s2 = $('cc-send-status'); if (s2) s2.textContent = ccSendMode ? t : ''; }
 let ccVoiceOn = true; try { ccVoiceOn = localStorage.getItem('tm-cc-voice') !== '0'; } catch (e) {}
 function ccBatchSet(v) { try { localStorage.setItem('tm-cc-batch', String(parseInt(v, 10) || 0)); } catch (e) {} }
 document.addEventListener('DOMContentLoaded', () => { const b = $('cc-batch'); if (b) { try { const v = localStorage.getItem('tm-cc-batch'); if (v != null) b.value = v; } catch (e) {} } });
@@ -9141,6 +9143,7 @@ document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 �
   }, 500);
 });
 document.addEventListener('DOMContentLoaded', () => { // 뷰어: 지난번 캠 코드 자동 채움 (v0.54)
+  try { const el = $('cc-mycode'); if (el) el.textContent = '이 폰의 캠 코드 ' + ccMyCode(); } catch (e) {} // v0.98: 카메라 안 켜도 코드 보임
   try { const c = localStorage.getItem('tm-cvcode'); const el = $('cc-code-in'); if (c && el && !el.value) el.value = c; } catch (e) {}
   try { const c = localStorage.getItem('tm-cvcode2'); const el = $('cc-code-in2'); if (c && el && !el.value) el.value = c; } catch (e) {}
 });
@@ -9193,7 +9196,7 @@ function ccShowLog() { // 설정 › 저장 이력 보기
   const el = $('cc-log'); if (!el) return;
   if (!el.hidden) { el.hidden = true; return; }
   let arr = []; try { arr = JSON.parse(localStorage.getItem('tm-cclog') || '[]'); } catch (e) {}
-  const name = { boot: '앱 시작', start: '캠 시작', stop: '캠 종료', save: '구간 저장', 'save-fail': '저장 실패', prune: '자동 정리(오래된 구간 삭제)', 'clear-all': '전부 지우기(버튼)', 'clear-export': '내보내기 후 지우기', persist: '영구 보관 요청' };
+  const name = { boot: '앱 시작', start: '캠 시작', stop: '캠 종료', save: '구간 저장', 'save-fail': '저장 실패', prune: '자동 정리(오래된 구간 삭제)', 'clear-all': '전부 지우기(버튼)', 'clear-export': '내보내기 후 지우기', persist: '영구 보관 요청', 'send-wait': 'PC 전송 대기(카메라 없이)', 'clear-pc': 'PC로 보낸 뒤 지우기' };
   const pad = x => String(x).padStart(2, '0');
   el.textContent = (ccQuota ? '저장 공간 ' + ccQuota.used + ' / ' + ccQuota.quota + 'MB\n' : '') + (arr.length ? arr.slice().reverse().map(x => { const d = new Date(x.t); return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + (name[x.k] || x.k) + (x.d ? ' — ' + x.d : ''); }).join('\n') : '이력이 없어요 (v0.76부터 기록)');
   el.hidden = false;
@@ -9350,8 +9353,43 @@ function ccClearSegs() {
   });
 }
 
+function ccMyCode() { // 이 폰의 고정 캠 코드 (v0.54) — 카메라를 안 켜도 같은 코드 (v0.98)
+  let code = '';
+  try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
+  if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} }
+  return code;
+}
+let ccSendMode = false, ccSendTimer = null;
+function ccSendFrame() { // 대기 모드: 카메라 대신 안내 그림을 썸네일로 보내 뷰어가 "캠이 켜졌다"고 알게 함 (PC 받기 자동 재시도 트리거)
+  if (!ccChan || !ccSendMode) return;
+  const c = document.createElement('canvas'); c.width = 320; c.height = 180; const g = c.getContext('2d');
+  g.fillStyle = '#1b2a1e'; g.fillRect(0, 0, 320, 180);
+  g.fillStyle = '#d4e94e'; g.font = 'bold 22px sans-serif'; g.textAlign = 'center'; g.fillText('PC 전송 대기 중', 160, 80);
+  g.fillStyle = '#fff'; g.font = '16px sans-serif'; g.fillText('영상 ' + ccSegN + '개 · ' + Math.round(ccSegBytes / 1048576) + 'MB', 160, 115);
+  try { ccChan.send({ type: 'broadcast', event: 'frame', payload: { d: c.toDataURL('image/jpeg', 0.6), at: Date.now(), wait: true } }); } catch (e) {}
+}
+async function ccSendOnly() { // PC로 영상 보내기 대기 (v0.98): 카메라·녹화 없이 채널만 열어 PC(뷰어)의 받기 요청(rtc)에 응답. 저장된 영상은 지우지 않음
+  const wasSend = ccSendMode;
+  if (ccChan) { await ccStop(true); if (wasSend) { toast('대기를 껐어요'); return; } }
+  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  if (cvChan) await cvStop(true);
+  await ccLoadSegInfo();
+  const code = ccMyCode();
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } });
+  chan.on('broadcast', { event: 'hello' }, () => ccSendFrame());
+  chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload));
+  try {
+    await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
+  } catch (e) { toast('연결 실패: ' + (e.message || e)); return; }
+  ccChan = chan; ccCode = code; ccSendMode = true;
+  ccSendTimer = setInterval(ccSendFrame, 2500); ccSendFrame();
+  try { if (navigator.wakeLock) ccWakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  const b = $('cc-send-btn'); if (b) b.textContent = '대기 끄기 (캠 코드 ' + code + ')';
+  ccStatus('PC 전송 대기 중 — 카메라·녹화는 꺼져 있고 영상 ' + ccSegN + '개(' + Math.round(ccSegBytes / 1048576) + 'MB)는 그대로예요. PC 크롬 뷰어에 코드 ' + code + ' 넣고 보기 → [캠 영상 전부 PC로 받기]. 화면은 켜둔 채 두세요');
+  ccLog('send-wait', ccSegN + '개');
+}
 async function ccToggle() {
-  if (ccChan) { ccStop(); return; }
+  if (ccChan) { if (ccSendMode) await ccStop(true); else { ccStop(); return; } }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // iOS: 탭 직후(어떤 await보다 먼저) 요청해야 허용됨 (v0.58)
   camReq.catch(() => {});
@@ -9364,9 +9402,7 @@ async function ccToggle() {
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
   await ccLoadSegInfo();
   ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
-  let code = '';
-  try { code = localStorage.getItem('tm-cccode') || ''; } catch (e) {}
-  if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} } // 이 폰의 고정 코드 (v0.54)
+  const code = ccMyCode();
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
@@ -9533,6 +9569,8 @@ async function ccStop(silent) {
   if (ccWakeLock) { try { await ccWakeLock.release(); } catch (e) {} ccWakeLock = null; }
   if (ccChan) { try { await ccChan.unsubscribe(); } catch (e) {} ccChan = null; }
   ccRec = null; ccChunks = []; ccCode = null;
+  if (ccSendTimer) { clearInterval(ccSendTimer); ccSendTimer = null; }
+  if (ccSendMode) { ccSendMode = false; const sb = $('cc-send-btn'); if (sb) sb.textContent = 'PC로 영상 보내기 대기 (카메라 안 켬)'; const ss = $('cc-send-status'); if (ss) ss.textContent = ''; }
   const w = $('cc-cam-wrap'); if (w) w.style.display = 'none';
   const b = $('cc-start-btn'); if (b) b.textContent = '📡 이 폰을 클럽캠으로 (공기계에서 누르세요)';
   if (!silent) toast('클럽캠을 껐어요 — 💾 전체 저장으로 오늘 영상을 내려받으세요');
