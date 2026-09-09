@@ -1981,7 +1981,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.96';
+const APP_VERSION = 'v0.97';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9270,23 +9270,37 @@ async function ccRtcSend(dc) { // 캠: 세그먼트 전부를 순서대로 (meta
 }
 let cvPull = null;
 function cvPullStatus(t) { const el = $('cv-pull-status'); if (el) el.textContent = t; }
-async function cvPullAll() { // PC(뷰어): 폴더 고르고 캠에 offer
+async function cvPullAll() { // PC(뷰어): 폴더 고르고 캠에 offer. 캠이 아직 안 켜졌으면 켜질 때(화면이 올 때) 자동으로 다시 offer (v0.97)
   if (!cvChan) { toast('먼저 캠 코드로 👀 보기 연결을 해주세요'); return; }
   if (!window.RTCPeerConnection) { toast('이 브라우저는 직접 전송을 지원하지 않아요'); return; }
   let dir = null;
   if (window.showDirectoryPicker) { try { dir = await showDirectoryPicker({ mode: 'readwrite' }); } catch (e) { if (e && e.name === 'AbortError') return; dir = null; } }
+  cvPullArm = { dir, tries: 0, at: 0 };
+  await cvPullOffer();
+}
+let cvPullArm = null; // {dir, tries, at} — 받기 대기 상태(캠이 켜지면 자동 재시도)
+async function cvPullOffer() {
+  const A = cvPullArm; if (!A || !cvChan) return;
   if (cvPull && cvPull.pc) { try { cvPull.pc.close(); } catch (e) {} }
+  const dir = A.dir; A.tries++; A.at = Date.now();
   const sid = mrGenCode();
   const pc = new RTCPeerConnection(RTC_CFG);
   const dc = pc.createDataChannel('segs', { ordered: true }); dc.binaryType = 'arraybuffer';
-  cvPull = { sid, pc, dc, dir, cur: null, writer: null, chunks: [], got: 0, files: 0, bytes: 0, q: Promise.resolve(), done: false };
+  const P = cvPull = { sid, pc, dc, dir, cur: null, writer: null, chunks: [], got: 0, files: 0, bytes: 0, q: Promise.resolve(), done: false, opened: false };
   pc.onicecandidate = e => { if (e.candidate && cvChan) { try { cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, ice: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate } }); } catch (x) {} } };
-  dc.onopen = () => cvPullStatus('연결됨 — 캠이 보내기 시작해요');
-  dc.onclose = () => { if (!cvPull.done) cvPullStatus('연결이 끊겼어요 (' + cvPull.files + '개 받음)'); };
+  pc.onconnectionstatechange = () => { if (cvPull === P && !P.opened && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) { cvPullStatus('연결 실패 — 캠 화면이 오면 다시 시도해요 (' + A.tries + '회)'); A.at = Date.now() - 20000; } };
+  dc.onopen = () => { P.opened = true; cvPullStatus('연결됨 — 캠이 보내기 시작해요'); };
+  dc.onclose = () => { if (cvPull === P && !P.done) cvPullStatus('연결이 끊겼어요 (' + P.files + '개 받음)' + (P.opened ? '' : ' — 캠 화면이 오면 다시 시도해요')); };
   dc.onmessage = ev => cvPullMsg(ev.data);
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
   cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, offer: { type: offer.type, sdp: offer.sdp }, clear: !!($('cv-pull-clear') && $('cv-pull-clear').checked) } });
-  cvPullStatus('캠 응답 기다리는 중… (캠 폰과 같은 와이파이여야 해요)' + (dir ? '' : ' — 폴더 선택을 지원하지 않는 브라우저라 파일마다 다운로드돼요'));
+  cvPullStatus('캠 응답 기다리는 중… (캠 폰과 같은 와이파이여야 해요. 캠이 아직 안 켜졌으면 켜질 때 자동으로 이어져요' + (A.tries > 1 ? ', ' + A.tries + '번째 시도' : '') + ')' + (dir ? '' : ' — 폴더 선택을 지원하지 않는 브라우저라 파일마다 다운로드돼요'));
+}
+function cvPullTick() { // 캠 화면이 올 때마다: 받기 대기 중인데 아직 연결 안 됐고 마지막 offer가 8초 넘었으면 다시 offer
+  const A = cvPullArm; if (!A) return;
+  if (cvPull && (cvPull.done || cvPull.opened)) { if (cvPull.done) cvPullArm = null; return; }
+  if (Date.now() - A.at < 8000 || A.tries >= 30) return;
+  cvPullOffer().catch(() => {});
 }
 async function cvPullRtc(p) { // PC: 캠의 answer/ice
   if (!cvPull || !p || p.sid !== cvPull.sid) return;
@@ -9313,7 +9327,7 @@ function cvPullMsg(data) {
         cvPullStatus('받음 ' + P.files + (cur ? '/' + cur.n : '') + ' · ' + Math.round(P.bytes / 1048576) + 'MB');
       });
     } else if (m.t === 'done') {
-      P.q = P.q.then(() => { P.done = true; cvPullStatus('완료 — ' + P.files + '개 ' + Math.round(P.bytes / 1048576) + 'MB' + (P.dir ? ' (선택한 폴더에 저장)' : ' (다운로드 폴더)')); try { P.pc.close(); } catch (e) {} });
+      P.q = P.q.then(() => { P.done = true; cvPullArm = null; cvPullStatus('완료 — ' + P.files + '개 ' + Math.round(P.bytes / 1048576) + 'MB' + (P.dir ? ' (선택한 폴더에 저장)' : ' (다운로드 폴더)')); try { P.pc.close(); } catch (e) {} });
     }
     return;
   }
@@ -9677,7 +9691,7 @@ async function cvWatch() {
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   if (cvChan) await cvStop(true);
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
-  chan.on('broadcast', { event: 'frame' }, p => cvFrame(p.payload));
+  chan.on('broadcast', { event: 'frame' }, p => { cvFrame(p.payload); cvPullTick(); });
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload)); // 🤖 라이브 판정 피드
   chan.on('broadcast', { event: 'rtc' }, p => cvPullRtc(p.payload)); // 📥 PC로 받기 응답 (v0.96)
@@ -10200,6 +10214,7 @@ async function cvClip(p) {
 async function cvStop(silent) {
   if (cvChanB) await cvStopB(true);
   cvClipPend = {};
+  cvPullArm = null;
   if (cvChan) { try { await cvChan.unsubscribe(); } catch (e) {} cvChan = null; }
   if (cvTimer) { clearInterval(cvTimer); cvTimer = null; }
   cvCode = null;
