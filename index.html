@@ -1068,7 +1068,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (WASB 테니스 모델 · 첫 실행 5MB)</button>
-        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v1.onnx">소형 v1 — 빠름 (0.8MB, 우리 영상 학습, 기본)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v1.onnx|wasm">소형 v1 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v2.onnx">소형 v2 — 빠름 (0.8MB, 9/9 경기 2시간 추가 학습, 기본)</option><option value="ball_tiny_xl_v1.onnx">소형 v1 — 이전 (9/7 영상만 학습)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v2.onnx|wasm">소형 v2 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
         <div class="muted" style="font-size:11px;margin-top:3px">WASB-SBDT (NTT Communications, MIT) — 실코트 검증(2026-09-07). 소형 v1 = WASB를 선생님으로 우리 영상 7분 학습(재현율 94%·정밀도 89%). 실패 시 TrackNet으로 대체</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
@@ -1983,7 +1983,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v0.98';
+const APP_VERSION = 'v0.99';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8184,8 +8184,10 @@ async function aiAnalyze() {
     aiBusy = false; $('ai-run-btn').disabled = false;
   }
 }
-let aiModelFile = 'ball_tiny_xl_v1.onnx'; try { aiModelFile = localStorage.getItem('tm-ball-model') || aiModelFile; } catch (e) {} // v0.90 기본 = 소형 v1 (폴드3 실측 2.4배 빠름, 판정 동일)
-function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx(\|wasm)?$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
+let aiModelFile = 'ball_tiny_xl_v2.onnx'; // v0.99 기본 = 소형 v2 (검증 영상 3개: 재현율 94.7%·정밀도 89.4%·바운스 25/27 @0.4 vs v1 90.1/89.1/22)
+try { const st = localStorage.getItem('tm-ball-model'); if (st && (st !== 'ball_tiny_xl_v1.onnx' || localStorage.getItem('tm-ball-model-user'))) aiModelFile = st; } catch (e) {} // v1 저장값은 직접 고른 게 아니면 v2로
+function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx(\|wasm)?$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); localStorage.setItem('tm-ball-model-user', '1'); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
+function aiModelThr() { return /tiny_xl_v2/.test(aiModelFile) ? 0.4 : 0.5; } // v2는 임계 0.4가 최적(0.5는 바운스 17/27, 0.4는 25/27)
 document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
 async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델). v0.87: 모델 선택
   if (!window.WASB) {
@@ -8290,7 +8292,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
   const inferCaps = async caps => { // 12장씩 배치 추론 (마지막은 마지막 프레임을 복제해 3의 배수로 채움)
     for (let i = 0; i < caps.length; i += BATCH) {
       const chunk = caps.slice(i, i + BATCH); while (chunk.length % 3) chunk.push(chunk[chunk.length - 1]);
-      const ds = await WASB.detectFrames(chunk.map(r => r.c), v.videoWidth, v.videoHeight, { all: true, topk: 3 });
+      const ds = await WASB.detectFrames(chunk.map(r => r.c), v.videoWidth, v.videoHeight, { all: true, topk: 3, thr: aiModelThr() });
       ds.forEach((d, j) => { if (i + j < caps.length) frames.push({ t: caps[i + j].t, cands: d ? d.cands : [] }); });
       rebuild(); aiStatus('🎯 공 탐지 ' + Math.min(i + BATCH, caps.length) + '/' + caps.length + '장 · 공 발견 ' + aiTraj.length + '회 · ' + Math.round((performance.now() - tStart) / 1000) + '초 경과 (' + (WASB.backend || '') + ')'); aiSyncCanvas(); aiDraw();
     }
@@ -8325,7 +8327,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
     const byT = new Map(frames.map(f => [f.t, f]));
     for (let i = 0; i < crops.length; i += BATCH) {
       const trio = crops.slice(i, i + BATCH); while (trio.length % 3) trio.push(trio[trio.length - 1]);
-      const ds = await WASB.detectFrames(trio.map(r => r.c), cw, ch, { all: true, topk: 3 });
+      const ds = await WASB.detectFrames(trio.map(r => r.c), cw, ch, { all: true, topk: 3, thr: aiModelThr() });
       ds.forEach((d, j) => {
         if (!d || i + j >= crops.length) return; const f = byT.get(trio[j].t); if (!f) return;
         d.cands.forEach(c => { const x = cx0 + c.x, y = cy0 + c.y; if (!f.cands.some(o => Math.hypot(o.x - x, o.y - y) < 8)) f.cands.push({ x, y, conf: c.conf, far: true }); });
