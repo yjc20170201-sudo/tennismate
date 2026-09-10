@@ -1983,7 +1983,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.02';
+const APP_VERSION = 'v1.03';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4688,12 +4688,18 @@ function lvTypeChange() {
   if ($('lv-doubles')) $('lv-doubles').style.display = d ? '' : 'none';
   if ($('lv-opp-lbl')) $('lv-opp-lbl').textContent = d ? '상대 1' : '상대';
 }
-function liveTeams() { // 현재 경기의 양 팀 표기 (복식은 A·B)
+function lvP1Change() { // v1.03: 선수 1이 내가 아니면 파트너 라벨도 바꿈
+  const other = $('lv-p1') && $('lv-p1').value !== 'me';
+  const l = $('lv-partner-lbl'); if (l) l.textContent = other ? '선수 1의 파트너' : '내 파트너';
+}
+function liveTeams() { // 현재 경기의 양 팀 표기 (복식은 A·B). v1.03: 선수 1이 다른 회원일 수 있음(live.p1Id)
   const opp = players.find(p => p.id === live.oppId);
-  if (live.type !== 'd') return { mine: ME.name + ' (나)', theirs: opp ? opp.name : '상대', opp };
+  const p1 = live.p1Id ? players.find(p => p.id === live.p1Id) : null;
+  const me = p1 ? p1.name : ME.name;
+  if (live.type !== 'd') return { mine: p1 ? p1.name : ME.name + ' (나)', theirs: opp ? opp.name : '상대', opp, p1 };
   const pt = players.find(p => p.id === live.partnerId);
   const o2 = players.find(p => p.id === live.opp2Id);
-  return { mine: ME.name + '·' + (pt ? pt.name : '?'), theirs: (opp ? opp.name : '?') + '·' + (o2 ? o2.name : '?'), opp, pt, o2 };
+  return { mine: me + '·' + (pt ? pt.name : '?'), theirs: (opp ? opp.name : '?') + '·' + (o2 ? o2.name : '?'), opp, pt, o2, p1 };
 }
 function openLive() {
   live = null;
@@ -4703,16 +4709,18 @@ function openLive() {
 function startLive() {
   const type = $('lv-type') ? $('lv-type').value : 's';
   const oppId = parseInt($('lv-opp').value);
+  const p1Id = ($('lv-p1') && $('lv-p1').value !== 'me') ? parseInt($('lv-p1').value) : null; // v1.03: null = 나
   let partnerId = null, opp2Id = null;
+  if (p1Id && p1Id === oppId) { toast('선수 1과 상대가 같아요'); return; }
   if (type === 'd') {
     partnerId = parseInt($('lv-partner').value);
     opp2Id = parseInt($('lv-opp2').value);
-    if (new Set([oppId, partnerId, opp2Id]).size < 3) { toast('⚠️ 복식은 파트너와 상대 2명이 모두 서로 달라야 해요'); return; }
+    if (new Set([oppId, partnerId, opp2Id].concat(p1Id ? [p1Id] : [])).size < (p1Id ? 4 : 3)) { toast('⚠️ 복식은 네 명이 모두 서로 달라야 해요'); return; }
   }
   const gT = parseInt($('lv-games') ? $('lv-games').value : '6') || 6;
   const sNeed = parseInt($('lv-sets') ? $('lv-sets').value : '2') || 2;
   const noAd = !$('lv-noad') || $('lv-noad').value !== '0'; // 기본 노애드 (동호회 규칙) — v0.67
-  live = { type, gT, sNeed, oppId, partnerId, opp2Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd };
+  live = { type, gT, sNeed, oppId, partnerId, opp2Id, p1Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd };
   lvSpeak('경기 시작. 서브 우리');
   if (!lvRC && typeof serverMode === 'function' && serverMode() && TMAuth.isLoggedIn) { // 워치·다른 폰이 바로 붙게 리모컨 자동 연결 (고정 코드)
     lvRCJoin(lvRCFixedCode(), 'host').catch(() => {});
@@ -4756,10 +4764,12 @@ function renderLive() {
         <div style="flex:1"><label>세트 수</label><select id="lv-sets"><option value="2" selected>3판 2선승</option><option value="1">단판</option></select></div>
         <div style="flex:1"><label>듀스</label><select id="lv-noad"><option value="1" selected>노애드 (한 점 결정)</option><option value="0">어드밴티지</option></select></div>
       </div>
+      <label>선수 1 (점수판 왼쪽, 우리 쪽)</label>
+      <select id="lv-p1" onchange="lvP1Change()"><option value="me">나 — ${esc(ME.name)}</option>${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       <label id="lv-opp-lbl">상대 1</label>
       <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       <div id="lv-doubles">
-        <label>내 파트너</label>
+        <label id="lv-partner-lbl">내 파트너</label>
         <select id="lv-partner">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
         <label>상대 2</label>
         <select id="lv-opp2">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
@@ -4792,12 +4802,12 @@ function renderLive() {
     <div class="muted" style="text-align:center">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${liveTeams().theirs} · ${live.tb ? '🔥 타이브레이크' : (live.sets.length + 1) + '세트'} ${liveStateLabel()}</div>
     <div class="dline">완료 세트: ${liveSetChips()}</div>
     <div class="live-grid">
-      <div><div class="live-name">⭐ ${liveTeams().mine}</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
+      <div><div class="live-name">${live.p1Id ? '' : '⭐ '}${liveTeams().mine}</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
       <div style="font-weight:800;color:var(--muted)">:</div>
       <div><div class="live-name">${liveTeams().theirs}</div><div class="live-pts" id="lv-p1">${disp[1]}</div><div class="muted">게임 ${live.g[1]}</div></div>
     </div>
     <div class="row" style="gap:8px">
-      <button class="btn pt-btn" onclick="livePoint(0)">+ ${live.type === 'd' ? '우리' : '내'} 포인트</button>
+      <button class="btn pt-btn" onclick="livePoint(0)">+ ${(live.type === 'd' || live.p1Id) ? '우리' : '내'} 포인트</button>
       <button class="btn outline pt-btn" onclick="livePoint(1)">+ 상대 포인트</button>
     </div>
     <div class="row" style="gap:8px;margin-top:8px">
@@ -4873,7 +4883,7 @@ function lvSpeak(text) { // 본폰 스피커 + 캠 채널로 전달(공기계가
   if (cvChan) { try { cvChan.send(sayMsg); } catch (e) {} }
   if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sayMsg); } catch (e) {} }
 }
-function lvSideName(side) { return side === 0 ? (live && live.type === 'd' ? '우리' : '내') : '상대'; }
+function lvSideName(side) { return side === 0 ? (live && (live.type === 'd' || live.p1Id) ? '우리' : '내') : '상대'; }
 function lvPtWord(d) { return ({ '0': '러브', '15': '피프틴', '30': '써티', '40': '포티', 'Ad': '어드밴티지' })[d] || String(d); } // 테니스식 콜 (v0.66)
 function lvScoreCall() { // 현재 포인트 상황 — 서브 넣는 쪽 점수 먼저 (테니스 관례)
   if (!live) return '';
@@ -4975,6 +4985,18 @@ function finishLive(myS, opS) {
   const isD = live.type === 'd';
   const kind = isD ? 'd' : 's';
   const win = myS > opS;
+  const setsStr0 = live.sets.map(s => s[0] + '-' + s[1]).join(' ');
+  if (live.p1Id && t.p1) { // v1.03: 선수 1이 다른 회원 — 내 통계·기록·보정은 건드리지 않고 두 팀의 로컬 레이팅만 반영
+    const myR = isD ? (t.p1.pts + t.pt.pts) / 2 : t.p1.pts;
+    const opR = isD ? (opp.pts + t.o2.pts) / 2 : opp.pts;
+    const delta = eloDelta(myR, opR, win);
+    [t.p1, isD ? t.pt : null].filter(Boolean).forEach(o => { applyPts(o, delta, kind); o.matches++; if (win) o.wins++; bumpKind(o, kind, win); });
+    [opp, isD ? t.o2 : null].filter(Boolean).forEach(o => { applyPts(o, -delta, kind); o.matches++; if (!win) o.wins++; bumpKind(o, kind, !win); });
+    addFeed(`🎾 라이브 스코어보드 — ${t.mine} vs ${t.theirs} 세트 ${myS}:${opS} (${setsStr0}) · 내 기록에는 반영 안 됨`);
+    toast(`경기 종료 — ${t.mine} ${myS}:${opS} (내 기록·랭킹에는 반영하지 않았어요)`);
+    renderRank(); renderLive();
+    return;
+  }
   // 복식은 팀 평균 레이팅 기준 (saveMatch·서버 confirm_match와 동일 규칙)
   const myR = isD ? (myStats.pts + t.pt.pts) / 2 : myStats.pts;
   const opR = isD ? (opp.pts + t.o2.pts) / 2 : opp.pts;
@@ -5010,9 +5032,10 @@ function closeLive() {
   const opp = players.find(p => p.id === live.oppId);
   const myS = live.sets.filter(s => s[0] > s[1]).length, opS = live.sets.length - myS;
   const win = myS > opS;
+  const other = !!live.p1Id;
   live = null;
   closeModal('live');
-  if (opp) suggestRematch(opp, win);
+  if (opp && !other) suggestRematch(opp, win);
 }
 
 // ===== 날씨 안내 (v0.10, 결정적 데모 예보) =====
