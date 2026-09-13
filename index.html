@@ -1068,8 +1068,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (기본 소형 v2 · 첫 실행 0.8MB)</button>
-        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v3.onnx">소형 v3 — 빠름 (0.8MB, 9/9 경기 2시간 학습 2차, 기본)</option><option value="ball_tiny_xl_v2.onnx">소형 v2 — 이전 (1차 학습)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v3.onnx|wasm">소형 v3 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
-        <div class="muted" style="font-size:11px;margin-top:3px">소형 v3 = WASB를 선생님으로 우리 코트 영상 2시간 학습(0.8MB, 검증 재현율 96%·정밀도 90%, 2026-09-10). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v4.onnx">소형 v4 — 빠름 (0.8MB, 9/9+9/13 경기 4시간 학습, 기본)</option><option value="ball_tiny_xl_v3.onnx">소형 v3 — 이전 (9/9 경기만)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v4.onnx|wasm">소형 v4 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
+        <div class="muted" style="font-size:11px;margin-top:3px">소형 v4 = WASB를 선생님으로 우리 코트 영상 4시간(9/9·9/13) 학습(0.8MB, 검증 영상 5개 재현율 93%·정밀도 93%·바운스 67/71, v3는 55/71, 2026-09-13). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
@@ -1983,7 +1983,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.03';
+const APP_VERSION = 'v1.04';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8207,10 +8207,10 @@ async function aiAnalyze() {
     aiBusy = false; $('ai-run-btn').disabled = false;
   }
 }
-let aiModelFile = 'ball_tiny_xl_v3.onnx'; // v1.02 기본 = 소형 v3 (검증 영상 3개 @0.4: 재현율 96.0%·정밀도 89.5%·바운스 25/27; v2 94.7/89.4/25; v1 90.1/89.1/22)
-try { const st = localStorage.getItem('tm-ball-model'); if (st && (!/^ball_tiny_xl_v[12]\.onnx/.test(st) || localStorage.getItem('tm-ball-model-user'))) aiModelFile = st; } catch (e) {} // 이전 기본값(v1·v2)은 직접 고른 게 아니면 v3로
+let aiModelFile = 'ball_tiny_xl_v4.onnx'; // v1.04 기본 = 소형 v4 (검증 영상 5개 @0.4: 재현율 93.1%·정밀도 92.7%·바운스 67/71; v3 93.2/84.6/55 — 9/13 영상 2개가 검증에 추가돼 v3 수치는 이전 문서와 다름)
+try { const st = localStorage.getItem('tm-ball-model'); if (st && (!/^ball_tiny_xl_v[1-3]\.onnx/.test(st) || localStorage.getItem('tm-ball-model-user'))) aiModelFile = st; } catch (e) {} // 이전 기본값(v1~v3)은 직접 고른 게 아니면 v4로
 function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx(\|wasm)?$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); localStorage.setItem('tm-ball-model-user', '1'); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
-function aiModelThr() { return /tiny_xl_v[2-9]/.test(aiModelFile) ? 0.4 : 0.5; } // v2 이후 소형 모델은 임계 0.4가 최적(v3: 0.5 바운스 23/27, 0.4는 25/27)
+function aiModelThr() { return /tiny_xl_v[2-9]/.test(aiModelFile) ? 0.4 : 0.5; } // v2 이후 소형 모델은 임계 0.4가 최적(v4: 0.5 바운스 63/71, 0.4는 67/71, 0.3은 정밀도 85%로 하락)
 document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
 async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web CDN + 5MB 모델). v0.87: 모델 선택
   if (!window.WASB) {
