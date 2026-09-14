@@ -1255,6 +1255,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">폰 보관 상한</span><select id="cc-keep" onchange="ccKeepSet(this.value)" style="flex:1"><option value="120">2시간 (120개, 약 2GB)</option><option value="240" selected>4시간 (240개, 약 4GB, 기본)</option><option value="480">8시간 (480개, 약 8.5GB)</option><option value="960">16시간 (960개, 약 17GB — 폰 용량 확인)</option></select></div>
+            <div class="muted" style="font-size:11px;margin-top:3px">상한을 넘기면 옛 영상부터 자동으로 지워져요(설정 › 저장·삭제 이력에 prune으로 남음). 경기 뒤엔 [PC로 영상 보내기 대기]로 먼저 옮기세요. 폰 저장 공간이 모자라면 저장 실패가 상태 줄에 떠요.</div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
             <div class="muted" style="font-size:11.5px;margin-top:4px">한 번에 옮기려면: [캠 영상 파일로 다운로드] → 파일 앱 › 다운로드 폴더 › 선택 › 전체 선택 › 공유 › "비디오 저장" — 사진 앨범으로 한 번에 들어가요. 그다음 USB로 PC에서 <b>아이폰_영상_가져오기</b> 실행.</div>
             <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="tag-btn" onclick="ccSaveAll()">캠 영상 파일로 다운로드 (파일 앱)</button><button type="button" class="tag-btn" onclick="ccShowLog()">저장·삭제 이력 보기</button></div>
@@ -2006,7 +2008,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.09';
+const APP_VERSION = 'v1.10';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9065,7 +9067,10 @@ function ccAspectChange(v) {
   try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
   if (ccStream && ccChan) ccReacquire('aspect'); else toast('화각 ' + (v === '16:9' ? '16:9' : '넓게 4:3') + ' — 다음 클럽캠 시작부터 적용');
 }
-const CC_MAX_SEGS = 120; // 폰에 보관할 최대 세그먼트 수(≈2시간·약 2GB) — 넘치면 오래된 것부터 삭제
+let CC_MAX_SEGS = 240; // 폰에 보관할 최대 세그먼트 수(1분 단위, 기본 240 ≈ 4시간·약 4.3GB) — 넘치면 오래된 것부터 삭제. v1.10: 설정 tm-cc-keep (v0.47~v1.09는 120 고정 → 2시간 넘게 찍으면 앞부분이 사라졌음)
+try { const k = parseInt(localStorage.getItem('tm-cc-keep') || '', 10); if (k >= 60 && k <= 2000) CC_MAX_SEGS = k; } catch (e) {}
+function ccKeepSet(v) { const k = parseInt(v, 10); if (!(k >= 60 && k <= 2000)) return; CC_MAX_SEGS = k; try { localStorage.setItem('tm-cc-keep', String(k)); } catch (e) {} toast('폰에 최근 ' + (k / 60) + '시간(' + k + '개, 약 ' + Math.round(k * 18 / 1024 * 10) / 10 + 'GB)까지 보관해요 — 넘치면 옛 영상부터 지워지니 그 전에 PC로 옮기세요'); }
+document.addEventListener('DOMContentLoaded', () => { const k = $('cc-keep'); if (k) k.value = String(CC_MAX_SEGS); });
 let ccChan = null, ccStream = null, ccRec = null, ccChunks = [], ccWakeLock = null;
 let ccCode = null, ccTimers = [], ccBusy = false, ccDb = null, ccSegN = 0, ccSegBytes = 0;
 let cvChan = null, cvCode = null, cvLastFrame = 0, cvTimer = null, cvHelloN = 0;
