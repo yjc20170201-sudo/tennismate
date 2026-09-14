@@ -566,7 +566,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   body.cc-full { overflow: hidden; }
   body.cc-full #cc-stage { position: fixed !important; inset: 0 !important; width: 100vw; height: 100vh; z-index: 9999; background: #000; margin: 0 !important; }
   body.cc-full #cc-cam { width: 100% !important; height: 100% !important; max-height: none !important; object-fit: contain; background: #000; }
-  #cc-fullbar { display: none; position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 10px; background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #fff; font-size: 12px; }
+  #cc-fullbar { display: none; position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; padding: 8px 10px; background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #fff; font-size: 12px; }
   body.cc-full #cc-fullbar { display: flex; flex-direction: column; gap: 6px; }
   #cc-fullbar .row { gap: 6px; }
   #cc-fullbar button { background: rgba(255,255,255,.18); color: #fff; border: none; border-radius: 10px; padding: 8px 10px; font-size: 13px; font-weight: 700; flex: 1; }
@@ -1206,7 +1206,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <canvas id="cc-preview" style="display:none;position:absolute;inset:0;width:100%;height:100%;background:#000"></canvas>
             <svg id="cc-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
             <canvas id="cc-cam-overlay" class="ai-overlay" onclick="clCanvasClick(event)"></canvas>
-            <button type="button" id="cc-tap" onclick="ccShowTap(false); ccReacquire('tap')" style="display:none;position:absolute;inset:12% 8%;align-items:center;justify-content:center;background:rgba(27,94,32,.92);color:#fff;border:none;border-radius:16px;font-size:20px;font-weight:800;z-index:3">탭해서 카메라 다시 켜기</button>
+            <button type="button" id="cc-tap" onclick="ccShowTap(false); ccReacquire('tap')" style="display:none;position:absolute;inset:12% 8%;align-items:center;justify-content:center;background:rgba(27,94,32,.92);color:#fff;border:none;border-radius:16px;font-size:20px;font-weight:800;z-index:6">탭해서 카메라 다시 켜기</button>
+            <div id="cc-eco-shade" onclick="ccEcoPeek()" style="display:none;position:absolute;inset:0;z-index:3;background:#000;color:#8fa896;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-size:14px;line-height:1.6;cursor:pointer"><div style="font-weight:800;font-size:17px;color:#d4e94e">절전 녹화 중</div><div>탭하면 5초간 화면을 보여줘요</div><div id="cc-eco-info" style="font-size:12px;opacity:.8;margin-top:6px"></div></div>
             <div id="cc-fullbar">
               <div id="cc-full-code" style="font-size:12px;opacity:.9"></div>
               <div id="cc-full-score" style="display:none;font-size:26px;font-weight:800;color:#d4e94e;line-height:1.1"></div>
@@ -1216,6 +1217,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
                 <button type="button" onclick="clAutoCalib()">보정</button>
                 <button type="button" onclick="clManualStart()">수동</button>
                 <button type="button" id="cc-full-judge" onclick="clToggle()">판정 켜기</button>
+                <button type="button" id="cc-full-eco" onclick="ccEcoToggle()">절전</button>
                 <button type="button" onclick="ccHardReload()">새로고침</button>
                 <button type="button" onclick="ccFullToggle()">⛶ 나가기</button>
               </div>
@@ -1224,6 +1226,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div class="row" style="gap:6px;margin-top:8px">
             <button type="button" class="btn small" style="flex:1" id="cl-auto-btn" onclick="clAutoCalib()">코트 자동 보정</button>
             <button type="button" class="btn small" style="flex:1.3;background:#1b5e20" id="cl-toggle-btn" onclick="clToggle()">라이브 판정 켜기</button>
+            <button type="button" class="btn small outline" style="flex:0 0 auto" id="cc-eco-btn" onclick="ccEcoToggle()">절전 녹화</button>
             <button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccFullToggle()">⛶ 전체 화면</button>
           </div>
           <details class="help" id="cc-settings" style="margin-top:8px"><summary>클럽캠 설정</summary>
@@ -2002,7 +2005,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.05';
+const APP_VERSION = 'v1.06';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9114,7 +9117,50 @@ function ccFullToggle() { // ⛶ 전체 화면 캠 모드 — 카메라가 화�
   const v = $('cc-cam'); if (v && v.paused) v.play().catch(() => {}); // 노드 이동 후 재생 유지
   setTimeout(() => { try { clDraw(); } catch (e) {} }, 80);
 }
+// ── 절전 녹화 모드 (v1.06): 야외 직사광에서 발열로 꺼지는 문제 완화 — 화면 검게, 미리보기 그리기·라이브 판정 정지, 썸네일 6초마다. 녹화·중계·WakeLock은 그대로 ──
+let ccEco = false, ccEcoPeekT = null, ccEcoSince = 0;
+function ccEcoPref() { try { return localStorage.getItem('tm-cc-eco') === '1'; } catch (e) { return false; } }
+function ccEcoToggle() { ccEco = !ccEco; try { localStorage.setItem('tm-cc-eco', ccEco ? '1' : '0'); } catch (e) {} ccEcoApply(); }
+function ccEcoApply() {
+  const sh = $('cc-eco-shade');
+  if (ccEco && ccStream) {
+    ccEcoSince = ccEcoSince || Date.now();
+    if (clOn) { clStop(true); toast('절전 녹화: 라이브 판정을 껐어요 (발열이 가장 큰 기능)'); }
+    ccPreviewStop(); const v = $('cc-cam'); if (v) v.style.opacity = '0.02'; // 디코딩은 유지, 그리기만 중단
+    if (sh) sh.style.display = 'flex';
+    ccEcoInfo();
+    ccStatus('절전 녹화 중 — 화면 그리기·라이브 판정 정지, 썸네일 6초마다. 녹화는 그대로. 밝기는 제어 센터에서 직접 최저로');
+    ccLog('eco-on', '');
+  } else {
+    if (sh) sh.style.display = 'none';
+    if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; }
+    if (ccStream) { ccPreviewStart(true); if (ccEcoSince) { ccStatus('절전 녹화 끝 — 라이브 판정은 필요하면 다시 켜세요'); ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분'); } }
+    else if (ccEco) toast('절전 녹화를 켜두면 클럽캠을 시작할 때 바로 절전으로 들어가요');
+    ccEcoSince = 0;
+  }
+  ccEcoBtns();
+}
+function ccEcoBtns() {
+  const b = $('cc-eco-btn'); if (b) { b.textContent = ccEco ? '절전 녹화 끄기' : '절전 녹화'; b.style.background = ccEco ? '#1b5e20' : ''; b.style.color = ccEco ? '#fff' : ''; }
+  const f = $('cc-full-eco'); if (f) { f.textContent = ccEco ? '절전 끄기' : '절전'; f.classList.toggle('hot', !!ccEco); }
+}
+function ccEcoInfo() {
+  const el = $('cc-eco-info'); if (!el) return;
+  const m = ccEcoSince ? Math.round((Date.now() - ccEcoSince) / 60000) : 0;
+  el.textContent = '캠 코드 ' + (ccCode || '—') + ' · 영상 ' + ccSegN + '개 · 절전 ' + m + '분' + (ccRec && ccRec.state === 'recording' ? ' · 녹화 중' : ' · 녹화 아님');
+}
+function ccEcoPeek() { // 검은 화면 탭 → 5초만 보여주고 다시 절전
+  if (!ccEco) return;
+  const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none';
+  ccPreviewStart(true);
+  if (ccEcoPeekT) clearTimeout(ccEcoPeekT);
+  ccEcoPeekT = setTimeout(() => { ccEcoPeekT = null; if (ccEco && ccStream) { ccPreviewStop(); const v = $('cc-cam'); if (v) v.style.opacity = '0.02'; if (sh) sh.style.display = 'flex'; ccEcoInfo(); } }, 5000);
+}
+// 꺼진 원인 이력 (v1.06): 다음에 또 꺼지면 설정 › 저장·삭제 이력에서 열(track-ended)·화면 잠김(hidden)·페이지 닫힘(pagehide)을 구분
+document.addEventListener('visibilitychange', () => { if (ccStream) ccLog(document.hidden ? 'hidden' : 'visible', document.hidden ? '화면 잠김 또는 다른 앱으로' : '복귀'); });
+window.addEventListener('pagehide', () => { if (ccStream) ccLog('pagehide', '페이지 닫힘/전환 (배터리·재부팅이면 이 줄이 마지막)'); });
 function ccFullSync() {
+  ccEcoBtns();
   const j = $('cc-full-judge'); if (j) { j.textContent = clOn ? '⏹ 판정 끄기' : '🤖 판정 켜기'; j.classList.toggle('hot', !!clOn); }
 }
 window.addEventListener('resize', () => { if (ccFull) setTimeout(() => { try { clDraw(); } catch (e) {} }, 120); });
@@ -9139,7 +9185,7 @@ function ccTrackDead() {
 function ccBindTracks() {
   if (!ccStream) return;
   ccStream.getVideoTracks().forEach(t => {
-    t.onended = () => { if (ccChan) ccReacquire('ended'); };
+    t.onended = () => { ccLog('track-ended', 'iOS가 카메라를 끊음 — 열 차단·다른 앱 카메라 사용 가능성'); if (ccChan) ccReacquire('ended'); };
     t.onmute = () => { setTimeout(() => { if (ccChan && document.visibilityState === 'visible' && ccTrackDead()) ccReacquire('muted'); }, 1200); };
   });
 }
@@ -9471,6 +9517,7 @@ async function ccToggle() {
   $('cc-cam-wrap').style.display = 'block'; $('cc-view-wrap').style.display = 'none'; // 보이는 상태에서 붙여야 iOS가 로드함 (v0.59)
   const v = $('cc-cam'); ccBindVideo(ccStream);
   ccPreviewStart(true); // 항상 캔버스로 표시 (v0.62)
+  if (ccEcoPref()) { ccEco = true; setTimeout(ccEcoApply, 300); } else ccEcoBtns(); // v1.06 절전 녹화(저장값)
   courtGuideInit('cc-cam'); // 📐 설치 가이드
   clUiReset(); // 🤖 라이브 판정: 저장된 보정이 이 카메라 해상도와 맞으면 복원
   v.addEventListener('loadedmetadata', () => clRestoreCal(), { once: true });
@@ -9595,7 +9642,8 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   }
   ccNoFrame = 0; ccNoFrameRounds = 0;
   if (!ccFrame._ok) { ccFrame._ok = true; try { sessionStorage.setItem('tm-cc-reloads', '0'); } catch (e) {} }
-  if (v.readyState < 2) { if (++ccRs0Ticks >= 2 && !ccPreviewOn) ccPreviewStart(); } else ccRs0Ticks = 0;
+  if (v.readyState < 2) { if (++ccRs0Ticks >= 2 && !ccPreviewOn && !ccEco) ccPreviewStart(); } else ccRs0Ticks = 0;
+  if (ccEco) { ccEcoInfo(); if ((ccFrame._eco = (ccFrame._eco || 0) + 1) % 4) return; } // v1.06 절전: 썸네일 6초마다
   const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
   const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
   cv.width = W; cv.height = H;
@@ -9605,6 +9653,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  { const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none'; if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; } if (ccEcoSince) ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분(캠 종료)'); ccEcoSince = 0; } // v1.06
   ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
   ccPreviewStop();
   if (ccFull) ccFullToggle();
