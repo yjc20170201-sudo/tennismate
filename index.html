@@ -2006,7 +2006,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.08';
+const APP_VERSION = 'v1.09';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7900,7 +7900,7 @@ function aiRefineLine(pts, l, yA, yB) { // 직선 ±4px 안의 마스크 점으�
 }
 function aiDetectCourtSvc(d, w, h) { // → [svcL, svcR, nearR, nearL] (복식 사이드라인 ∩ 서비스라인/베이스라인) | null
   const pts = aiLineMask2(d, w, h);
-  aiDetectCourtSvc.why = '';
+  aiDetectCourtSvc.why = ''; aiDetectCourtSvc.netY = null;
   if (pts.length < 80) { aiDetectCourtSvc.why = '라인 픽셀 부족'; return null; }
   const grid = new Set(pts.map(p => p[1] * w + p[0]));
   const lines = aiHough(pts, w, h);
@@ -7928,6 +7928,7 @@ function aiDetectCourtSvc(d, w, h) { // → [svcL, svcR, nearR, nearL] (복식 �
   }
   const netRows = rows.filter(r => r.sup > 0.4 && r.out > 0.35); // 네트 띠(사이드라인 바깥까지 밝은 줄)
   const net = netRows.sort((a, b) => (b.sup + b.out) - (a.sup + a.out))[0] || null;
+  aiDetectCourtSvc.netY = net ? net.yy : null; // v1.09: corners 폴백 검사용
   const isNet = yy => netRows.some(r => Math.abs(r.yy - yy) <= 8);
   const inside = rows.filter(r => r.out < 0.35 && !isNet(r.yy) && (!net || r.yy > net.yy + 8)).sort((a, b) => b.sup - a.sup); // 네트가 보이면 그 아래(가까운 코트)에서만
   if (inside.length) svc = { l: inside[0].l, y: inside[0].yy, sup: inside[0].sup };
@@ -7944,8 +7945,12 @@ function aiCalSane(q, mode) { // v1.08c: 자동 보정 사각형 모양 검사 �
   if (!q || q.length !== 4) return false;
   const top = q[1][0] - q[0][0], bot = q[2][0] - q[3][0];
   if (!(bot > 0) || !(top > 0)) return false;
-  const r = top / bot, lo = mode === 'auto-svc' ? 0.35 : 0.2;
-  const ok = r >= lo && r <= 0.98 && q[0][1] < q[3][1] && q[1][1] < q[2][1];
+  const r = top / bot, lo = mode === 'auto-svc' ? 0.35 : 0.08, hi = mode === 'auto-svc' ? 0.98 : 0.32; // 먼 베이스라인(23.77m)은 서비스라인(5.5m)보다 훨씬 좁게 보임: 카메라 3~8m 뒤면 0.11~0.25
+  let ok = r >= lo && r <= hi && q[0][1] < q[3][1] && q[1][1] < q[2][1];
+  const tiltTop = Math.atan2(q[1][1] - q[0][1], top), tiltBot = Math.atan2(q[2][1] - q[3][1], bot); // v1.09b: 위변·아래변 기울기 차 5° 넘으면 코트 가로선이 아님
+  if (ok && Math.abs(tiltTop - tiltBot) > 5 * Math.PI / 180) { aiCalSane.why = '모양 검사 실패 (위변 기울기 ' + (Math.abs(tiltTop - tiltBot) * 180 / Math.PI).toFixed(1) + '°, ' + mode + ')'; return false; }
+  const netY = aiDetectCourtSvc.netY;
+  if (ok && mode === 'corners' && netY != null && Math.abs((q[0][1] + q[1][1]) / 2 - netY) < 14) { ok = false; aiCalSane.why = '모양 검사 실패 (위변이 네트 띠 y=' + netY + ')'; return false; } // v1.09: 네트를 먼 베이스라인으로 잡은 경우
   if (!ok) aiCalSane.why = '모양 검사 실패 (폭 비율 ' + r.toFixed(2) + ', ' + mode + ')';
   return ok;
 }
