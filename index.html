@@ -1245,6 +1245,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             </div>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocut" checked onchange="clAutoCut = this.checked"> 아슬아슬(라인 5cm 이내)하면 자동으로 ✂️ 20초 클립을 내 폰으로</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="cl-autocall" checked onchange="clAutoCallSet(this.checked)"> 라이브 자동 콜 — 확실한 아웃(15cm↑)과 폴트(포인트 시작 첫 바운스가 서비스 박스 밖)만 소리로 (캠·본폰)</label>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-model" onchange="clModelSet(this.checked)"> 라이브 판정에 학습 모델(소형 v4) 사용 — 폴드3처럼 WebGPU 되는 폰 권장. 느린 폰은 자동으로 프레임 차분으로 돌아가요</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
@@ -2005,7 +2006,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.06';
+const APP_VERSION = 'v1.07';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8245,7 +8246,7 @@ async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web C
   WASB.resetStats(); aiDeepFrames = 0;
   return true;
 }
-function aiTrackCands(frames, vw) { // v0.81: frames [{t, cands:[{x,y,conf}]}] → 움직이는 공 궤적 [{t,x,y,s}]
+function aiTrackCands(frames, vw, maxSteps) { // maxSteps(v1.07): 라이브 모델 경로처럼 프레임 간격이 띄엄띄엄일 때 연결 반경 상한 // v0.81: frames [{t, cands:[{x,y,conf}]}] → 움직이는 공 궤적 [{t,x,y,s}]
   // 1) 놓인 공: 반경 vw*1%(≈13px) 안에 전체 프레임의 40% 이상 나타나는 위치는 정적 → 제거
   const R = vw * 0.01, N = frames.length; const clusters = [];
   frames.forEach(f => f.cands.forEach(c => { let cl = clusters.find(k => Math.hypot(k.x - c.x, k.y - c.y) <= R); if (cl) { cl.n++; cl.x = (cl.x * (cl.n - 1) + c.x) / cl.n; cl.y = (cl.y * (cl.n - 1) + c.y) / cl.n; } else clusters.push({ x: c.x, y: c.y, n: 1 }); }));
@@ -8258,7 +8259,7 @@ function aiTrackCands(frames, vw) { // v0.81: frames [{t, cands:[{x,y,conf}]}] �
     const used = new Set();
     tracks.forEach(tr => {
       if (tr.dead) return;
-      const last = tr.pts[tr.pts.length - 1]; const steps = Math.max(1, Math.round((f.t - last.t) * 30));
+      const last = tr.pts[tr.pts.length - 1]; const steps = Math.min(maxSteps || 1e9, Math.max(1, Math.round((f.t - last.t) * 30)));
       if (f.t - last.t > 0.4) { tr.dead = true; return; }
       const px = last.x + tr.vx * steps, py = last.y + tr.vy * steps; let best = null, bd = vw * 0.12 * steps;
       cands.forEach((c, i) => { if (used.has(i)) return; const d = Math.hypot(c.x - px, c.y - py); if (d < bd) { bd = d; best = i; } });
@@ -9089,7 +9090,7 @@ function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
   try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
 }
-document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); });
+document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); const cm = $('cl-model'); if (cm) cm.checked = clModel; });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
   const v = $('cc-cam'); if (!v || !stream) return;
   try {
@@ -10124,6 +10125,55 @@ function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스
     g.fillText(clLast.call ? (clLast.call + (clLast.close ? '?' : '') + ' ' + clLast.distCm + 'cm') : '바운스', q[0] + 14, q[1] + 5);
   }
 }
+// ── 라이브 판정 학습 모델 (v1.07): 프레임 차분 대신 소형 v4(ONNX, wasb.js)로 공 후보 추출. rVFC 틱에서 3장을 모아 한 번 추론(폴드3 WebGPU ≈0.3초/3장 → 초당 7~10장 표본), 추론 중엔 틱 건너뜀. 트랙은 판독 센터와 같은 aiTrackCands(정지 공 제거·속도 예측 연결). 느린 폰(900ms/3장 넘게 5회)은 프레임 차분으로 자동 전환 ──
+let clModel = !!navigator.gpu; try { const s0 = localStorage.getItem('tm-cl-model'); if (s0 !== null) clModel = s0 === '1'; } catch (e) {}
+let clModelLive = false, clMBusy = false, clMK = 0, clMN = 0, clMPool = null, clMT = [0, 0, 0], clMSlow = 0;
+function clModelSet(on) { clModel = !!on; try { localStorage.setItem('tm-cl-model', clModel ? '1' : '0'); } catch (e) {} if (clOn) toast('다음에 라이브 판정을 켤 때부터 적용돼요'); }
+function clModelFile() { const mf = (typeof aiModelFile === 'string' ? aiModelFile : '').split('|')[0]; return /tiny_xl/.test(mf) ? mf : 'ball_tiny_xl_v4.onnx'; } // WASB 원본(5MB)은 라이브엔 느려 소형만
+async function clModelStart() {
+  try {
+    clStatus('학습 모델 준비 중… (소형 v4)');
+    if (!window.WASB) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js?v=' + encodeURIComponent(APP_VERSION); sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패')); document.head.appendChild(sc); });
+    if (typeof WASB.resetStats !== 'function') throw new Error('구버전 wasb.js — 앱을 완전히 닫았다 다시 열어 주세요');
+    const mf = clModelFile();
+    if (WASB.model !== mf || !WASB.backend) await WASB.load('', t => clStatus('학습 모델 ' + t), mf, 'auto');
+    if (!clOn) return; // 준비 중에 껐으면
+    WASB.resetStats(); clModelLive = true; clMK = 0; clMBusy = false; clMN = 0; clMSlow = 0; clFrames = [];
+    clStatus('🤖 라이브 판정 중 (학습 모델 ' + mf.replace('.onnx', '').replace('ball_', '') + ' · ' + WASB.backend + ') — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 내 폰(뷰어)으로 보내요');
+  } catch (e) {
+    clModelLive = false;
+    clStatus('학습 모델을 못 열어 프레임 차분으로 판정해요 (' + ((e && e.message) || e) + ')');
+  }
+  if (clOn) clLoop();
+}
+function clModelTick(v, now) { // rVFC 틱마다: 3장 모아 추론(비동기). 추론 중엔 건너뜀 → 3장 묶음이 띄엄띄엄 들어오고 aiTrackCands가 시간 간격으로 잇는다
+  if (clMBusy) return;
+  const W = WASB.W || 512, H = WASB.H || 288;
+  if (!clMPool) clMPool = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; });
+  clMPool[clMK].getContext('2d').drawImage(v, 0, 0, W, H); clMT[clMK] = now;
+  const tw = CL_TW, th = Math.max(1, Math.round(CL_TW * v.videoHeight / v.videoWidth));
+  if (clSampleOn) { // 🧪 학습 샘플용 링 — 프레임 차분 경로와 같은 형식(묶음 프레임만)
+    const cv = clLoop._cv || (clLoop._cv = document.createElement('canvas')); if (cv.width !== tw || cv.height !== th) { cv.width = tw; cv.height = th; }
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(v, 0, 0, tw, th);
+    clRing.push({ t: now, d: cx.getImageData(0, 0, tw, th).data }); while (clRing.length > 45) clRing.shift();
+  }
+  if (++clMK < 3) return;
+  clMK = 0; clMBusy = true;
+  const ts = clMT.slice(); const t0 = performance.now();
+  WASB.detectFrames(clMPool, tw, th, { all: true, topk: 3, thr: aiModelThr() }).then(res => {
+    if (!clOn || !clModelLive) return;
+    const ms = performance.now() - t0; clMN++;
+    res.forEach((r, i) => clFrames.push({ t: ts[i], cands: r && r.cands ? r.cands.map(q => ({ x: q.x, y: q.y, conf: q.conf, n: 4 })) : [] }));
+    const nowS = performance.now() / 1000; while (clFrames.length && clFrames[0].t < nowS - CL_WIN) clFrames.shift();
+    if (ms > 900) { if (++clMSlow >= 5) { clModelLive = false; clPrev = clPrev2 = null; clFrames = []; clStatus('학습 모델이 이 폰에선 느려요 (' + Math.round(ms) + 'ms/3장) — 프레임 차분으로 전환. WebGPU 되는 폰(폴드3)을 캠으로 쓰면 모델로 돌아요'); return; } } else clMSlow = 0;
+    if (clMN === 6) clStatus('🤖 라이브 판정 중 (학습 모델 · ' + WASB.backend + ' · ' + Math.round(WASB.avgMs) + 'ms/3장 ≈ 초당 ' + Math.round(3000 / Math.max(1, WASB.avgMs + 100)) + '장 표본) — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 뷰어로 보내요');
+    if (clFrames.length >= 6 && nowS - clLastCall > CL_MIN_GAP) clDetect(tw, th, v);
+  }).catch(e => { console.warn('live model', e); }).finally(() => { clMBusy = false; });
+}
+function clModelTrack(frames, tw) { // 모델 후보 → 정지 공 제거 + 속도 예측 연결(판독 센터와 같은 aiTrackCands)
+  const pts = aiTrackCands(frames, tw, 4);
+  return pts.length >= 6 ? { pts } : null;
+}
 function clToggle() {
   if (clOn) { clStop(); return; }
   const v = $('cc-cam');
@@ -10131,12 +10181,14 @@ function clToggle() {
   if (!clH) { toast('먼저 ✨ 코트 자동 보정을 해주세요 (보정 없이는 바운스만 감지돼요)'); }
   clOn = true; clFrames = []; clPrev = clPrev2 = null; clTick = 0; clLastT = 0;
   const b = $('cl-toggle-btn'); if (b) b.textContent = '⏹ 라이브 판정 끄기';
+  clModelLive = false; clMBusy = false; clMK = 0;
+  if (clModel) { clModelStart(); return; } // v1.07: 학습 모델 준비 → 준비되면 clLoop
   clStatus('🤖 라이브 판정 중 — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 내 폰(뷰어)으로 보내요. 폰이 따뜻해질 수 있어요');
   clLoop();
 }
 function clStop(silent) {
   if (!clOn) return;
-  clOn = false; if (clTimer) { clearTimeout(clTimer); clTimer = null; }
+  clOn = false; if (clTimer) { clearTimeout(clTimer); clTimer = null; } clModelLive = false;
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   if (!silent) clStatus('라이브 판정을 껐어요 (' + clNCalls + '회 감지)');
 }
@@ -10148,6 +10200,7 @@ function clLoop() {
   const now = performance.now() / 1000;
   if (now - clLastT < 0.035) { next(); return; } // 최대 ~28fps
   clLastT = now;
+  if (clModelLive) { try { clModelTick(v, now); } catch (e) { /* 틱 하나 실패는 무시 */ } next(); return; } // v1.07 학습 모델 경로
   try {
     const tw = CL_TW, th = Math.max(1, Math.round(CL_TW * v.videoHeight / v.videoWidth));
     const cv = clLoop._cv || (clLoop._cv = document.createElement('canvas'));
@@ -10167,10 +10220,12 @@ function clLoop() {
   next();
 }
 function clDetect(tw, th, v) {
-  const track = clPickTrack(clFrames, tw);
+  const track = clModelLive ? clModelTrack(clFrames, tw) : clPickTrack(clFrames, tw); // v1.07
   if (!track || track.pts.length < 6) return;
   const pts = track.pts;
-  const bi = aiBounceIdx(pts.map(p => p.y));
+  let bi;
+  if (clModelLive) { bi = 0; pts.forEach((p, i) => { if (p.y > pts[bi].y) bi = i; }); if (bi === 0 || bi === pts.length - 1) bi = -1; } // 모델 경로: 표본이 성겨 이동평균이 한 칸 밀림 → 원시 최대점
+  else bi = aiBounceIdx(pts.map(p => p.y));
   if (bi < 3 || bi > pts.length - 3) return; // 하강·반등 양쪽 표본이 있어야
   if (pts[bi].y - pts[bi - 2].y < 3 || pts[bi].y - pts[bi + 2].y < 2) return; // 진짜 내려왔다 튀어오른 모양만
   if (performance.now() / 1000 - pts[bi].t < 0.12) return; // 반등 직후 표본이 더 모이면 다음 틱에
