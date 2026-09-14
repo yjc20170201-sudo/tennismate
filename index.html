@@ -2006,7 +2006,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.07';
+const APP_VERSION = 'v1.08';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7900,37 +7900,54 @@ function aiRefineLine(pts, l, yA, yB) { // 직선 ±4px 안의 마스크 점으�
 }
 function aiDetectCourtSvc(d, w, h) { // → [svcL, svcR, nearR, nearL] (복식 사이드라인 ∩ 서비스라인/베이스라인) | null
   const pts = aiLineMask2(d, w, h);
-  if (pts.length < 80) return null;
+  aiDetectCourtSvc.why = '';
+  if (pts.length < 80) { aiDetectCourtSvc.why = '라인 픽셀 부족'; return null; }
   const grid = new Set(pts.map(p => p[1] * w + p[0]));
   const lines = aiHough(pts, w, h);
   const H = lines.filter(l => l.tdeg >= 75 && l.tdeg <= 105), S = lines.filter(l => l.tdeg < 70 || l.tdeg > 110);
-  if (H.length < 1 || S.length < 2) return null;
+  if (H.length < 1 || S.length < 2) { aiDetectCourtSvc.why = '가로/세로 직선 부족 H' + H.length + ' S' + S.length; return null; }
   const yOf = l => Math.abs(Math.sin(l.th)) < 1e-6 ? null : (l.rho - (w / 2) * Math.cos(l.th)) / Math.sin(l.th);
   // 가까운 베이스라인 = 화면 아래쪽 수평선 중 전폭 지지율 25% 이상인 가장 아래 것
   const Hs = H.map(l => ({ l, y: yOf(l) })).filter(o => o.y !== null && o.y > h * 0.3 && o.y < h - 2)
     .map(o => ({ ...o, sup: aiSegSupportH(grid, o.l, 0, w - 1, w, h) })).filter(o => o.sup > 0.25).sort((a, b) => b.y - a.y);
-  if (!Hs.length) return null;
+  if (!Hs.length) { aiDetectCourtSvc.why = '베이스라인 없음'; return null; }
   const near = Hs[0];
   // 사이드라인: 베이스라인과의 교점이 화면 근처, 베이스라인 위 구간 지지율 30% 이상. 왼쪽/오른쪽 각각 지지율 최대
   const cand = S.map(l => { const c = aiIntersect(l, near.l); if (!c) return null; return { l, cx: c[0], sup: aiSegSupportV(grid, l, near.y - h * 0.35, near.y - 4, w) }; })
     .filter(o => o && o.cx > -0.7 * w && o.cx < 1.7 * w && o.sup > 0.3);
   const L = cand.filter(o => o.cx < w * 0.45).sort((a, b) => b.sup - a.sup)[0], R = cand.filter(o => o.cx > w * 0.55).sort((a, b) => b.sup - a.sup)[0];
-  if (!L || !R) return null;
-  // 서비스라인: 베이스라인과 같은 기울기의 직선을 y로 훑어 사이드라인 사이 지지율 최대 (허프에 안 잡혀도 됨)
+  if (!L || !R) { aiDetectCourtSvc.why = '사이드라인 없음 L' + (L ? 1 : 0) + ' R' + (R ? 1 : 0) + ' 후보 ' + cand.length; return null; }
+  // 서비스라인 (v1.08): 베이스라인과 같은 기울기의 가로줄을 y로 훑되, ① 사이드라인 바깥까지 이어지는 밝은 줄(네트 띠·펜스)은 제외 ② 네트 띠가 보이면 사이드라인 소실점 원근으로 서비스라인 y를 예측해 그 ±5% 안에서만 고름. (9/13 야외 코트: 네트를 서비스라인으로 잡아 코트가 절반으로 눌리던 문제)
   let svc = null; const th0 = near.l.th;
-  for (let yy = Math.round(near.y - h * 0.5); yy <= near.y - h * 0.12; yy++) {
+  const outSup = (l, xa, xb) => { const m = Math.round(w * 0.15); let sS = 0, nN = 0; const a0 = Math.max(0, xa - m), a1 = xa - 6, b0 = xb + 6, b1 = Math.min(w - 1, xb + m); if (a1 - a0 >= 12) { sS = Math.max(sS, aiSegSupportH(grid, l, a0, a1, w, h)); nN++; } if (b1 - b0 >= 12) { sS = Math.max(sS, aiSegSupportH(grid, l, b0, b1, w, h)); nN++; } return nN ? sS : 0; }; // 좌/우 중 큰 쪽 — 네트 띠가 한쪽만 화면에 걸려도
+  const rows = [];
+  for (let yy = Math.round(near.y - h * 0.62); yy <= near.y - h * 0.12; yy++) {
+    const xa = aiLineX(L.l, yy), xb = aiLineX(R.l, yy); if (xa === null || xb === null || xb - xa < w * 0.15) continue;
     const l = { th: th0, rho: (w / 2) * Math.cos(th0) + yy * Math.sin(th0) };
-    const xa = aiLineX(L.l, yy), xb = aiLineX(R.l, yy); if (xa === null || xb === null) continue;
-    const s2 = aiSegSupportH(grid, l, xa + 4, xb - 4, w, h);
-    if (!svc || s2 > svc.sup) svc = { l, y: yy, sup: s2 };
+    rows.push({ yy, l, sup: aiSegSupportH(grid, l, xa + 4, xb - 4, w, h), out: outSup(l, xa, xb) });
   }
+  const netRows = rows.filter(r => r.sup > 0.4 && r.out > 0.35); // 네트 띠(사이드라인 바깥까지 밝은 줄)
+  const net = netRows.sort((a, b) => (b.sup + b.out) - (a.sup + a.out))[0] || null;
+  const isNet = yy => netRows.some(r => Math.abs(r.yy - yy) <= 8);
+  const inside = rows.filter(r => r.out < 0.35 && !isNet(r.yy) && (!net || r.yy > net.yy + 8)).sort((a, b) => b.sup - a.sup); // 네트가 보이면 그 아래(가까운 코트)에서만
+  if (inside.length) svc = { l: inside[0].l, y: inside[0].yy, sup: inside[0].sup };
+  aiDetectCourtSvc.why = (svc ? 'svc y=' + svc.y + ' sup=' + svc.sup.toFixed(2) : 'svc 없음') + (net ? ' net y=' + net.yy : ' net없음');
   if (!svc || svc.sup < 0.3) return null;
   const nl = aiRefineLine(pts, near.l, near.y - 6, near.y + 6), sl = aiRefineLine(pts, svc.l, svc.y - 6, svc.y + 6);
   const Ll = aiRefineLine(pts, L.l, svc.y - 10, near.y + 6), Rl = aiRefineLine(pts, R.l, svc.y - 10, near.y + 6);
   const c1 = aiIntersect(sl, Ll), c2 = aiIntersect(sl, Rl), c3 = aiIntersect(nl, Rl), c4 = aiIntersect(nl, Ll);
-  if (!c1 || !c2 || !c3 || !c4) return null;
-  if (c3[0] - c4[0] < w * 0.5 || c2[0] - c1[0] <= 0 || c2[0] - c1[0] > c3[0] - c4[0]) return null;
+  if (!c1 || !c2 || !c3 || !c4) { aiDetectCourtSvc.why += ' 교점 실패'; return null; }
+  if (c3[0] - c4[0] < w * 0.5 || c2[0] - c1[0] <= 0 || c2[0] - c1[0] > c3[0] - c4[0]) { aiDetectCourtSvc.why += ' 모양 검사 실패'; return null; }
   return [c1, c2, c3, c4];
+}
+function aiCalSane(q, mode) { // v1.08c: 자동 보정 사각형 모양 검사 — 위변(먼 쪽)/아래변(베이스라인) 폭 비율. 실코트 A·C 정상값 0.51~0.54, 엉뚱한 결과 0.11~0.22
+  if (!q || q.length !== 4) return false;
+  const top = q[1][0] - q[0][0], bot = q[2][0] - q[3][0];
+  if (!(bot > 0) || !(top > 0)) return false;
+  const r = top / bot, lo = mode === 'auto-svc' ? 0.35 : 0.2;
+  const ok = r >= lo && r <= 0.98 && q[0][1] < q[3][1] && q[1][1] < q[2][1];
+  if (!ok) aiCalSane.why = '모양 검사 실패 (폭 비율 ' + r.toFixed(2) + ', ' + mode + ')';
+  return ok;
 }
 function aiAutoCalibCore(v) { // v0.80: 현재 프레임에서 코트 보정 시도 → 'auto-svc' | 'corners' | null (aiCorners·aiH 설정)
   const w2 = 640, h2 = Math.max(2, Math.round(w2 * v.videoHeight / v.videoWidth));
@@ -7939,7 +7956,8 @@ function aiAutoCalibCore(v) { // v0.80: 현재 프레임에서 코트 보정 시
   cx.drawImage(v, 0, 0, w2, h2);
   const data = cx.getImageData(0, 0, w2, h2).data;
   let q = aiDetectCourtSvc(data, w2, h2), mode = 'auto-svc';
-  if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; }
+  if (q && !aiCalSane(q, mode)) q = null;
+  if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; if (q && !aiCalSane(q, mode)) q = null; } // v1.08c: 엉뚱한 사각형이면 실패로
   if (!q) return null;
   const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
   const pts = q.map(c => [c[0] * sx, c[1] * sy]);
@@ -10029,7 +10047,8 @@ function clAutoCalib() {
     cx.drawImage(v, 0, 0, w2, h2);
     const data = cx.getImageData(0, 0, w2, h2).data;
     let q = aiDetectCourtSvc(data, w2, h2), mode = 'auto-svc'; // v0.77: 실코트 검증된 서비스라인 기준 우선
-    if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; }
+    if (q && !aiCalSane(q, mode)) q = null;
+    if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; if (q && !aiCalSane(q, mode)) q = null; } // v1.08c
     if (!q) { clStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이게 잡거나, 📐 수동으로 4점을 탭하세요'); return; }
     const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
     clCalModeChange(mode);
