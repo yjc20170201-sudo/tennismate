@@ -2008,7 +2008,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.12';
+const APP_VERSION = 'v1.13';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9111,12 +9111,17 @@ function clAutoCallFor(vd, mC, isServe) { // v0.84: 확실한 것만 → 'OUT' |
 }
 function clCallSay(text) { // 자동 콜 음성 (토글 cl-autocall) — 캠·뷰어 공용
   if (!clAutoCall || !text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+  try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); ccTtsUnlocked = true; } catch (e) {}
+}
+let ccTtsUnlocked = false;
+function ccTtsUnlock() { // v1.13: iOS 사파리는 사용자 탭 안에서 speak()를 한 번 해야 이후 채널 이벤트(본폰 점수판 콜)로도 말함 — "점수 콜 소리" 체크를 껐다 켜면 되던 이유
+  if (ccTtsUnlocked || !ccVoiceOn || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
+  try { const u = new SpeechSynthesisUtterance('클럽캠 시작'); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; u.onstart = () => { ccTtsUnlocked = true; }; speechSynthesis.speak(u); } catch (e) {}
 }
 function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   if (!ccVoiceOn || !p || typeof p.text !== 'string' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
-  try { speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); } catch (e) {}
+  try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); ccTtsUnlocked = true; } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); const cm = $('cl-model'); if (cm) cm.checked = clModel; });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
@@ -9228,6 +9233,7 @@ async function ccReacquire(why) {
   if (!ccChan || ccReacq) return; ccReacq = true;
   ccStatus('📷 카메라 다시 여는 중… (' + (why === 'manual' || why === 'tap' ? '수동' : why) + ')');
   const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // 탭 직후 즉시 요청 — 어떤 await보다 먼저 (v0.58)
+  if (why === 'tap' || why === 'manual') ccTtsUnlock(); // v1.13: 탭으로 다시 열 때만(자동 재획득은 제스처가 아님)
   camReq.catch(() => {});
   try {
     try { await ccSealSeg(); } catch (e) {} // 지금까지 구간은 저장
@@ -9515,6 +9521,7 @@ async function ccToggle() {
   if (ccChan) { if (ccSendMode) await ccStop(true); else { ccStop(); return; } }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // iOS: 탭 직후(어떤 await보다 먼저) 요청해야 허용됨 (v0.58)
+  ccTtsUnlock(); // v1.13: 같은 탭 안에서 음성 합성도 열어 둠(안 하면 본폰 콜이 채널로 와도 iOS가 말하지 않음)
   camReq.catch(() => {});
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
