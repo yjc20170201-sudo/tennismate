@@ -576,6 +576,10 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   .ai-verdict { display: inline-block; border-radius: 999px; padding: 4px 12px; font-weight: 800; font-size: 13px; }
   .ai-verdict.in { background: #e8f3ec; color: var(--green); }
   .ai-verdict.out { background: #fdeaea; color: #c0392b; }
+  .ai-card { display: flex; gap: 8px; margin-top: 8px; align-items: flex-start; flex-wrap: wrap } /* v1.14 결과 카드 */
+  .ai-card canvas { border-radius: 10px; background: #000; max-width: 100% }
+  .ai-card #ai-card-crop { flex: 1 1 200px; width: 100%; height: auto; min-width: 0 }
+  .ai-card #ai-card-court { flex: 0 0 auto; width: 96px; height: auto }
   .ai-verdict.unsure { background: #fdf3e3; color: #b0722a; }
   body.dark .ai-verdict.in { background: #1d3527; color: #5ecb8b; }
   body.dark .ai-verdict.out { background: #3a2020; color: #e08a80; }
@@ -1303,6 +1307,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div id="cc-call-feed" style="margin-top:4px"></div>
           <div id="cc-call-sum"></div>
           <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
+          <button type="button" class="btn small full" style="margin-top:6px;background:#8e44ad" onclick="cvChallenge()">챌린지 — 마지막 바운스 바로 판독 (캠이 앞뒤 4초만 보내고 자동 분석)</button>
         </div>
         <div class="row" style="gap:6px;margin-top:8px">
           <button type="button" class="btn small outline" style="flex:1" onclick="ccShareAll()">캠 영상 내보내기 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 사진 앨범·드라이브로</button>
@@ -2008,7 +2013,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.13';
+const APP_VERSION = 'v1.14';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7975,6 +7980,85 @@ function aiAutoCalibCore(v) { // v0.80: 현재 프레임에서 코트 보정 시
   return mode;
 }
 let aiCalMode = 'corners';
+// ── v1.14 결과 카드(스윙비전식 "바로 보기"): 바운스 확대 장면(코트 라인 투영·궤적·착지점) + 미니 코트 낙하점 ──
+let aiCardInfo = null, aiCardVid = null, aiChallengeInfo = null;
+function aiInv3(H) { // 3×3 역행렬 (코트 m → 이미지 px)
+  const [a, b, c, d, e, f, g, h, i] = H;
+  const A = e * i - f * h, B = -(d * i - f * g), C = d * h - e * g;
+  const det = a * A + b * B + c * C; if (!det || !isFinite(det)) return null;
+  return [A / det, -(b * i - c * h) / det, (b * f - c * e) / det, B / det, (a * i - c * g) / det, -(a * f - c * d) / det, C / det, -(a * h - b * g) / det, (a * e - b * d) / det];
+}
+function aiCourtToImg(Hi, cx, cy) { const w = Hi[6] * cx + Hi[7] * cy + Hi[8]; return [(Hi[0] * cx + Hi[1] * cy + Hi[2]) / w, (Hi[3] * cx + Hi[4] * cy + Hi[5]) / w]; }
+function aiCourtSegs() { // 코트 라인(m, 라인 중심): 베이스라인 2·복식 사이드 2·단식 사이드 2·서비스라인 2·센터 서비스라인·네트
+  const W = AI_COURT_W, L = AI_COURT_L, S = AI_SINGLES_IN, sv = L / 2 - 6.40;
+  return [[0, 0, W, 0], [0, L, W, L], [0, 0, 0, L], [W, 0, W, L], [S, 0, S, L], [W - S, 0, W - S, L], [S, sv, W - S, sv], [S, L - sv, W - S, L - sv], [W / 2, sv, W / 2, L - sv], [0, L / 2, W, L / 2]];
+}
+function aiMiniCourt(c, cx, cy, vd) { // 위에서 본 코트 + 착지점
+  if (!c) return;
+  const g = c.getContext('2d'); const W = c.width, H = c.height; const m = 10; const sc = Math.min((W - 2 * m) / AI_COURT_W, (H - 2 * m) / AI_COURT_L);
+  const ox = (W - AI_COURT_W * sc) / 2, oy = (H - AI_COURT_L * sc) / 2;
+  const P = (x, y) => [ox + x * sc, oy + y * sc];
+  g.fillStyle = '#2a6f97'; g.fillRect(0, 0, W, H); g.fillStyle = '#3d8bbf'; { const [x0, y0] = P(0, 0), [x1, y1] = P(AI_COURT_W, AI_COURT_L); g.fillRect(x0, y0, x1 - x0, y1 - y0); }
+  g.strokeStyle = '#fff'; g.lineWidth = 1.5; aiCourtSegs().forEach(sg => { const [x0, y0] = P(sg[0], sg[1]), [x1, y1] = P(sg[2], sg[3]); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); });
+  { const [x0, y0] = P(0, AI_COURT_L / 2), [x1] = P(AI_COURT_W, 0); g.strokeStyle = '#111'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0 - 4, y0); g.lineTo(x1 + 4, y0); g.stroke(); }
+  if (cx != null && isFinite(cx) && isFinite(cy)) {
+    const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, cy));
+    const [bx, by] = P(qx, qy);
+    g.fillStyle = vd ? (vd.call === 'IN' ? '#2ecc71' : '#e74c3c') : '#f1c40f'; g.beginPath(); g.arc(bx, by, 5, 0, 7); g.fill();
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(bx, by, 5, 0, 7); g.stroke();
+    if (qx !== cx || qy !== cy) { g.fillStyle = '#fff'; g.font = 'bold 9px sans-serif'; g.fillText('코트 밖', Math.min(W - 34, Math.max(2, bx - 14)), Math.max(10, by - 8)); }
+  }
+}
+function aiCropDraw(info) { // 숨은 <video>로 바운스 프레임을 따로 찾아 확대 (본 플레이어는 재생 중이라 건드리지 않음)
+  const v = $('vj-video'), c = $('ai-card-crop'); if (!v || !c || !v.videoWidth) return;
+  const src = v.currentSrc || v.src; if (!src) return;
+  if (!aiCardVid) { const cv = document.createElement('video'); cv.muted = true; cv.playsInline = true; cv.preload = 'auto'; cv.setAttribute('muted', ''); cv.setAttribute('playsinline', ''); cv.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0.01;pointer-events:none'; document.body.appendChild(cv); aiCardVid = cv; }
+  const cv = aiCardVid, rb = info.rb, Z = 3.2;
+  const draw = () => { try {
+    const vw = v.videoWidth, vh = v.videoHeight, rw = c.width / Z, rh = c.height / Z;
+    let x0 = Math.max(0, Math.min(vw - rw, rb.x - rw / 2)), y0 = Math.max(0, Math.min(vh - rh, rb.y - rh * 0.55));
+    const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height);
+    try { g.drawImage(cv, x0, y0, rw, rh, 0, 0, c.width, c.height); } catch (e) {}
+    const P = (x, y) => [(x - x0) * Z, (y - y0) * Z];
+    if (aiH) { const Hi = aiInv3(aiH); if (Hi) { g.strokeStyle = 'rgba(255,230,0,0.9)'; g.lineWidth = 2; aiCourtSegs().forEach(sg => { g.beginPath(); let started = false; for (let k = 0; k <= 60; k++) { const q = aiCourtToImg(Hi, sg[0] + (sg[2] - sg[0]) * k / 60, sg[1] + (sg[3] - sg[1]) * k / 60); if (!isFinite(q[0]) || !isFinite(q[1]) || Math.abs(q[0]) > 1e5) { started = false; continue; } const [px, py] = P(q[0], q[1]); if (!started) { g.moveTo(px, py); started = true; } else g.lineTo(px, py); } g.stroke(); }); } }
+    g.fillStyle = 'rgba(255,255,255,0.85)'; aiTraj.forEach(p => { const [px, py] = P(p.x, p.y); if (px >= 0 && px <= c.width && py >= 0 && py <= c.height) { g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); } });
+    const [bx, by] = P(rb.x, rb.y); g.strokeStyle = info.vd ? (info.vd.call === 'IN' ? '#2ecc71' : '#e74c3c') : '#f1c40f'; g.lineWidth = 3; g.beginPath(); g.arc(bx, by, 13, 0, 7); g.stroke();
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, c.height - 18, c.width, 18); g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.fillText('바운스 ' + rb.t.toFixed(2) + '초 · ' + Z + '배 확대' + (aiH ? ' · 노란 선 = 보정된 코트 라인' : ''), 6, c.height - 5);
+    c.dataset.drawn = '1';
+  } catch (e) {} };
+  const onSeek = () => { cv.removeEventListener('seeked', onSeek); draw(); };
+  cv.addEventListener('seeked', onSeek);
+  if (cv.src !== src) { cv.src = src; cv.addEventListener('loadedmetadata', () => { cv.currentTime = rb.t; }, { once: true }); } else cv.currentTime = rb.t;
+  setTimeout(() => { if (!c.dataset.drawn && cv.readyState >= 2) draw(); }, 3000); // 안전망
+}
+function aiResultCard(info) {
+  const res = $('ai-result'); if (!res || !info || !info.rb) return;
+  const old = $('ai-card'); if (old) old.remove();
+  const d = document.createElement('div'); d.id = 'ai-card'; d.className = 'ai-card';
+  d.innerHTML = '<canvas id="ai-card-crop" width="336" height="224"></canvas><canvas id="ai-card-court" width="120" height="236"></canvas>';
+  res.appendChild(d);
+  const cc = $('ai-card-court'); if (info.cx != null) aiMiniCourt(cc, info.cx, info.cy, info.vd); else cc.style.display = 'none';
+  aiCropDraw(info);
+  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지 — 캠 실시간 의견 ' + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? info.vd.call + ' ' + info.vd.distCm + 'cm' : '보정 없음'); d.appendChild(cap); }
+}
+async function aiChallengeRun(p) { // v1.14: 챌린지 클립이 열리면 바운스 시각(끝에서 fromEnd)으로 이동해 정밀 추적 자동 실행
+  const v = $('vj-video'); if (!v || !p) return;
+  const st = $('cc-view-status');
+  await new Promise(res => { if (v.readyState >= 1) return res(); v.addEventListener('loadedmetadata', res, { once: true }); setTimeout(res, 4000); });
+  let dur = v.duration;
+  if (!isFinite(dur) || dur <= 0) { // MediaRecorder webm은 길이가 Infinity → 끝으로 보내 실제 길이를 알아냄
+    try { v.currentTime = 1e6; await new Promise(res => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 3000); }); } catch (e) {}
+    dur = isFinite(v.duration) && v.duration > 0 ? v.duration : v.currentTime;
+  }
+  if (!isFinite(dur) || dur <= 0) dur = 4;
+  const t = Math.min(Math.max(0.3, dur - (p.fromEnd || 0) / 1000), Math.max(0.3, dur - 0.3));
+  v.currentTime = t; await new Promise(res => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 2500); });
+  if (st) st.textContent = '챌린지: ' + t.toFixed(1) + '초 지점 자동 판독 중…' + (p.call ? ' (캠 실시간 의견 ' + p.call + (p.distCm != null ? ' ' + p.distCm + 'cm' : '') + ')' : '');
+  aiChallengeInfo = { call: p.call, distCm: p.distCm, close: !!p.close, guess: !!p.guess };
+  try { await aiAnalyzeDeep(); } catch (e) {}
+  if (st) st.textContent = '챌린지 결과가 아래 판독 센터에 있어요 (확대 장면 + 미니 코트)';
+  const card = $('ai-card'); if (card) { try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
+}
 function aiSay(text) { // 판정 음성 (v0.80) — 기기가 지원할 때만, 점수판 콜과 같은 ko-KR
   try {
     if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
@@ -8578,6 +8662,7 @@ function covRender(pts) {
   covStatus('완료!');
 }
 function aiFinish(t0, t1) {
+  aiCardInfo = null; // v1.14
   const res = $('ai-result');
   if (aiTraj.length < 4) {
     aiStatus('공을 못 찾았어요 (' + aiTraj.length + '회) — 이럴 땐 0.25× 슬로우와 ◀▶ 프레임 버튼으로 직접 보는 게 제일 정확해요. 다시 시도하려면 공이 크게 보이는 순간에 멈추고 눌러주세요.');
@@ -8602,12 +8687,13 @@ function aiFinish(t0, t1) {
   } else {
     const b = aiTraj[bi];
     const rb = aiRefineBounce(aiTraj, bi) || b; // 보간 성공 시 정밀 착지점 사용
+    aiCardInfo = { rb }; // v1.14 결과 카드
     const refined = rb !== b;
     const v = $('vj-video'); v.currentTime = rb.t; // 바운스 순간으로 이동
     html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
     if (aiH) {
       const [cx, cy] = aiMapPt(aiH, rb.x, rb.y);
-      const vd = aiVerdict(cx, cy);
+      const vd = aiVerdict(cx, cy); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14
       const cls = vd.close ? 'unsure' : (vd.call === 'IN' ? 'in' : 'out');
       html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">라인에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${aiCalMode === 'auto-svc' ? ' · 자동 보정' : ''}</span></div>`;
       say = (vd.call === 'IN' ? '인' : '아웃') + (vd.close ? ', 아슬아슬해요' : '') + ', 라인에서 ' + vd.distCm + '센티';
@@ -8624,6 +8710,7 @@ function aiFinish(t0, t1) {
     if (sp) html += `<div style="margin-top:6px"><span class="badge orange">🌀 ${sp.label} 추정</span> <span class="muted" style="font-size:12px">낙하각 ${sp.angleIn}° · 바운스 반발 ${sp.rebound}% — ${sp.why} <b>(1대 카메라 참고치)</b></span></div>`;
   }
   res.innerHTML = html;
+  if (aiCardInfo) { try { aiResultCard(aiCardInfo); } catch (e) {} } // v1.14 바운스 확대 + 미니 코트
   aiStatus('완료 — ▶ 재생을 누르면 공 이동 경로가 혜성 꼬리처럼 따라 그려져요 (정지하면 전체 경로)');
   aiSyncCanvas(); aiDraw();
 }
@@ -9058,6 +9145,10 @@ async function mrTryOpen() {
 // 뷰어(내 폰): 썸네일 라이브 보기 + ✂️ 요청 → 캠이 직전 ~20초를 storage 'clips'(cam/코드/)에 올리면 판독 센터로 자동 오픈
 const CC_SEG = 60;  // 세그먼트 길이(초)
 const CC_CUT = 20;  // ✂️ 클립 길이(초)
+const CC_CH_BEFORE = 2.5, CC_CH_AFTER = 2.0, CC_CH_MAXAGE = 45, CC_CH_FALLBACK = 8, CC_CH_FALLBACK_SEEK = 3; // v1.14 챌린지 창(초): 마지막 바운스 앞·뒤, 바운스 기록이 없으면 직전 8초(바운스는 끝에서 3초 전으로 추정)
+function ccPickChunks(chunks, startMs, endMs) { // 청크 at = 1초 청크가 끝난 시각 → [at-1000, at]가 창과 겹치는 것만 (첫 청크=헤더는 항상)
+  return chunks.filter((c, i) => i === 0 || (c.at >= startMs && c.at - 1000 <= endMs));
+}
 // 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
 function ccAspect() { return '16:9'; } // v0.61: 화각 선택 제거 — 16:9 고정 (첫 실기기 성공 때와 동일 제약)
 function ccCamConstraints() {
@@ -9534,7 +9625,7 @@ async function ccToggle() {
   ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
   const code = ccMyCode();
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
-  chan.on('broadcast', { event: 'cut' }, () => ccOnCut());
+  chan.on('broadcast', { event: 'cut' }, p => ccOnCut(p && p.payload));
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
   chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
   chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
@@ -9604,20 +9695,26 @@ async function ccFlush() { // 1분마다: 자체 재생 가능한 세그먼트�
   ccBusy = false;
   if (ccStream) ccStartRec();
 }
-async function ccOnCut() { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨)
-  if (ccBusy || !ccStream || !ccChan) return; ccBusy = true;
-  ccStatus('✂️ 클립 잘라서 올리는 중…');
+async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨). v1.14: p.challenge면 마지막 바운스 앞뒤만
+  if (ccBusy || !ccStream || !ccChan) return;
+  const ch = !!(p && p.challenge);
+  const b = ch && clLast && clLast.bounceAt && Date.now() - clLast.bounceAt < CC_CH_MAXAGE * 1000 ? clLast : null;
+  if (b) { const wait = b.bounceAt + CC_CH_AFTER * 1000 + 400 - Date.now(); if (wait > 0) { setTimeout(() => ccOnCut(p), wait); return; } } // 반등 뒤 장면이 녹화될 때까지
+  ccBusy = true;
+  ccStatus(ch ? '챌린지 클립 잘라서 올리는 중…' : '✂️ 클립 잘라서 올리는 중…');
   try {
     const chunks = await ccSealSeg();
     const cutoff = Date.now() - CC_CUT * 1000;
-    const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
+    const cut = ch ? ccPickChunks(chunks, b ? b.bounceAt - CC_CH_BEFORE * 1000 : Date.now() - CC_CH_FALLBACK * 1000, b ? b.bounceAt + CC_CH_AFTER * 1000 : Date.now()) : chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
     if (cut.length < 2) throw new Error('버퍼에 영상이 없어요');
     const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
     const at = Date.now();
     const path = 'cam/' + ccCode + '/' + at + '.' + ccFmt.ext;
     const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: ccFmt.type, upsert: true });
     if (error) throw error;
-    ccChan.send({ type: 'broadcast', event: 'camclip', payload: { path, at } });
+    const pay = { path, at };
+    if (ch) { const last = cut[cut.length - 1]; pay.challenge = true; pay.fromEnd = b ? Math.max(0, last.at - b.bounceAt) : CC_CH_FALLBACK_SEEK * 1000; pay.call = b ? b.call : null; pay.distCm = b ? b.distCm : null; pay.close = b ? !!b.close : false; pay.guess = !b; ccLog('challenge', (b ? '바운스 ' + Math.round((Date.now() - b.bounceAt) / 1000) + '초 전' : '바운스 기록 없음') + ' · 청크 ' + cut.length); }
+    ccChan.send({ type: 'broadcast', event: 'camclip', payload: pay });
     ccStatus('✂️ 클립 전송 완료 (' + Math.round(blob.size / 1024) + 'KB) — 🔴 녹화+중계 계속');
   } catch (e) {
     if (ccChan) ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: e.message || '업로드 실패' } });
@@ -10279,7 +10376,7 @@ function clDetect(tw, th, v) {
   const isServe = clCallsSinceScore === 0 && sinceScore >= 3 && sinceScore <= 45; clCallsSinceScore++;
   const auto = clAutoCallFor(vd, mC, isServe); // v0.84
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
-  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto };
+  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt: at - Math.round((performance.now() / 1000 - rb.t) * 1000) }; // bounceAt = 벽시계 기준 착지 시각 (v1.14 챌린지 창)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
   [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
   const trailN = pts.map(p => [Math.round(p.x * sx / v.videoWidth * 1000) / 1000, Math.round(p.y * sy / v.videoHeight * 1000) / 1000]); // 뷰어용 정규화 좌표
@@ -10414,6 +10511,14 @@ function cvFrame(p) {
   const st = $('cc-view-status');
   if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
 }
+function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
+  if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
+  const m = { type: 'broadcast', event: 'cut', payload: { at: Date.now(), challenge: true } };
+  if (cvChan) cvChan.send(m);
+  if (cvChanB) { try { cvChanB.send(m); } catch (e) {} }
+  const st = $('cc-view-status');
+  if (st) st.textContent = '챌린지 요청 보냄 — 캠이 바운스 앞뒤 4초를 올리면 자동으로 판독해요 (10초쯤)';
+}
 function cvCut() {
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
   const cutMsg = { type: 'broadcast', event: 'cut', payload: { at: Date.now() } };
@@ -10432,6 +10537,7 @@ async function cvClip(p) {
     if (error) throw error;
     vjLoadBlob(data, '✂️ 클럽캠 클립 도착 — 슬로우·🤖 AI로 판독하세요');
     cvClipPair('A', data, p.at);
+    if (p.challenge) aiChallengeRun(p); // v1.14
     if (st) st.textContent = '⚖️ 클립이 아래 판독 센터에 열렸어요';
   } catch (e) {
     if (st) st.textContent = '클립 다운로드 실패: ' + (e.message || e);
