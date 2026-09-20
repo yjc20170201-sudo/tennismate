@@ -1234,6 +1234,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccFullToggle()">⛶ 전체 화면</button>
           </div>
           <details class="help" id="cc-settings" style="margin-top:8px"><summary>클럽캠 설정</summary>
+            <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><input type="checkbox" id="cc-eco-auto" checked onchange="ccEcoAutoSet(this.checked)"> 3분 동안 손대지 않으면 자동 절전 — 화면을 검게 해 발열을 줄여요 (녹화는 계속, 라이브 판정을 켠 동안은 안 함)</label>
             <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
               <button type="button" class="tag-btn" id="cl-manual-btn" onclick="clManualStart()">수동 보정 (4점 탭)</button>
               <button type="button" class="tag-btn" onclick="clClearCal()">보정 지우기</button>
@@ -2013,7 +2014,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.14';
+const APP_VERSION = 'v1.15';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9214,7 +9215,7 @@ function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
   try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); ccTtsUnlocked = true; } catch (e) {}
 }
-document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); const cm = $('cl-model'); if (cm) cm.checked = clModel; });
+document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ea = $('cc-eco-auto'); if (ea) ea.checked = ccEcoAuto; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); const cm = $('cl-model'); if (cm) cm.checked = clModel; });
 function ccBindVideo(stream) { // iOS: 보이는 상태에서, 프로퍼티로 muted/inline 지정, 비웠다가 다시 붙여야 rs0에서 빠져나옴 (v0.59)
   const v = $('cc-cam'); if (!v || !stream) return;
   try {
@@ -9755,10 +9756,26 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
     ' · 녹화 ' + (ccRec ? ccRec.state : '-') + (v && v.srcObject ? '' : ' · src없음') + (ccPreviewOn ? ' · 대체표시' : '') +
     (ccNoFrame ? ' · 프레임없음 ' + ccNoFrame : '') + (ccQuota ? ' · 저장 ' + ccQuota.used + '/' + ccQuota.quota + 'MB' : '');
 }
+// ── v1.15 촬영 지킴이: ① 세로(옆으로 누운) 영상 경고·자동 복구 ② 손대지 않으면 자동 절전(발열) ──
+let ccOrientWarnAt = 0, ccOrientFixN = 0, ccLastTouch = Date.now(), ccEcoAuto = true;
+try { ccEcoAuto = localStorage.getItem('tm-cc-eco-auto') !== '0'; } catch (e) {}
+function ccEcoAutoSet(on) { ccEcoAuto = !!on; try { localStorage.setItem('tm-cc-eco-auto', ccEcoAuto ? '1' : '0'); } catch (e) {} }
+document.addEventListener('pointerdown', () => { ccLastTouch = Date.now(); }, true);
+const CC_ECO_AUTO_MS = 180000;
+function ccGuardTick(v) {
+  if (!ccStream) return;
+  if (v && v.videoWidth && v.videoWidth < v.videoHeight) { // 폰은 가로로 걸었는데 화면 자동 회전이 꺼져 있으면 영상이 옆으로 누운 채 저장됨
+    const pageLandscape = window.innerWidth > window.innerHeight;
+    if (pageLandscape && ccOrientFixN < 2 && !ccReacq && !ccBusy) { ccOrientFixN++; ccLog('orient-fix', v.videoWidth + 'x' + v.videoHeight); ccReacquire('orient'); return; }
+    if (Date.now() - ccOrientWarnAt > 20000) { ccOrientWarnAt = Date.now(); ccStatus('⚠️ 영상이 세로(옆으로 누운 상태)로 찍히고 있어요 — 폰의 화면 자동 회전을 켜고 가로로 돌려 주세요. 가로가 되면 카메라를 자동으로 다시 열어요'); toast('영상이 옆으로 누워 저장되고 있어요 — 자동 회전을 켜고 폰을 가로로'); ccLog('orient-warn', v.videoWidth + 'x' + v.videoHeight); }
+  } else if (v && v.videoWidth) ccOrientFixN = 0;
+  if (ccEcoAuto && !ccEco && !clOn && !ccBusy && Date.now() - ccLastTouch > CC_ECO_AUTO_MS) { ccEco = true; ccEcoApply(); ccLog('eco-auto', ''); } // 설정은 저장하지 않음(다음 시작은 평소대로)
+}
 function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   if (!ccChan || !ccStream) return;
   const v = $('cc-cam');
   ccDiag();
+  ccGuardTick(v); // v1.15
   if (v && v.paused) v.play().catch(() => {}); // iOS: 재생이 풀리면 다시
   if (!v || !v.videoWidth) { // 프레임이 안 들어옴 — 3초마다: 다시 붙이기 ×3 → 재획득 → 새로고침
     if (++ccNoFrame >= 2 && !ccReacq) {
