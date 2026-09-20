@@ -1234,6 +1234,9 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccFullToggle()">⛶ 전체 화면</button>
           </div>
           <details class="help" id="cc-settings" style="margin-top:8px"><summary>클럽캠 설정</summary>
+            <div class="row" id="cc-lens-row" style="gap:6px;align-items:center;margin-top:8px;display:none"><span class="muted" style="font-size:12px;flex:0 0 auto">렌즈</span><select id="cc-lens" style="flex:1;min-width:0" onchange="ccLensSet(this.value)"><option value="">자동 (폰이 고름)</option></select></div>
+            <div class="muted" style="font-size:11px;margin-top:2px">코트가 너무 작고 휘어 보이면 초광각이 잡힌 거예요 — 다른 렌즈를 골라 보세요 (클럽캠을 켠 뒤에 목록이 나와요)</div>
+            <div class="row" id="cc-zoom-row" style="gap:6px;align-items:center;margin-top:6px;display:none"><span class="muted" style="font-size:12px;flex:0 0 auto">줌</span><input type="range" id="cc-zoom" style="flex:1" oninput="ccZoomApply(this.value)"><span id="cc-zoom-val" class="muted" style="font-size:12px;flex:0 0 auto">1.0×</span></div>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer"><input type="checkbox" id="cc-eco-auto" checked onchange="ccEcoAutoSet(this.checked)"> 3분 동안 손대지 않으면 자동 절전 — 화면을 검게 해 발열을 줄여요 (녹화는 계속, 라이브 판정을 켠 동안은 안 함)</label>
             <div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap">
               <button type="button" class="tag-btn" id="cl-manual-btn" onclick="clManualStart()">수동 보정 (4점 탭)</button>
@@ -2014,7 +2017,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.16';
+const APP_VERSION = 'v1.17';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9152,8 +9155,40 @@ function ccPickChunks(chunks, startMs, endMs) { // 청크 at = 1초 청크가 �
 }
 // 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
 function ccAspect() { return '16:9'; } // v0.61: 화각 선택 제거 — 16:9 고정 (첫 실기기 성공 때와 동일 제약)
+function ccLensPref() { try { return localStorage.getItem('tm-cc-lens') || ''; } catch (e) { return ''; } }
 function ccCamConstraints() {
-  return { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false };
+  const id = ccLensPref(); // v1.17: 사용자가 고른 렌즈가 있을 때만 (기본은 예전 그대로 자동)
+  const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } };
+  return { video: id ? Object.assign({ deviceId: { exact: id } }, base) : Object.assign({ facingMode: 'environment' }, base), audio: false };
+}
+async function ccLensRefresh() { // 권한을 받은 뒤에야 이름이 보임 → 카메라가 열린 다음 호출
+  const sel = $('cc-lens'); if (!sel || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    const back = devs.filter(d => !/front|user|전면/i.test(d.label || '')); const list = back.length ? back : devs;
+    const cur = ccLensPref(); const active = ccStream && ccStream.getVideoTracks()[0] ? (ccStream.getVideoTracks()[0].getSettings().deviceId || '') : '';
+    sel.innerHTML = '';
+    const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '자동 (폰이 고름)'; sel.appendChild(o0);
+    list.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = '렌즈 ' + (i + 1) + (d.label ? ' — ' + d.label : '') + (d.deviceId === active ? ' (지금)' : ''); sel.appendChild(o); });
+    sel.value = cur && list.some(d => d.deviceId === cur) ? cur : '';
+    const row = $('cc-lens-row'); if (row) row.style.display = list.length > 1 ? 'flex' : 'none';
+  } catch (e) {}
+}
+function ccLensSet(id) {
+  try { if (id) localStorage.setItem('tm-cc-lens', id); else localStorage.removeItem('tm-cc-lens'); } catch (e) {}
+  if (ccStream && ccChan) { ccLog('lens', id ? '선택' : '자동'); ccReacquire('manual'); } else toast('다음 클럽캠 시작부터 이 렌즈로 열어요');
+}
+function ccZoomSetup() { // 지원 기기(주로 안드로이드 크롬)만: 트랙 zoom 능력이 있으면 슬라이더 표시, 저장값 복원
+  const row = $('cc-zoom-row'), sl = $('cc-zoom'); if (!row || !sl) return;
+  const t = ccStream && ccStream.getVideoTracks()[0]; let cap = null; try { cap = t && t.getCapabilities ? t.getCapabilities() : null; } catch (e) {}
+  if (!cap || !cap.zoom || !(cap.zoom.max > cap.zoom.min)) { row.style.display = 'none'; return; }
+  row.style.display = 'flex'; sl.min = cap.zoom.min; sl.max = Math.min(cap.zoom.max, cap.zoom.min * 4); sl.step = cap.zoom.step || 0.1;
+  let z = cap.zoom.min; try { const sv = parseFloat(localStorage.getItem('tm-cc-zoom') || ''); if (sv >= cap.zoom.min && sv <= cap.zoom.max) z = sv; } catch (e) {}
+  sl.value = z; ccZoomApply(z, true);
+}
+function ccZoomApply(z, silent) {
+  const t = ccStream && ccStream.getVideoTracks()[0]; if (!t || !t.applyConstraints) return; z = parseFloat(z);
+  t.applyConstraints({ advanced: [{ zoom: z }] }).then(() => { const l = $('cc-zoom-val'); if (l) l.textContent = z.toFixed(1) + '×'; if (!silent) { try { localStorage.setItem('tm-cc-zoom', String(z)); } catch (e) {} } }).catch(() => {});
 }
 function ccAspectChange(v) {
   try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
@@ -9311,6 +9346,7 @@ function ccTrackDead() {
 }
 function ccBindTracks() {
   if (!ccStream) return;
+  setTimeout(() => { try { ccLensRefresh(); ccZoomSetup(); } catch (e) {} }, 600); // v1.17
   ccStream.getVideoTracks().forEach(t => {
     t.onended = () => { ccLog('track-ended', 'iOS가 카메라를 끊음 — 열 차단·다른 앱 카메라 사용 가능성'); if (ccChan) ccReacquire('ended'); };
     t.onmute = () => { setTimeout(() => { if (ccChan && document.visibilityState === 'visible' && ccTrackDead()) ccReacquire('muted'); }, 1200); };
@@ -9631,7 +9667,7 @@ async function ccToggle() {
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
     ccStream = await camReq;
-  } catch (e) { toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
+  } catch (e) { if (ccLensPref()) { try { localStorage.removeItem('tm-cc-lens'); } catch (e2) {} toast('고른 렌즈를 열 수 없어 자동으로 되돌렸어요 — 클럽캠 시작을 다시 눌러 주세요'); return; } toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
