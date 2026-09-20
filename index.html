@@ -2014,7 +2014,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.15';
+const APP_VERSION = 'v1.16';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9283,7 +9283,8 @@ function ccEcoPeek() { // 검은 화면 탭 → 5초만 보여주고 다시 절�
   ccEcoPeekT = setTimeout(() => { ccEcoPeekT = null; if (ccEco && ccStream) { ccPreviewStop(); const v = $('cc-cam'); if (v) v.style.opacity = '0.02'; if (sh) sh.style.display = 'flex'; ccEcoInfo(); } }, 5000);
 }
 // 꺼진 원인 이력 (v1.06): 다음에 또 꺼지면 설정 › 저장·삭제 이력에서 열(track-ended)·화면 잠김(hidden)·페이지 닫힘(pagehide)을 구분
-document.addEventListener('visibilitychange', () => { if (ccStream) ccLog(document.hidden ? 'hidden' : 'visible', document.hidden ? '화면 잠김 또는 다른 앱으로' : '복귀'); });
+let ccHiddenAt = 0;
+document.addEventListener('visibilitychange', () => { if (!ccStream) return; if (document.hidden) { ccHiddenAt = Date.now(); ccLog('hidden', '화면 잠김 또는 다른 앱으로(전화·알림 등)'); } else { const sec = ccHiddenAt ? Math.round((Date.now() - ccHiddenAt) / 1000) : 0; ccHiddenAt = 0; ccLog('visible', '복귀' + (sec ? ' — ' + sec + '초 동안 촬영이 끊겼을 수 있어요' : '')); } });
 window.addEventListener('pagehide', () => { if (ccStream) ccLog('pagehide', '페이지 닫힘/전환 (배터리·재부팅이면 이 줄이 마지막)'); });
 function ccFullSync() {
   ccEcoBtns();
@@ -9319,7 +9320,19 @@ function ccShowTap(on, msg) { // 자동 복구가 iOS에 막혔을 때: 손으�
   const b = $('cc-tap'); if (!b) return;
   b.style.display = on ? 'flex' : 'none';
   if (msg) b.textContent = msg;
-  if (on && navigator.vibrate) navigator.vibrate([60, 60, 60]);
+  ccDownAlert(on, msg); // v1.16: 진동은 거치 각도를 바꿀 수 있어 뺌 — 소리 + 본폰 통지로
+}
+let ccDownT = null, ccDownN = 0, ccDownSince = 0;
+function ccDownAlert(on, msg) { // 카메라가 끊겨 사람이 탭해야 할 때: 캠 폰이 말로 알리고(20초마다 최대 6번) 뷰어에 camdown, 풀리면 camup
+  if (on) {
+    if (!ccDownSince) { ccDownSince = Date.now(); ccDownN = 0; ccLog('cam-down', msg || ''); }
+    const say = () => { if (!ccDownSince || ccDownN >= 6) return; ccDownN++; try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance('카메라가 끊겼어요. 캠 화면을 눌러 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (e) {} }; // 콜 소리 설정과 무관하게 알림(촬영 유실이 더 큼)
+    if (!ccDownT) { say(); ccDownT = setInterval(say, 20000); }
+    if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(msg || '').replace(/[<>]/g, '').slice(0, 60) } }); } catch (e) {} }
+  } else {
+    if (ccDownT) { clearInterval(ccDownT); ccDownT = null; }
+    if (ccDownSince) { const sec = Math.round((Date.now() - ccDownSince) / 1000); ccDownSince = 0; ccLog('cam-up', sec + '초 끊김'); if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camup', payload: { at: Date.now(), sec } }); } catch (e) {} } }
+  }
 }
 async function ccReacquire(why) {
   if (!ccChan || ccReacq) return; ccReacq = true;
@@ -9624,6 +9637,7 @@ async function ccToggle() {
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
   await ccLoadSegInfo();
   ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
+  try { if (!sessionStorage.getItem('tm-cc-dnd-hint')) { sessionStorage.setItem('tm-cc-dnd-hint', '1'); setTimeout(() => toast('전화·알림이 오면 촬영이 끊겨요 — 방해 금지 모드를 켜 두세요'), 2500); } } catch (e) {} // v1.16
   const code = ccMyCode();
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
   chan.on('broadcast', { event: 'cut' }, p => ccOnCut(p && p.payload));
@@ -9979,6 +9993,7 @@ async function cvWatch() {
   chan.on('broadcast', { event: 'frame' }, p => { cvFrame(p.payload); cvPullTick(); });
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload)); // 🤖 라이브 판정 피드
+  chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'A')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'A')); // v1.16
   chan.on('broadcast', { event: 'rtc' }, p => cvPullRtc(p.payload)); // 📥 PC로 받기 응답 (v0.96)
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
@@ -10012,6 +10027,7 @@ async function cvWatchB() { // 반대편 캠(B) 추가 시청 (v0.65)
   chan.on('broadcast', { event: 'frame' }, p => cvFrameB(p.payload));
   chan.on('broadcast', { event: 'camclip' }, p => cvClipB(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload, 'B'));
+  chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'B')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'B')); // v1.16
   try {
     await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
   } catch (e) { toast('B 캠 연결 실패: ' + (e.message || e)); return; }
@@ -10527,6 +10543,15 @@ function cvFrame(p) {
   const img = $('cc-live'); if (img) { img.onload = () => { try { cvDrawOverlay(); } catch (e) {} }; img.src = p.d; }
   const st = $('cc-view-status');
   if (st) st.textContent = '🟢 라이브 (1~2초 간격 갱신) — 시비 나면 ✂️ 를 누르세요';
+}
+let cvDownSaid = 0;
+function cvCamDown(p, slot) { // v1.16: 캠이 끊겨 사람이 눌러 줘야 함 — 본폰에 표시 + 말로(30초에 한 번)
+  const st = $('cc-view-status'); if (st) st.textContent = '⚠️ ' + (slot === 'B' ? 'B 캠' : '캠') + ' 카메라가 끊겼어요 — 캠 폰 화면을 눌러 다시 켜 주세요' + (p && p.msg ? ' (' + p.msg + ')' : '');
+  if (Date.now() - cvDownSaid > 30000) { cvDownSaid = Date.now(); try { aiSay((slot === 'B' ? '비 ' : '') + '캠이 끊겼어요'); } catch (e) {} toast('캠 카메라가 끊겼어요 — 캠 폰 화면을 눌러 주세요'); }
+}
+function cvCamUp(p, slot) {
+  const st = $('cc-view-status'); if (st) st.textContent = (slot === 'B' ? 'B 캠' : '캠') + ' 카메라가 다시 켜졌어요' + (p && p.sec ? ' (' + p.sec + '초 끊김)' : '');
+  cvDownSaid = 0;
 }
 function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
