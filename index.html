@@ -2052,7 +2052,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.22';
+const APP_VERSION = 'v1.23';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10290,7 +10290,7 @@ let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0
 function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
   clOn = false; clH = null; clCorners = []; clPicking = false; clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
-  if (typeof clAutoTimer !== 'undefined' && clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } clLensSwitches = 0; // v1.21
+  if (typeof clAutoTimer !== 'undefined' && clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } clLensSwitches = 0; clUltraAllowed = false; clLensPrevId = ''; // v1.21/v1.23
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   const c = $('cl-singles'); if (c) c.checked = !!aiSingles;
   const a = $('cl-autocut'); if (a) clAutoCut = a.checked;
@@ -10381,7 +10381,7 @@ function clHeightShow() { // 보정이 정해질 때마다 호출 — 캠 화면
   try { ccLog('height', r.level + ' ' + r.Z.toFixed(1) + 'm 뒤 ' + r.back.toFixed(1) + 'm 가림 ' + r.hidPct + '%'); } catch (e) {}
 }
 function clClearCal() { clCorners = []; clH = null; clPicking = false; try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
-let clAutoTimer = null, clAutoTries = 0, clLensSwitches = 0, clAutoSaid = '';
+let clAutoTimer = null, clAutoTries = 0, clLensSwitches = 0, clAutoSaid = '', clLensPrevId = '', clAutoFailAfterSwitch = 0, clUltraAllowed = false;
 function clAutoSchedule() { // 캠 시작 3초 뒤 자동 보정, 실패하면 15초마다(최대 20회). 렌즈 자동 전환 뒤 재획득에도 다시 잡힘
   if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; }
   clAutoTries = 0; clAutoSaid = '';
@@ -10391,6 +10391,11 @@ function clAutoSchedule() { // 캠 시작 3초 뒤 자동 보정, 실패하면 1
     const v = $('cc-cam'); if (!v || !v.videoWidth) { clAutoTimer = setTimeout(tick, 2000); return; }
     clAutoTries++;
     const ok = clAutoCalib(true); // silent
+    if (!ok && clLensSwitches > 0 && clLensPrevId) { // v1.23: 광각으로 바꾼 뒤 코트를 못 잡으면 초광각으로 되돌림
+      clAutoFailAfterSwitch++;
+      if (clAutoFailAfterSwitch >= 3) { clUltraAllowed = true; clLensSwitches = 0; ccLensSessionId = clLensPrevId; clLensPrevId = ''; ccLog('lens-revert', '광각에서 코트를 못 잡아 초광각으로'); clAutoSay('광각에서는 코트가 다 안 보여서 초광각으로 되돌려요'); ccReacquire('lens'); clAutoSchedule(); return; }
+    }
+    if (ok) clAutoFailAfterSwitch = 0;
     if (!ok && clAutoTries < 20) clAutoTimer = setTimeout(tick, 15000);
     else if (!ok) ccLog('autocal-giveup', '');
   };
@@ -10400,7 +10405,8 @@ function clAutoSay(text) { try { if (window.speechSynthesis && window.SpeechSynt
 function clAutoAfterCal() { // 보정 직후: 초광각이면 자동으로 다음 렌즈(최대 2회) → 재보정, 아니면 높이를 말로
   const v = $('cc-cam'); if (!clH || !v || !v.videoWidth) return;
   let lens = null, hc = null; try { lens = clLensCheck(clH, v.videoWidth, v.videoHeight); hc = clHeightCheck(clH, v.videoWidth, v.videoHeight); } catch (e) {}
-  if (lens && lens.ultra && clLensSwitches < 2 && ccLensList.length >= 2) {
+  if (lens && lens.ultra && clLensSwitches < 2 && ccLensList.length >= 2 && !ccLensPref() && !clUltraAllowed) { // v1.23: 사용자가 고른 렌즈가 있거나 초광각을 허용한 세션이면 안 바꿈
+    clLensPrevId = (ccStream && ccStream.getVideoTracks()[0] ? (ccStream.getVideoTracks()[0].getSettings() || {}).deviceId : '') || ''; clAutoFailAfterSwitch = 0;
     clLensSwitches++; ccLog('lens-auto-ultra', '화각 ' + lens.hfov + '° → 다음 렌즈'); clAutoSay('초광각 렌즈라 다른 렌즈로 바꿔요');
     ccLensNext('ultra-auto'); clAutoSchedule(); return;
   }
