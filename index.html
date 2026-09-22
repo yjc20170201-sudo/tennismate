@@ -1406,6 +1406,17 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 </div>
 
 <!-- 프로필 편집 모달 -->
+<div class="modal-bg" id="modal-newpw" style="z-index:10002">
+  <div class="modal">
+    <h3>새 비밀번호</h3>
+    <div class="muted" style="font-size:13px">재설정 링크로 들어오셨어요. 새 비밀번호를 정해 주세요 (6자 이상).</div>
+    <label>새 비밀번호</label><input type="password" id="newpw-1" autocomplete="new-password" placeholder="6자 이상">
+    <label>한 번 더</label><input type="password" id="newpw-2" autocomplete="new-password" placeholder="같은 비밀번호">
+    <div id="newpw-msg" class="muted" style="font-size:12px;margin-top:6px"></div>
+    <button type="button" class="btn full" style="margin-top:10px" onclick="newPwDo()">비밀번호 바꾸기</button>
+    <button type="button" class="btn full outline" style="margin-top:6px" onclick="closeModal('newpw')">나중에</button>
+  </div>
+</div>
 <div class="modal-bg" id="modal-admin" onclick="if(event.target===this)closeModal('admin')">
   <div class="modal" style="max-width:640px">
     <h3>관리자</h3>
@@ -1842,7 +1853,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 window.TM_CONFIG = {
   supabaseUrl: 'https://ssibxgplavavsqemqrej.supabase.co',   // 서울 리전 · 2026-08-31 B0 완료
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaWJ4Z3BsYXZhdnNxZW1xcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDkwNzAsImV4cCI6MjEwMzY4NTA3MH0.SU5gZ8lIT8qdQNF0t8EnYRpD_GA7QFF3KohOsNlvc6U',
-  redirectTo: location.origin
+  redirectTo: location.origin + location.pathname // v1.22: 허용 목록(…/tennismate/)과 같은 전체 주소로
 };
 
 /* backend/api/auth-client.js (2026-08-30) 내장본 — Supabase 인증 클라이언트 래퍼
@@ -1896,7 +1907,7 @@ const TMAuth = (() => {
     }
     const { createClient } = await import(SUPABASE_ESM);
     client = createClient(config.supabaseUrl, config.supabaseAnonKey, {
-      auth: { flowType: 'pkce', detectSessionInUrl: true, autoRefreshToken: true, persistSession: true }
+      auth: { flowType: 'implicit', detectSessionInUrl: true, autoRefreshToken: true, persistSession: true } // v1.22: implicit — 재설정·가입 확인 링크를 다른 브라우저(메일 앱)에서 열어도 됨
     });
     init._redirectTo = config.redirectTo || (typeof location !== 'undefined' ? location.origin : undefined);
 
@@ -1905,6 +1916,7 @@ const TMAuth = (() => {
     if (currentSession) await refreshMyProfile().catch(() => {});
 
     client.auth.onAuthStateChange(async (_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') { setTimeout(() => { try { openNewPw(); } catch (e) {} }, 300); } // v1.22: 재설정 링크로 들어옴 → 새 비밀번호 입력
       currentSession = session || null;
       myProfile = null;
       if (currentSession) await refreshMyProfile().catch(() => {});
@@ -1937,6 +1949,10 @@ const TMAuth = (() => {
     return data.session;
   }
 
+  async function updatePassword(pw) { // v1.22: 재설정 링크로 로그인된 상태에서 새 비밀번호
+    const c = requireClient(); const { error } = await c.auth.updateUser({ password: String(pw || '') });
+    if (error) throw new Error(koMessage(error)); return true;
+  }
   async function resetPassword(email) {
     const c = requireClient();
     const { error } = await c.auth.resetPasswordForEmail(String(email || '').trim(), {
@@ -2021,7 +2037,7 @@ const TMAuth = (() => {
 
   return {
     init,
-    signUpEmail, signInEmail, resetPassword,
+    signUpEmail, signInEmail, resetPassword, updatePassword,
     signInKakao, signInGoogle,
     signOut, deleteAccount,
     refreshMyProfile, completeOnboarding, updateMyProfile,
@@ -2036,7 +2052,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.21';
+const APP_VERSION = 'v1.22';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7510,6 +7526,16 @@ function svRenderSlots() {
   }).join('');
 }
 function svClient() { return window.__svTestClient || TMAuth.client; }
+// ── v1.22 비밀번호 재설정 링크 처리 ──
+function openNewPw() { try { closeModal('auth'); } catch (e) {} const a = $('newpw-1'), b = $('newpw-2'), m = $('newpw-msg'); if (a) a.value = ''; if (b) b.value = ''; if (m) m.textContent = ''; openModal('newpw'); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+async function newPwDo() {
+  const a = ($('newpw-1') || {}).value || '', b = ($('newpw-2') || {}).value || '', m = $('newpw-msg');
+  if (a.length < 6) { if (m) m.textContent = '6자 이상으로 해 주세요'; return; }
+  if (a !== b) { if (m) m.textContent = '두 칸이 달라요'; return; }
+  try { if (m) m.textContent = '바꾸는 중…'; await TMAuth.updatePassword(a); closeModal('newpw'); toast('비밀번호를 바꿨어요 — 이제 이 비밀번호로 로그인돼요'); }
+  catch (e) { if (m) m.textContent = '실패: ' + (e.message || e) + ' — 링크가 오래됐으면 재설정 메일을 다시 받아 주세요'; }
+}
+document.addEventListener('DOMContentLoaded', () => { try { if (/type=recovery/.test(location.hash) || /type=recovery/.test(location.search)) setTimeout(openNewPw, 1200); } catch (e) {} }); // 이벤트를 놓쳐도 주소로 판단
 // ── v1.19 관리자 모드 ──
 let adminIs = false, adminTouched = 0;
 async function adminTouch() {
