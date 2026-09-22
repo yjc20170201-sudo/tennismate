@@ -1272,6 +1272,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <pre id="cc-log" hidden class="muted" style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;max-height:220px;overflow:auto"></pre>
           </details>
           <div id="cc-live-status" class="muted" style="font-size:12px;margin-top:6px">보정 전 — ✨ 자동 보정을 누르면 코트를 찾고, 라이브 판정을 켤 수 있어요</div>
+          <div id="cl-lens" style="display:none;font-size:12px;margin-top:6px;padding:8px 10px;border-radius:10px;line-height:1.6;background:#fdeaea;color:#c0392b"></div>
           <div id="cl-height" style="display:none;font-size:12px;margin-top:6px;padding:8px 10px;border-radius:10px;line-height:1.5"></div>
           <div id="cc-cam-status" class="muted" style="font-size:12px;margin-top:6px"></div>
           <div id="cc-diag" class="muted" style="font-size:11px;margin-top:2px;font-family:ui-monospace,monospace"></div>
@@ -2035,7 +2036,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.19';
+const APP_VERSION = 'v1.20';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9206,7 +9207,7 @@ function ccPickChunks(chunks, startMs, endMs) { // 청크 at = 1초 청크가 �
 function ccAspect() { return '16:9'; } // v0.61: 화각 선택 제거 — 16:9 고정 (첫 실기기 성공 때와 동일 제약)
 function ccLensPref() { try { return localStorage.getItem('tm-cc-lens') || ''; } catch (e) { return ''; } }
 function ccCamConstraints() {
-  const id = ccLensPref(); // v1.17: 사용자가 고른 렌즈가 있을 때만 (기본은 예전 그대로 자동)
+  const id = ccLensPref() || (typeof ccLensSessionId === 'string' ? ccLensSessionId : ''); // v1.17 사용자 선택 > v1.20 이 세션에서 자동으로 고른 렌즈 > 자동
   const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } };
   return { video: id ? Object.assign({ deviceId: { exact: id } }, base) : Object.assign({ facingMode: 'environment' }, base), audio: false };
 }
@@ -9222,6 +9223,29 @@ async function ccLensRefresh() { // 권한을 받은 뒤에야 이름이 보임 
     sel.value = cur && list.some(d => d.deviceId === cur) ? cur : '';
     const row = $('cc-lens-row'); if (row) row.style.display = list.length > 1 ? 'flex' : 'none';
   } catch (e) {}
+}
+let ccLensAutoDone = false, ccLensList = [];
+function ccLensIdx(d) { const m = /camera2?\s*(\d+)/i.exec(d.label || ''); return m ? parseInt(m[1], 10) : 99; }
+async function ccLensAuto() { // 뒷면 렌즈가 여럿이고 사용자 선택이 없으면 기본 광각(라벨 번호 최소)으로 자동 전환 — 세션당 한 번
+  if (ccLensAutoDone || ccLensPref() || !ccStream || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+  ccLensAutoDone = true;
+  try {
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput'); const back = devs.filter(d => !/front|user|전면/i.test(d.label || ''));
+    ccLensList = back; if (back.length < 2) return;
+    const active = (ccStream.getVideoTracks()[0].getSettings() || {}).deviceId || '';
+    const pick = back.slice().sort((a, b) => ccLensIdx(a) - ccLensIdx(b))[0];
+    if (!pick || pick.deviceId === active || ccLensIdx(pick) === 99) return;
+    try { sessionStorage.setItem('tm-cc-lens-session', pick.deviceId); } catch (e) {}
+    ccLog('lens-auto', (pick.label || '').slice(0, 40)); ccStatus('렌즈를 기본 광각으로 바꾸는 중… (초광각이면 코트가 작게 찍혀요)');
+    ccLensSessionId = pick.deviceId; ccReacquire('lens');
+  } catch (e) {}
+}
+let ccLensSessionId = ''; // 이 세션에서 자동으로 고른 렌즈(저장은 안 함 — 다음 시작 때 다시 판단)
+function ccLensNext(why) { // 초광각 경고에서 [다음 렌즈]: 지금 렌즈 다음 것으로
+  const active = ccStream && ccStream.getVideoTracks()[0] ? (ccStream.getVideoTracks()[0].getSettings() || {}).deviceId : '';
+  const list = ccLensList.slice().sort((a, b) => ccLensIdx(a) - ccLensIdx(b)); if (list.length < 2) { toast('바꿀 다른 렌즈가 없어요'); return; }
+  const i = list.findIndex(d => d.deviceId === active); const nx = list[(i + 1) % list.length];
+  ccLensSessionId = nx.deviceId; ccLog('lens-next', why || ''); ccStatus('다음 렌즈로 바꾸는 중…'); ccReacquire('lens');
 }
 function ccLensSet(id) {
   try { if (id) localStorage.setItem('tm-cc-lens', id); else localStorage.removeItem('tm-cc-lens'); } catch (e) {}
@@ -9395,7 +9419,7 @@ function ccTrackDead() {
 }
 function ccBindTracks() {
   if (!ccStream) return;
-  setTimeout(() => { try { ccLensRefresh(); ccZoomSetup(); } catch (e) {} }, 600); // v1.17
+  setTimeout(() => { try { ccLensRefresh(); ccZoomSetup(); ccLensAuto(); } catch (e) {} }, 600); // v1.17 / v1.20 자동 렌즈
   ccStream.getVideoTracks().forEach(t => {
     t.onended = () => { ccLog('track-ended', 'iOS가 카메라를 끊음 — 열 차단·다른 앱 카메라 사용 가능성'); if (ccChan) ccReacquire('ended'); };
     t.onmute = () => { setTimeout(() => { if (ccChan && document.visibilityState === 'visible' && ccTrackDead()) ccReacquire('muted'); }, 1200); };
@@ -9716,7 +9740,7 @@ async function ccToggle() {
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
     ccStream = await camReq;
-  } catch (e) { if (ccLensPref()) { try { localStorage.removeItem('tm-cc-lens'); } catch (e2) {} toast('고른 렌즈를 열 수 없어 자동으로 되돌렸어요 — 클럽캠 시작을 다시 눌러 주세요'); return; } toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
+  } catch (e) { if (ccLensPref() || ccLensSessionId) { try { localStorage.removeItem('tm-cc-lens'); } catch (e2) {} ccLensSessionId = ''; toast('고른 렌즈를 열 수 없어 자동으로 되돌렸어요 — 클럽캠 시작을 다시 눌러 주세요'); return; } toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
@@ -10304,7 +10328,21 @@ function clHeightCheck(H, vw, vh) { // → { level: 'good'|'mid'|'low', Z, back,
     : '카메라가 낮아요 — 약 ' + z + 'm (베이스라인 뒤 ' + bk + 'm). 먼 코트의 네트 쪽 ' + hidPct + '%가 네트 그물 뒤에 가려 먼 바운스를 놓쳐요. ' + ns + 'm 이상으로 올려 주세요 (펜스 맨 위·폴대)' + (level === 'low' ? '. 지금은 먼 베이스라인도 네트에 걸려요' : '');
   return { level, Z: p.Z, back, needSvc, needBase, hidPct, f: p.f, text };
 }
+function clLensCheck(H, vw, vh) { // 보정에서 초점거리 → 화각. 720p 일반 광각 f≈0.8~0.9×vw, 초광각 ≈0.4~0.5×vw
+  const p = clCamPose(H, vw, vh); if (!p || !(p.f > 0)) return null; const ratio = p.f / vw;
+  return { ratio, ultra: ratio < 0.62, f: p.f, hfov: Math.round(2 * Math.atan(vw / 2 / p.f) * 180 / Math.PI) };
+}
+function clLensShow() {
+  const el = $('cl-lens'); if (!el) return; const v = $('cc-cam');
+  if (!clH || !v || !v.videoWidth) { el.style.display = 'none'; return; }
+  let r = null; try { r = clLensCheck(clH, v.videoWidth, v.videoHeight); } catch (e) {}
+  if (!r) { el.style.display = 'none'; return; }
+  try { ccLog('lens-fov', r.hfov + '° f/w ' + r.ratio.toFixed(2)); } catch (e) {}
+  if (!r.ultra) { el.style.display = 'none'; return; }
+  el.style.display = 'block'; el.innerHTML = '<b>초광각 렌즈로 찍히고 있어요</b> (화각 약 ' + r.hfov + '°) — 코트가 작게 잡혀 먼 공을 못 봐요. <button type="button" class="tag-btn" style="margin-left:6px" onclick="ccLensNext(\'ultra\')">다음 렌즈로 바꾸기</button>';
+}
 function clHeightShow() { // 보정이 정해질 때마다 호출 — 캠 화면 아래 색 띠 + 이력
+  try { clLensShow(); } catch (e) {}
   const el = $('cl-height'); if (!el) return;
   const v = $('cc-cam'); if (!clH || !v || !v.videoWidth) { el.style.display = 'none'; return; }
   let r = null; try { r = clHeightCheck(clH, v.videoWidth, v.videoHeight); } catch (e) {}
