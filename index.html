@@ -219,6 +219,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   .modal h3 { margin-bottom: 12px; }
   .modal label { font-size: 12px; color: var(--muted); display: block; margin: 10px 0 4px; }
   .modal select, .modal input { width: 100%; }
+  .admin-tbl { border-collapse: collapse; font-size: 12px; white-space: nowrap; width: 100% } .admin-tbl th, .admin-tbl td { padding: 5px 8px; border-bottom: 1px solid #eee; text-align: left } .admin-tbl th { color: var(--muted); font-weight: 600; font-size: 11px } .admin-tbl td.dim { color: var(--muted) } /* v1.19 */
 
   .toast {
     position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
@@ -1335,6 +1336,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <div class="card" style="padding:4px 16px">
       <div class="more-row" onclick="openProfile()"><div><b>내 프로필</b><div class="muted">닉네임 · NTRP · 지역 · 로그아웃</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="toggleDark()"><div><b>다크 모드</b><div class="muted">화면 밝기 전환</div></div><span class="chev">›</span></div>
+      <div class="more-row" id="admin-row" style="display:none" onclick="adminOpen()"><div><b>관리자</b><div class="muted">가입자 전체 · 접속 기록 (관리자 계정만)</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="openHomeEdit()"><div><b>홈 화면 편집</b><div class="muted">홈에 보일 섹션 고르기</div></div><span class="chev">›</span></div>
       <div class="more-row" style="cursor:default"><div><b>버전</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타</div></div></div>
     </div>
@@ -1403,6 +1405,21 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 </div>
 
 <!-- 프로필 편집 모달 -->
+<div class="modal-bg" id="modal-admin" onclick="if(event.target===this)closeModal('admin')">
+  <div class="modal" style="max-width:640px">
+    <h3>관리자</h3>
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center">
+      <button type="button" class="tag-btn" onclick="adminLoad()">새로고침</button>
+      <select id="admin-days" onchange="adminLoad()" style="width:auto"><option value="7">최근 7일</option><option value="30" selected>최근 30일</option><option value="90">최근 90일</option><option value="365">1년</option></select>
+      <span class="muted" id="admin-status" style="font-size:12px"></span>
+    </div>
+    <div class="section-title" style="margin-top:10px">가입자 <span id="admin-n" class="muted" style="font-weight:400;font-size:12px"></span></div>
+    <div style="overflow-x:auto"><table class="admin-tbl" id="admin-users"></table></div>
+    <div class="section-title" style="margin-top:14px">접속 기록 <span class="muted" style="font-weight:400;font-size:12px">(v1.19부터 기록 · 하루 한 행, 앱을 열 때마다 횟수)</span></div>
+    <div style="overflow-x:auto"><table class="admin-tbl" id="admin-visits"></table></div>
+    <div class="muted" style="font-size:11px;margin-top:8px">이메일·최근 로그인은 서버 인증 정보라 관리자 계정에만 보여요. 화면 캡처를 밖으로 내보내지 마세요.</div>
+  </div>
+</div>
 <div class="modal-bg" id="modal-profile" onclick="if(event.target===this)closeModal('profile')">
   <div class="modal">
     <h3>내 프로필</h3>
@@ -2018,7 +2035,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.18';
+const APP_VERSION = 'v1.19';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2789,6 +2806,7 @@ function onAuthChange(session, profile) {
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
   svLoadClubs();     // 🏘️ 서버 클럽 목록으로 교체 (비동기)
   svLoadKdkHistory(); // 📜 서버 개인전 기록 (비동기)
+  adminTouch(); // v1.19: 접속 기록 + 관리자 줄 표시 (비동기)
   closeModal('auth');
   if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
 }
@@ -7491,6 +7509,36 @@ function svRenderSlots() {
   }).join('');
 }
 function svClient() { return window.__svTestClient || TMAuth.client; }
+// ── v1.19 관리자 모드 ──
+let adminIs = false, adminTouched = 0;
+async function adminTouch() {
+  try {
+    if (!serverMode() || !TMAuth.isLoggedIn) return;
+    if (Date.now() - adminTouched > 600000) { adminTouched = Date.now(); svClient().rpc('touch_visit', { p_ua: navigator.userAgent.slice(0, 200), p_ver: APP_VERSION }).then(() => {}, () => {}); } // 접속 기록(10분에 한 번만)
+    const { data } = await svClient().rpc('is_admin'); adminIs = data === true;
+    const row = $('admin-row'); if (row) row.style.display = adminIs ? '' : 'none';
+  } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) adminTouch(); });
+function adminOpen() { if (!adminIs) { toast('관리자 계정이 아니에요'); return; } openModal('admin'); adminLoad(); }
+const adminFmt = t => { if (!t) return '—'; const d = new Date(t); const p = n => String(n).padStart(2, '0'); return d.getMonth() + 1 + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+const adminAgo = t => { if (!t) return ''; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
+async function adminLoad() {
+  const st = $('admin-status'); if (st) st.textContent = '불러오는 중…';
+  try {
+    const days = parseInt(($('admin-days') || {}).value || '30', 10);
+    const [u, v] = await Promise.all([svClient().rpc('admin_users'), svClient().rpc('admin_visits', { p_days: days })]);
+    if (u.error) throw u.error; if (v.error) throw v.error;
+    const users = u.data || [], visits = v.data || [];
+    $('admin-n').textContent = users.length + '명' + (users.filter(x => x.deleted).length ? ' (탈퇴 ' + users.filter(x => x.deleted).length + ')' : '');
+    $('admin-users').innerHTML = '<tr><th>#</th><th>닉네임</th><th>이메일</th><th>가입</th><th>최근 로그인</th><th>접속</th><th>마지막 접속</th><th>NTRP</th><th>지역</th><th>클럽</th></tr>' +
+      users.map((x, i) => '<tr' + (x.deleted ? ' style="opacity:.5"' : '') + '><td class="dim">' + (i + 1) + '</td><td><b>' + esc(x.nickname) + '</b>' + (x.deleted ? ' <span class="badge">탈퇴</span>' : '') + '</td><td>' + esc(x.email) + '</td><td class="dim">' + adminFmt(x.created_at) + '</td><td class="dim">' + adminFmt(x.last_sign_in_at) + '</td><td>' + (x.visit_days ? x.visit_days + '일 · ' + x.visit_n + '회' : '<span class="dim">—</span>') + '</td><td class="dim">' + (x.last_visit ? adminFmt(x.last_visit) + ' (' + adminAgo(x.last_visit) + ')' : '—') + '</td><td class="dim">' + esc(x.ntrp) + '</td><td class="dim">' + esc(x.region) + '</td><td class="dim">' + esc(x.clubs) + '</td></tr>').join('');
+    $('admin-visits').innerHTML = '<tr><th>닉네임</th><th>날짜</th><th>처음</th><th>마지막</th><th>횟수</th><th>버전</th><th>기기</th></tr>' +
+      (visits.length ? visits.map(x => '<tr><td><b>' + esc(x.nickname) + '</b></td><td class="dim">' + esc(x.seen_on) + '</td><td class="dim">' + adminFmt(x.first_at).slice(-5) + '</td><td class="dim">' + adminFmt(x.last_at).slice(-5) + '</td><td>' + x.n + '</td><td class="dim">' + esc(x.app_ver) + '</td><td class="dim">' + esc(adminUa(x.ua)) + '</td></tr>').join('') : '<tr><td colspan="7" class="dim">아직 기록이 없어요 — v1.19 이후 접속부터 쌓여요</td></tr>');
+    if (st) st.textContent = adminFmt(Date.now()) + ' 기준';
+  } catch (e) { if (st) st.textContent = '불러오기 실패: ' + (e.message || e); }
+}
+function adminUa(ua) { ua = String(ua || ''); const m = ua.match(/iPhone|iPad|Android|Windows|Macintosh/); const b = /CriOS|Chrome/.test(ua) ? '크롬' : /Safari/.test(ua) ? '사파리' : /SamsungBrowser/.test(ua) ? '삼성' : ''; const mo = ua.match(/SM-[A-Z0-9]+/); return [m ? m[0] : '', mo ? mo[0] : '', b].filter(Boolean).join(' '); }
 function svLogged() { return !!window.__svTestClient || (serverMode() && TMAuth.isLoggedIn); }
 function svMyId() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
 function svParseSets(str) { // "6-4, 3-6, 7-5" → {sets, winner(1|2)} | null — 순수 함수
