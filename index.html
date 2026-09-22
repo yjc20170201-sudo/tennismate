@@ -2036,7 +2036,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.20';
+const APP_VERSION = 'v1.21';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9217,6 +9217,7 @@ async function ccLensRefresh() { // 권한을 받은 뒤에야 이름이 보임 
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
     const back = devs.filter(d => !/front|user|전면/i.test(d.label || '')); const list = back.length ? back : devs;
     const cur = ccLensPref(); const active = ccStream && ccStream.getVideoTracks()[0] ? (ccStream.getVideoTracks()[0].getSettings().deviceId || '') : '';
+    ccLensList = back; // v1.21
     sel.innerHTML = '';
     const o0 = document.createElement('option'); o0.value = ''; o0.textContent = '자동 (폰이 고름)'; sel.appendChild(o0);
     list.forEach((d, i) => { const o = document.createElement('option'); o.value = d.deviceId; o.textContent = '렌즈 ' + (i + 1) + (d.label ? ' — ' + d.label : '') + (d.deviceId === active ? ' (지금)' : ''); sel.appendChild(o); });
@@ -9772,6 +9773,7 @@ async function ccToggle() {
   courtGuideInit('cc-cam'); // 📐 설치 가이드
   clUiReset(); // 🤖 라이브 판정: 저장된 보정이 이 카메라 해상도와 맞으면 복원
   v.addEventListener('loadedmetadata', () => clRestoreCal(), { once: true });
+  clAutoSchedule(); // v1.21: 손대지 않아도 보정·렌즈·높이 점검이 스스로 돌게
   ccStartRec();
   try { if (navigator.wakeLock) ccWakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
   ccTimers.push(setInterval(ccFrame, 1500));
@@ -10262,6 +10264,7 @@ let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0
 function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
   clOn = false; clH = null; clCorners = []; clPicking = false; clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
+  if (typeof clAutoTimer !== 'undefined' && clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } clLensSwitches = 0; // v1.21
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   const c = $('cl-singles'); if (c) c.checked = !!aiSingles;
   const a = $('cl-autocut'); if (a) clAutoCut = a.checked;
@@ -10352,9 +10355,37 @@ function clHeightShow() { // 보정이 정해질 때마다 호출 — 캠 화면
   try { ccLog('height', r.level + ' ' + r.Z.toFixed(1) + 'm 뒤 ' + r.back.toFixed(1) + 'm 가림 ' + r.hidPct + '%'); } catch (e) {}
 }
 function clClearCal() { clCorners = []; clH = null; clPicking = false; try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
-function clAutoCalib() {
+let clAutoTimer = null, clAutoTries = 0, clLensSwitches = 0, clAutoSaid = '';
+function clAutoSchedule() { // 캠 시작 3초 뒤 자동 보정, 실패하면 15초마다(최대 20회). 렌즈 자동 전환 뒤 재획득에도 다시 잡힘
+  if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; }
+  clAutoTries = 0; clAutoSaid = '';
+  const tick = () => {
+    clAutoTimer = null;
+    if (!ccStream || !ccChan) return;
+    const v = $('cc-cam'); if (!v || !v.videoWidth) { clAutoTimer = setTimeout(tick, 2000); return; }
+    clAutoTries++;
+    const ok = clAutoCalib(true); // silent
+    if (!ok && clAutoTries < 20) clAutoTimer = setTimeout(tick, 15000);
+    else if (!ok) ccLog('autocal-giveup', '');
+  };
+  clAutoTimer = setTimeout(tick, 3000);
+}
+function clAutoSay(text) { try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (e) {} }
+function clAutoAfterCal() { // 보정 직후: 초광각이면 자동으로 다음 렌즈(최대 2회) → 재보정, 아니면 높이를 말로
+  const v = $('cc-cam'); if (!clH || !v || !v.videoWidth) return;
+  let lens = null, hc = null; try { lens = clLensCheck(clH, v.videoWidth, v.videoHeight); hc = clHeightCheck(clH, v.videoWidth, v.videoHeight); } catch (e) {}
+  if (lens && lens.ultra && clLensSwitches < 2 && ccLensList.length >= 2) {
+    clLensSwitches++; ccLog('lens-auto-ultra', '화각 ' + lens.hfov + '° → 다음 렌즈'); clAutoSay('초광각 렌즈라 다른 렌즈로 바꿔요');
+    ccLensNext('ultra-auto'); clAutoSchedule(); return;
+  }
+  if (hc) {
+    const msg = hc.level === 'good' ? '설치 높이 좋아요, 약 ' + hc.Z.toFixed(1) + '미터' : '카메라가 낮아요, ' + (Math.ceil(hc.needSvc * 10) / 10).toFixed(1) + '미터 이상으로 올려 주세요';
+    if (clAutoSaid !== msg) { clAutoSaid = msg; clAutoSay(msg); }
+  } else if (clAutoSaid !== 'ok') { clAutoSaid = 'ok'; clAutoSay('코트 보정 됐어요'); }
+}
+function clAutoCalib(silent) {
   const v = $('cc-cam');
-  if (!v || !v.videoWidth) { toast('캠이 켜져 있어야 해요'); return; }
+  if (!v || !v.videoWidth) { if (!silent) toast('캠이 켜져 있어야 해요'); return false; }
   try {
     const w2 = 640, h2 = Math.max(2, Math.round(w2 * v.videoHeight / v.videoWidth));
     const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2;
@@ -10364,7 +10395,7 @@ function clAutoCalib() {
     let q = aiDetectCourtSvc(data, w2, h2), mode = 'auto-svc'; // v0.77: 실코트 검증된 서비스라인 기준 우선
     if (q && !aiCalSane(q, mode)) q = null;
     if (!q) { q = aiDetectCourt(data, w2, h2); mode = 'corners'; if (q && !aiCalSane(q, mode)) q = null; } // v1.08c
-    if (!q) { clStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이게 잡거나, 📐 수동으로 4점을 탭하세요'); return; }
+    if (!q) { clStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이게 잡거나, 📐 수동으로 4점을 탭하세요' + (silent ? ' (15초 뒤 다시 시도)' : '')); return false; }
     const sx = v.videoWidth / w2, sy = v.videoHeight / h2;
     clCalModeChange(mode);
     clCorners = q.map(c => [c[0] * sx, c[1] * sy]);
@@ -10373,7 +10404,8 @@ function clAutoCalib() {
     if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✨ 자동 보정 완료' + (mode === 'auto-svc' ? ' (베이스라인·서비스라인 기준)' : '') + ' — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
     else clStatus('보정 계산 실패 — 📐 수동으로 4점을 탭하세요');
     clDraw(); clHeightShow(); // v1.18
-  } catch (e) { clStatus('자동 보정 오류: ' + (e.message || e)); }
+    if (clH) { clAutoAfterCal(); return true; } return false; // v1.21
+  } catch (e) { clStatus('자동 보정 오류: ' + (e.message || e)); return false; }
 }
 function clManualStart() {
   const v = $('cc-cam');
