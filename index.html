@@ -19,6 +19,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   let firstBuild = null;
   function tmCurVer() { try { return typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''; } catch (e) { return ''; } }
   function tmBusy() { // 녹화·전송 대기·랠리 촬영·경기 진행·매치룸 녹화 중이면 자동 새로고침 금지
+    try { if (typeof mhBusy !== 'undefined' && mhBusy) return true; } catch (e) {} // v1.28 내 영상 하이라이트 분석·만들기 중
     try { if (typeof ccStream !== 'undefined' && ccStream) return true; } catch (e) {}
     try { if (typeof ccSendMode !== 'undefined' && ccSendMode) return true; } catch (e) {}
     try { if (typeof lvCam !== 'undefined' && lvCam) return true; } catch (e) {}
@@ -659,6 +660,11 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div class="stat"><div class="num" id="st-wins">0</div><div class="lbl">승리</div></div>
       <div class="stat"><div class="num" id="st-rank">-</div><div class="lbl">내 랭킹</div></div>
     </div>
+    <div class="card" id="home-mh" style="margin-bottom:10px;border:1.5px solid #d4e94e">
+      <div style="font-weight:700;font-size:15px">내 경기 영상 → 하이라이트 자동 편집</div>
+      <div class="muted" style="font-size:12px;margin:4px 0 2px">폰으로 찍은 경기 영상을 넣으면 공이 오간 랠리만 골라 쇼츠로 만들어 드려요. 영상은 폰 밖으로 나가지 않아요.</div>
+      <button class="btn full" onclick="goSection('judge', 'mh-sec')">하이라이트 만들기</button>
+    </div>
     <div class="card" id="home-quick" style="margin-bottom:10px">
       <div class="muted" style="font-size:12px;margin-bottom:6px">클럽 운영 바로가기</div>
       <div class="row" style="gap:6px">
@@ -1046,6 +1052,34 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   </div>
   <!-- ============ 판독 (v0.69: 판독 센터 + 클럽캠) ============ -->
   <div class="tab-content" id="tab-judge">
+    <div class="section-title" id="mh-sec">내 영상 하이라이트</div>
+    <div class="card" id="mh-card">
+      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 길이 순으로 고르고, 화면이 공을 따라가는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
+      <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">경기 영상 고르기 (여러 개 가능)
+        <input type="file" id="mh-file" accept="video/*" multiple style="display:none" onchange="mhPick(event)">
+      </label>
+      <div id="mh-files" class="muted" style="font-size:12px;margin-top:6px"></div>
+      <div class="row" style="gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
+        <select id="mh-n" style="flex:1;min-width:130px"><option value="5">긴 랠리 5개</option><option value="10" selected>긴 랠리 10개</option><option value="20">긴 랠리 20개</option><option value="0">랠리 전부 (경기 편집본)</option></select>
+        <select id="mh-fmt" style="flex:1;min-width:130px"><option value="v" selected>세로(쇼츠) · 공 따라가기</option><option value="h">가로 · 원래 화면</option></select>
+      </div>
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-audio" checked> 원래 소리(타구음) 넣기</label>
+      <div class="row" style="gap:6px;margin-top:10px">
+        <button type="button" class="btn" id="mh-go" style="flex:1" disabled onclick="mhGo()">하이라이트 만들기</button>
+        <button type="button" class="btn outline" id="mh-stop" style="flex:0 0 auto;display:none" onclick="mhStopNow()">멈추기</button>
+      </div>
+      <div id="mh-barw" style="display:none;height:6px;background:#e5e7eb;border-radius:3px;margin-top:8px;overflow:hidden"><div id="mh-bar" style="height:100%;width:0;background:#1b7a43"></div></div>
+      <div id="mh-status" class="muted" style="font-size:12px;margin-top:6px"></div>
+      <canvas id="mh-prev" width="384" height="216" style="display:none;width:100%;max-width:384px;margin-top:6px;border-radius:8px;background:#000"></canvas>
+      <div id="mh-result" style="display:none;margin-top:10px">
+        <video id="mh-out" controls playsinline style="width:100%;max-height:70vh;background:#000;border-radius:10px"></video>
+        <div class="row" style="gap:6px;margin-top:8px">
+          <button type="button" class="btn" style="flex:1" onclick="mhShare()">저장 · 공유</button>
+          <button type="button" class="btn outline" style="flex:1" onclick="mhGo()">옵션 바꿔 다시 만들기</button>
+        </div>
+        <div id="mh-list" class="muted" style="font-size:12px;margin-top:6px"></div>
+      </div>
+    </div>
     <div class="section-title" id="vj-sec">비디오 판독 센터</div>
     <div class="card">
       <details class="help"><summary>판독 센터 사용법</summary><div class="muted">폰으로 찍은 경기 영상을 불러와 슬로모션·프레임 단위로 <b>인아웃 판독</b>을 하고, 두 지점을 찍어 <b>서브 구속</b>을 측정해보세요. 영상은 내 기기에서만 재생되고 어디에도 업로드·저장되지 않아요. 🤖 AI 자동 판정·궤적 추적은 백엔드 도입 후 제공 예정!</div></details>
@@ -2054,7 +2088,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.27';
+const APP_VERSION = 'v1.28';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8437,6 +8471,298 @@ async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web C
   WASB.resetStats(); aiDeepFrames = 0;
   return true;
 }
+// ── v1.28 내 영상 하이라이트(mh*): 폰으로 찍은 경기 영상 → 랠리 찾기(공 인식) → 긴 랠리로 세로(쇼츠)/가로 하이라이트. 전부 내 폰에서 ──
+let mhFiles = [], mhUrls = [], mhBusy = false, mhStop = false, mhAn = null, mhOut = null, mhActx = null, mhVid = null, mhRVid = null, mhSrcNode = null, mhSilent = null, mhWake = null, mhPlaying = false; // mhVid = 분석용(소리 없음), mhRVid = 만들기용(원래 소리를 녹화로)
+function mhStatus(t, pct) { const el = $('mh-status'); if (el) el.textContent = t; const w = $('mh-barw'), b = $('mh-bar'); if (w) w.style.display = pct == null ? 'none' : 'block'; if (b && pct != null) b.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; }
+function mhOpt() { const nv = parseInt(($('mh-n') || {}).value || '10', 10); return { n: isFinite(nv) ? nv : 10, vert: ($('mh-fmt') || {}).value !== 'h', audio: !!($('mh-audio') || {}).checked }; }
+function mhFmtT(sec) { sec = Math.max(0, Math.round(sec)); return sec >= 60 ? Math.floor(sec / 60) + '분 ' + (sec % 60) + '초' : sec + '초'; }
+function mhPick(ev) {
+  const fl = Array.from((ev && ev.target && ev.target.files) || []).filter(f => /^video\//.test(f.type || '') || /\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name || ''));
+  if (mhBusy) { toast('만드는 중이에요 — 멈춘 뒤 다시 골라 주세요'); return; }
+  mhUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} }); mhUrls = [];
+  mhFiles = fl; mhAn = null; mhOut = null;
+  const el = $('mh-files'); if (el) el.textContent = fl.length ? fl.length + '개 영상 · ' + Math.round(fl.reduce((a, f) => a + (f.size || 0), 0) / 1048576) + 'MB — ' + fl.map(f => f.name).slice(0, 3).join(', ') + (fl.length > 3 ? ' …' : '') : '';
+  const go = $('mh-go'); if (go) go.disabled = !fl.length; const r = $('mh-result'); if (r) r.style.display = 'none';
+  mhStatus(fl.length ? '[하이라이트 만들기]를 누르면 분석을 시작해요 — 분석은 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 두세요' : '', null);
+  try { if (ev && ev.target) ev.target.value = ''; } catch (e) {}
+}
+function mhStopNow() { if (mhBusy) { mhStop = true; mhStatus('멈추는 중…', null); } }
+async function mhLoadModel() {
+  if (!window.WASB) await new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'wasb.js?v=' + encodeURIComponent(APP_VERSION); sc.onload = res; sc.onerror = () => rej(new Error('wasb.js 로드 실패 — 인터넷 연결을 확인해 주세요')); document.head.appendChild(sc); });
+  const mf = clModelFile(), ep = aiModelFile.split('|')[1] || 'auto';
+  if (WASB.model !== mf || !WASB.backend) await WASB.load('', t => mhStatus('공 인식 모델 ' + t, null), mf, ep);
+}
+function mhSeek(v, t) { return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; res(); } }; v.addEventListener('seeked', fin, { once: true }); setTimeout(fin, 5000); try { v.currentTime = Math.max(0, t); } catch (e) { fin(); } }); }
+function mhMeta(v, url) { return new Promise(res => { let done = false; const fin = ok => { if (!done) { done = true; res(ok); } }; v.onloadedmetadata = () => fin(true); v.onerror = () => fin(false); setTimeout(() => fin(v.readyState >= 1), 15000); v.src = url; try { v.load(); } catch (e) {} }); }
+function mhCalib(v) { // 판독 센터 aiAutoCalibCore와 같은 규칙(전역은 안 건드림) → H(이미지 px → 코트 m) | null
+  const w2 = 640, h2 = Math.max(2, Math.round(w2 * v.videoHeight / v.videoWidth));
+  const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2; const cx = cv.getContext('2d', { willReadFrequently: true });
+  try { cx.drawImage(v, 0, 0, w2, h2); } catch (e) { return null; }
+  const d = cx.getImageData(0, 0, w2, h2).data;
+  let q = aiDetectCourtSvc(d, w2, h2), mode = 'auto-svc'; if (q && !aiCalSane(q, mode)) q = null;
+  if (!q) { q = aiDetectCourt(d, w2, h2); mode = 'corners'; if (q && !aiCalSane(q, mode)) q = null; }
+  if (!q) return null;
+  const sx = v.videoWidth / w2, sy = v.videoHeight / h2, pts = q.map(c => [c[0] * sx, c[1] * sy]);
+  const dst = mode === 'auto-svc' ? [[0, CL_SVC_Y], [AI_COURT_W, CL_SVC_Y], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]] : [[0, 0], [AI_COURT_W, 0], [AI_COURT_W, AI_COURT_L], [0, AI_COURT_L]];
+  return aiHomography(pts, dst);
+}
+function mhBandFor(H, vhIn) { // 사이드라인 ±1.5m 띠(화면 px) — 옆 코트 공 제외 (clHlBand와 같은 규칙, H를 인자로)
+  const Hi = aiInv3(H); if (!Hi) return null;
+  const P = (x, y) => aiCourtToImg(Hi, x, y), l0 = P(-1.5, 0), l1 = P(-1.5, AI_COURT_L), r0 = P(AI_COURT_W + 1.5, 0), r1 = P(AI_COURT_W + 1.5, AI_COURT_L);
+  if (![l0, l1, r0, r1].every(q => isFinite(q[0]) && isFinite(q[1]))) return null;
+  const yf = Math.min(l0[1], l1[1], r0[1], r1[1]), yn = Math.max(l0[1], l1[1], r0[1], r1[1]);
+  const on = (a, b, y) => Math.abs(b[1] - a[1]) < 1e-6 ? a[0] : a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
+  const inside = (x, y) => {
+    let a, b;
+    if (y >= yf) { a = on(l0, l1, y); b = on(r0, r1, y); }
+    else { const t = (yf - y) / Math.max(1, yf); a = on(l0, l1, yf) + (on(l0, l1, yn) - on(l0, l1, yf)) * t; b = on(r0, r1, yf) + (on(r0, r1, yn) - on(r0, r1, yf)) * t; }
+    return x >= Math.min(a, b) && x <= Math.max(a, b);
+  };
+  const vh = vhIn || (aiCourtToImg(Hi, AI_COURT_W / 2, AI_COURT_L)[1] || 720) * 1.3; // 화면 높이(모르면 가까운 베이스라인 y의 1.3배)
+  return (x, y) => { for (let k = 0; k <= 5; k++) if (inside(x, y + vh * 0.05 * k)) return true; return false; }; // 공중의 공: 착지점은 화면에서 더 아래
+}
+function mhPickBall(res, tt, vw, band) { // 3장 묶음에서 "움직이는 공" 하나: 2~3장에 걸쳐 프레임당 폭 0.15%~9%로 이어지는 후보(놓인 공·한 장짜리 오탐 배제)
+  const C = (res || []).map(r => (r && r.cands ? r.cands : []).filter(c => !band || band(c.x, c.y)));
+  while (C.length < 3) C.push([]);
+  const lo = vw * 0.0015, hi = vw * 0.09; let best = null;
+  const ok = (a, b, k) => { const d = Math.hypot(b.x - a.x, b.y - a.y) / k; return d >= lo && d <= hi; };
+  C[0].forEach(a => C[1].forEach(b => C[2].forEach(c => {
+    if (!ok(a, b, 1) || !ok(b, c, 1)) return;
+    const ex = 2 * b.x - a.x, ey = 2 * b.y - a.y; if (Math.hypot(c.x - ex, c.y - ey) > Math.max(vw * 0.02, 0.8 * Math.hypot(b.x - a.x, b.y - a.y))) return; // 대략 같은 방향·속도
+    const sc = 3 + a.conf + b.conf + c.conf; if (!best || sc > best.sc) best = { sc, p: [[tt[0], a.x, a.y], [tt[1], b.x, b.y], [tt[2], c.x, c.y]] };
+  })));
+  if (!best) [[0, 1, 1], [1, 2, 1], [0, 2, 2]].forEach(([i, j, k]) => C[i].forEach(a => C[j].forEach(b => { if (!ok(a, b, k)) return; const sc = a.conf + b.conf; if (!best || sc > best.sc) best = { sc, p: [[tt[i], a.x, a.y], [tt[j], b.x, b.y]] }; })));
+  if (!best) return null;
+  const p = best.p, m = p.reduce((q, r) => [q[0] + r[0] / p.length, q[1] + r[1] / p.length, q[2] + r[2] / p.length], [0, 0, 0]);
+  return { t: m[0], x: m[1], y: m[2], pts: p, n: p.length };
+}
+function mhScan(v, dur, band, onProg) { // 소리 없이 배속 재생하며 연속 3장 → 모델 → 움직이는 공 표본들
+  const W = WASB.W || 512, Hh = WASB.H || 288, vw = v.videoWidth, vh = v.videoHeight;
+  const pool = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = W; c.height = Hh; return c; });
+  const samples = []; let k = 0, busy = false, rate = 1.5, tri = 0, rej = 0, errs = 0, lastAdj = performance.now(), lastVT = 0, lastTri = 0, lastCb = performance.now();
+  const ts = [0, 0, 0];
+  v.muted = true; v.playbackRate = rate;
+  return new Promise(resolve => {
+    let fin = false, wd = null;
+    const finish = () => {
+      if (fin) return; fin = true; clearInterval(wd); mhPlaying = false; try { v.pause(); } catch (e) {}
+      const t0 = performance.now(); const wait = () => { if (!busy || performance.now() - t0 > 5000) resolve(samples); else setTimeout(wait, 50); }; wait();
+    };
+    const step = (now, md) => {
+      if (fin) return; lastCb = performance.now();
+      if (mhStop) return finish();
+      const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime;
+      if (!busy) {
+        if (k > 0 && (t - ts[k - 1] > 0.05 || t <= ts[k - 1])) { k = 0; rej++; } // 연속 프레임이 아니면(배속이 빨라 건너뜀) 처음부터
+        try { pool[k].getContext('2d').drawImage(v, 0, 0, W, Hh); ts[k] = t; k++; } catch (e) { k = 0; }
+        if (k === 3) {
+          k = 0; busy = true; tri++; const tt = ts.slice();
+          WASB.detectFrames(pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() }).then(res => { const s = mhPickBall(res, tt, vw, band); if (s) samples.push(s); mhPrevDraw(pool[2], s, vw, vh); })
+            .catch(e => { if (++errs <= 3) console.warn('mh detect', e); }).finally(() => { busy = false; });
+        }
+      }
+      const wall = performance.now();
+      if (wall - lastAdj > 2500) { // 배속 조절: 영상 1초당 3장 묶음 1.8개 이상(랠리 판단에 충분), 여유 있으면 최대 4배속
+        const dv = t - lastVT, got = tri - lastTri, tps = dv > 0.2 ? got / dv : 3;
+        if ((tps < 1.8 || rej > got * 3) && rate > 0.5) rate = Math.max(0.5, rate * 0.75);
+        else if (tps > 3.2 && rej <= got && rate < 4) rate = Math.min(4, rate * 1.3);
+        try { v.playbackRate = rate; } catch (e) {}
+        lastAdj = wall; lastVT = t; lastTri = tri; rej = 0;
+      }
+      if (onProg) onProg(t, rate, samples.length);
+      if (errs > 30) return finish();
+      if (v.ended || t >= dur - 0.08) return finish();
+      v.requestVideoFrameCallback(step);
+    };
+    v.addEventListener('ended', () => setTimeout(finish, 400), { once: true });
+    wd = setInterval(() => { // 화면이 꺼졌다 돌아오면 재생 재개, 5초 넘게 프레임이 안 오면 재생 다시
+      if (fin) return;
+      if (document.visibilityState === 'visible' && (v.paused || performance.now() - lastCb > 5000) && !v.ended) { v.play().catch(() => {}); if (performance.now() - lastCb > 5000) { lastCb = performance.now(); v.requestVideoFrameCallback(step); } }
+    }, 1500);
+    mhPlaying = true; v.requestVideoFrameCallback(step); v.play().catch(() => {});
+  });
+}
+let mhPrevAt = 0;
+function mhPrevDraw(src, s, vw, vh) { // 분석 중 미리보기(0.5초마다): 본 장면 + 찾은 공
+  const c = $('mh-prev'); if (!c) return; const now = performance.now(); if (now - mhPrevAt < 500 && !s) return; if (now - mhPrevAt < 250) return; mhPrevAt = now;
+  c.style.display = 'block'; const g = c.getContext('2d'); try { g.drawImage(src, 0, 0, c.width, c.height); } catch (e) { return; }
+  if (s) { g.strokeStyle = '#d4e94e'; g.lineWidth = 2.5; g.beginPath(); g.arc(s.x / vw * c.width, s.y / vh * c.height, 9, 0, 7); g.stroke(); }
+}
+function mhRallies(samples, dur, vw, vh) { // 표본 → 랠리 [{a,b,dur,t0,t1,n}]: 3초 넘게 끊기면 분리, 좁은 곳에서만 움직이는 구간(공 튀기기·줍기)은 제외
+  const S = samples.slice().sort((a, b) => a.t - b.t);
+  const wide = S.map((s, i) => { let x0 = s.x, x1 = s.x, y0 = s.y, y1 = s.y; for (let j = i; j >= 0 && S[j].t >= s.t - 1.0; j--) { x0 = Math.min(x0, S[j].x); x1 = Math.max(x1, S[j].x); y0 = Math.min(y0, S[j].y); y1 = Math.max(y1, S[j].y); } for (let j = i; j < S.length && S[j].t <= s.t + 1.5; j++) { x0 = Math.min(x0, S[j].x); x1 = Math.max(x1, S[j].x); y0 = Math.min(y0, S[j].y); y1 = Math.max(y1, S[j].y); } return (x1 - x0) > vw * 0.08 || (y1 - y0) > vh * 0.15; });
+  const out = [];
+  const emit = part => { // 뒤쪽 좁은 움직임(공 줍기·굴러감) 잘라내고 조건 검사
+    let e = part.length - 1; while (e >= 0 && !part[e].w) e--; part = part.slice(0, e + 1);
+    if (part.length < 5) return; const a = part[0].t, b = part[part.length - 1].t, n3 = part.filter(q => q.n === 3).length;
+    if (b - a >= 3 && n3 >= 3) out.push({ a, b, dur: b - a, n: part.length, t0: Math.max(0, a - 2.0), t1: Math.min(dur, b + 1.5) });
+  };
+  const W = S.map((s, i) => ({ t: s.t, n: s.n, w: wide[i] }));
+  let seg = [];
+  const flushSeg = () => { // 한 덩어리 안에서: 넓은 움직임부터 시작, 좁은 움직임만 3.5초 넘게 이어지면 거기서 끊음
+    let part = [], lastW = null;
+    seg.forEach(q => { if (q.w) { if (part.length && lastW != null && q.t - lastW > 3.5) { emit(part); part = []; } part.push(q); lastW = q.t; } else if (part.length) part.push(q); });
+    if (part.length) emit(part); seg = [];
+  };
+  W.forEach(q => { if (seg.length && q.t - seg[seg.length - 1].t > 3.0) flushSeg(); seg.push(q); }); // 랠리 중에도 공을 2~3초 놓침(높은 공·그물 뒤)
+  flushSeg();
+  for (let i = 1; i < out.length; i++) if (out[i].t0 < out[i - 1].t1) { const m = (out[i - 1].b + out[i].a) / 2; out[i - 1].t1 = Math.min(out[i - 1].t1, m); out[i].t0 = Math.max(out[i].t0, m); } // 이웃 랠리와 겹치지 않게
+  return out;
+}
+function mhPath(F, r) { // 세로 창 중심(원본 px): 공 위치 보간 → ±0.6초 평균 → 속도 제한(초당 폭의 50%), 0.05초 간격 표
+  const S = F.samples.filter(q => q.t >= r.t0 - 2 && q.t <= r.t1 + 2), dt = 0.05, n = Math.max(2, Math.ceil((r.t1 - r.t0) / dt) + 1), raw = new Float32Array(n);
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = r.t0 + i * dt; while (j < S.length - 1 && S[j + 1].t <= t) j++;
+    let x; if (!S.length) x = F.vw / 2; else if (t <= S[0].t) x = S[0].x; else if (j >= S.length - 1) x = S[S.length - 1].x; else { const a = S[j], b = S[j + 1]; x = b.t - a.t > 2.5 ? a.x : a.x + (b.x - a.x) * (t - a.t) / (b.t - a.t); }
+    raw[i] = x;
+  }
+  const K = Math.round(0.6 / dt), sm = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let a = 0, c = 0; for (let q = Math.max(0, i - K); q <= Math.min(n - 1, i + K); q++) { a += raw[q]; c++; } sm[i] = a / c; }
+  const vmax = F.vw * 0.5 * dt; for (let i = 1; i < n; i++) sm[i] = sm[i - 1] + Math.max(-vmax, Math.min(vmax, sm[i] - sm[i - 1]));
+  return { t0: r.t0, dt, xs: sm };
+}
+function mhPathAt(p, t) { return p.xs[Math.max(0, Math.min(p.xs.length - 1, Math.round((t - p.t0) / p.dt)))]; }
+function mhRRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function mhDraw(g, v, OW, OH, vert, t, path, S, i, total, r) {
+  const vw = v.videoWidth || 16, vh = v.videoHeight || 9, u = OW / 720;
+  g.fillStyle = '#000'; g.fillRect(0, 0, OW, OH);
+  let X, Y;
+  if (vert) { const cw = Math.min(vw, vh * OW / OH), left = Math.max(0, Math.min(vw - cw, mhPathAt(path, t) - cw / 2)); try { g.drawImage(v, left, 0, cw, vh, 0, 0, OW, OH); } catch (e) {} X = x => (x - left) * OW / cw; Y = y => y * OH / vh; }
+  else { const fr = aiFitRect(vw, vh, OW, OH) || { x: 0, y: 0, w: OW, h: OH }; try { g.drawImage(v, fr.x, fr.y, fr.w, fr.h); } catch (e) {} X = x => fr.x + x * fr.w / vw; Y = y => fr.y + y * fr.h / vh; }
+  // 공 자국(최근 0.6초): 오래될수록 작고 옅게
+  const pts = []; S.forEach(q => q.pts.forEach(p => { if (p[0] <= t + 0.02 && p[0] >= t - 0.6) pts.push(p); })); pts.sort((a, b) => a[0] - b[0]);
+  g.lineCap = 'round';
+  for (let q = 0; q < pts.length; q++) {
+    const p = pts[q], al = Math.max(0, 1 - (t - p[0]) / 0.6);
+    if (q > 0 && p[0] - pts[q - 1][0] < 0.09) { g.strokeStyle = 'rgba(212,233,78,' + (0.2 + 0.7 * al).toFixed(2) + ')'; g.lineWidth = (1.5 + 4 * al) * u; g.beginPath(); g.moveTo(X(pts[q - 1][1]), Y(pts[q - 1][2])); g.lineTo(X(p[1]), Y(p[2])); g.stroke(); }
+    g.fillStyle = 'rgba(212,233,78,' + (0.3 + 0.7 * al).toFixed(2) + ')'; g.beginPath(); g.arc(X(p[1]), Y(p[2]), (2.5 + 5 * al) * u, 0, 7); g.fill();
+  }
+  // 제목 칩
+  const title = 'RALLY ' + (i + 1), sub = Math.round(r.dur) + '초 랠리';
+  g.font = 'bold ' + Math.round(30 * u) + 'px sans-serif'; const tw = g.measureText(title).width; g.font = Math.round(20 * u) + 'px sans-serif'; const sw = g.measureText(sub).width;
+  const bw = Math.max(tw, sw) + 32 * u; g.fillStyle = 'rgba(0,0,0,.55)'; mhRRect(g, 20 * u, 26 * u, bw, 78 * u, 14 * u); g.fill();
+  g.textAlign = 'left'; g.fillStyle = '#d4e94e'; g.font = 'bold ' + Math.round(30 * u) + 'px sans-serif'; g.fillText(title, 36 * u, 62 * u);
+  g.fillStyle = '#fff'; g.font = Math.round(20 * u) + 'px sans-serif'; g.fillText(sub, 36 * u, 92 * u);
+  g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold ' + Math.round(20 * u) + 'px sans-serif'; g.fillText((i + 1) + ' / ' + total, OW - 22 * u, 58 * u);
+  g.textAlign = 'center'; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = 'bold ' + Math.round(18 * u) + 'px sans-serif'; g.fillText('테니스메이트', OW / 2, OH - 26 * u); g.textAlign = 'left';
+}
+function mhCard(g, OW, OH, lines, p) { // 제목·끝 카드: [text, size, color]
+  const u = OW / 720; g.fillStyle = '#0f1f17'; g.fillRect(0, 0, OW, OH);
+  g.strokeStyle = 'rgba(212,233,78,.35)'; g.lineWidth = 3 * u; const m = 60 * u; g.strokeRect(m, OH * 0.28, OW - 2 * m, OH * 0.44); g.beginPath(); g.moveTo(m, OH / 2); g.lineTo(OW - m, OH / 2); g.stroke();
+  const tot = lines.reduce((a, l) => a + l[1] * u * 1.5, 0); let y = OH / 2 - tot / 2 + lines[0][1] * u;
+  g.textAlign = 'center'; lines.forEach(l => { g.fillStyle = l[2]; g.globalAlpha = Math.min(1, 0.2 + (p || 1) * 1.5); g.font = 'bold ' + Math.round(l[1] * u) + 'px sans-serif'; g.fillText(l[0], OW / 2, y); y += l[1] * u * 1.5; }); g.globalAlpha = 1; g.textAlign = 'left';
+}
+async function mhAnalyzeAll() {
+  mhStatus('공 인식 모델 준비 중…', 0); await mhLoadModel();
+  const v = mhVid, an = { files: [] }; let total = 0, doneV = 0; const t0w = performance.now();
+  for (let fi = 0; fi < mhFiles.length && !mhStop; fi++) {
+    const f = mhFiles[fi], url = mhUrls[fi] || (mhUrls[fi] = URL.createObjectURL(f));
+    mhStatus((fi + 1) + '/' + mhFiles.length + ' 영상 여는 중 — ' + f.name, null);
+    const ok = await mhMeta(v, url);
+    if (!ok || !v.videoWidth) { an.files.push({ fi, name: f.name, err: '이 폰에서 열 수 없는 영상 형식이에요' }); continue; }
+    let dur = v.duration;
+    if (!isFinite(dur) || dur <= 0) { await mhSeek(v, 1e7); dur = isFinite(v.duration) ? v.duration : v.currentTime; await mhSeek(v, 0); } // 녹화 앱이 만든 webm은 길이 정보가 없음
+    if (!(dur > 1)) { an.files.push({ fi, name: f.name, err: '영상 길이를 알 수 없어요' }); continue; }
+    total += dur;
+    const vw = v.videoWidth, vh = v.videoHeight;
+    let H = null; for (const p of [0.2, 0.45, 0.7, 0.9]) { if (mhStop) break; await mhSeek(v, dur * p); H = mhCalib(v); if (H) break; }
+    const band = H ? mhBandFor(H, vh) : null;
+    await mhSeek(v, 0);
+    const base = doneV;
+    const samples = await mhScan(v, dur, band, (t, rate, ns) => {
+      const doneNow = base + t, remainV = Math.max(0, mhFiles.slice(fi + 1).length ? (total - doneNow) + 0 : dur - t), wall = (performance.now() - t0w) / 1000, speed = doneNow / Math.max(1, wall);
+      mhStatus('분석 중 ' + (fi + 1) + '/' + mhFiles.length + ' · ' + Math.round(100 * t / dur) + '% · 공 ' + ns + '번 확인 · ' + rate.toFixed(1) + '배속' + (speed > 0.05 && wall > 8 ? ' · 약 ' + mhFmtT(remainV / speed) + ' 남음' : '') + ' — 화면을 켜 두세요', 100 * (fi + t / dur) / mhFiles.length);
+    });
+    doneV += dur;
+    const rallies = mhRallies(samples, dur, vw, vh);
+    an.files.push({ fi, name: f.name, url, dur, vw, vh, H, samples, rallies, date: f.lastModified || Date.now() });
+  }
+  return an;
+}
+async function mhRender(sel, opt) {
+  const vert = opt.vert, OW = vert ? 720 : 1280, OH = vert ? 1280 : 720, v = mhRVid || mhVid;
+  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d');
+  if (!cv.captureStream || typeof MediaRecorder === 'undefined') throw new Error('이 폰 브라우저는 영상 만들기를 지원하지 않아요 (크롬·사파리 최신 버전에서 해 주세요)');
+  const cs = cv.captureStream(30); let tracks = cs.getVideoTracks().slice(), dest = null;
+  if (opt.audio && mhActx && mhSrcNode) { try { dest = mhActx.createMediaStreamDestination(); mhSrcNode.connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); } catch (e) { dest = null; } }
+  const fmt = recPick(!!dest), bps = opt.n === 0 ? 4000000 : (vert ? 6000000 : 7000000);
+  let rec; try { rec = new MediaRecorder(new MediaStream(tracks), fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: bps, videoKeyFrameIntervalDuration: 1000 } : { videoBitsPerSecond: bps }); } catch (e) { rec = new MediaRecorder(new MediaStream(tracks)); }
+  if (rec.mimeType) { fmt.type = rec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'; fmt.ext = fmt.type === 'video/mp4' ? 'mp4' : 'webm'; }
+  const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+  const longest = Math.max(...sel.map(q => q.r.dur)), day = new Date(sel[0].F.date || Date.now()), ds = day.getFullYear() + '.' + String(day.getMonth() + 1).padStart(2, '0') + '.' + String(day.getDate()).padStart(2, '0');
+  const card = async (lines, sec) => { const t0 = performance.now(); while (!mhStop) { const p = (performance.now() - t0) / (sec * 1000); if (p >= 1) break; mhCard(g, OW, OH, lines, p); await new Promise(r => requestAnimationFrame(r)); } };
+  mhCard(g, OW, OH, [['오늘의 랠리', 64, '#d4e94e']], 0);
+  rec.start(1000);
+  await card([['오늘의 랠리', 64, '#d4e94e'], [ds, 30, '#ffffff'], ['랠리 ' + sel.length + '개 · 가장 긴 랠리 ' + Math.round(longest) + '초', 26, '#cfe3d6']], 1.6);
+  let curUrl = null;
+  for (let i = 0; i < sel.length && !mhStop; i++) {
+    const { F, r } = sel[i];
+    mhStatus('하이라이트 만드는 중 ' + (i + 1) + '/' + sel.length + ' — 화면을 켜 두세요', 100 * i / sel.length);
+    if (rec.state === 'recording') rec.pause();
+    if (curUrl !== F.url) { const ok = await mhMeta(v, F.url); curUrl = F.url; if (!ok) continue; }
+    await mhSeek(v, r.t0); v.playbackRate = 1; v.muted = !dest;
+    const path = mhPath(F, r), S = F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1);
+    mhDraw(g, v, OW, OH, vert, r.t0, path, S, i, sel.length, r);
+    await v.play().catch(() => {}); if (rec.state === 'paused') rec.resume();
+    await new Promise(res => {
+      let done = false; const fin = () => { if (!done) { done = true; clearTimeout(tm); try { v.pause(); } catch (e) {} res(); } };
+      const step = (now, md) => { if (done) return; const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime; mhDraw(g, v, OW, OH, vert, t, path, S, i, sel.length, r); if (t >= r.t1 || v.ended || mhStop) return fin(); v.requestVideoFrameCallback(step); };
+      const tm = setTimeout(fin, (r.t1 - r.t0 + 8) * 1000);
+      v.requestVideoFrameCallback(step);
+    });
+  }
+  if (rec.state === 'paused') rec.resume();
+  await card([['테니스메이트', 58, '#d4e94e'], ['경기 영상만 넣으면', 28, '#ffffff'], ['랠리 하이라이트가 자동으로', 28, '#ffffff']], 1.8);
+  await new Promise(res => { rec.onstop = res; try { rec.stop(); } catch (e) { res(); } });
+  if (dest) { try { mhSrcNode.disconnect(dest); } catch (e) {} }
+  cs.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+  if (mhStop) return null;
+  return { blob: new Blob(parts, { type: fmt.type }), ext: fmt.ext, type: fmt.type, n: sel.length, longest };
+}
+async function mhGo() {
+  if (mhBusy) return;
+  if (!mhFiles.length) { toast('먼저 경기 영상을 골라 주세요'); return; }
+  const opt = mhOpt();
+  // 탭 안에서(제스처): 동영상 요소·소리 경로 준비 — iOS는 탭 안에서 한 번 재생해 둬야 나중에 소리 있는 재생이 됨
+  const mkV = () => { const e = document.createElement('video'); e.playsInline = true; e.preload = 'auto'; e.setAttribute('playsinline', ''); Object.assign(e.style, { position: 'fixed', left: '0', bottom: '0', width: '2px', height: '2px', opacity: '0.01', pointerEvents: 'none' }); document.body.appendChild(e); return e; };
+  if (!mhVid) { mhVid = mkV(); mhVid.muted = true; }
+  if (!mhRVid) mhRVid = mkV();
+  if (opt.audio) { try { if (!mhActx) mhActx = new (window.AudioContext || window.webkitAudioContext)(); if (mhActx.state !== 'running') mhActx.resume(); if (!mhSrcNode) { mhSrcNode = mhActx.createMediaElementSource(mhRVid); mhSilent = mhActx.createGain(); mhSilent.gain.value = 0; mhSrcNode.connect(mhSilent); mhSilent.connect(mhActx.destination); } } catch (e) { console.warn('mh audio', e); } } // 노드가 어디에도 안 이어지면 재생이 멈춤 → 소리 0으로 항상 연결
+  if (!mhUrls[0]) mhUrls[0] = URL.createObjectURL(mhFiles[0]);
+  if (!mhRVid.src) mhRVid.src = mhUrls[0]; mhRVid.muted = !mhSrcNode; try { const pp = mhRVid.play(); if (pp && pp.then) pp.then(() => { try { mhRVid.pause(); } catch (e) {} }).catch(() => {}); } catch (e) {}
+  mhBusy = true; mhStop = false; mhOut = null;
+  const go = $('mh-go'), st = $('mh-stop'), res = $('mh-result'); if (go) go.disabled = true; if (st) st.style.display = ''; if (res) res.style.display = 'none';
+  try { if (navigator.wakeLock) mhWake = await navigator.wakeLock.request('screen'); } catch (e) {}
+  try {
+    if (!mhAn) mhAn = await mhAnalyzeAll();
+    if (mhStop) { mhStatus('멈췄어요 — 다시 누르면 처음부터 분석해요', null); mhAn = null; return; }
+    const all = []; mhAn.files.forEach(F => (F.rallies || []).forEach(r => all.push({ F, r })));
+    const errs = mhAn.files.filter(F => F.err).map(F => F.name + ': ' + F.err);
+    if (!all.length) { mhStatus('랠리를 못 찾았어요 — 코트 뒤쪽에서 가로로, 코트 전체가 보이게 찍은 영상인지 확인해 주세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : ''), null); return; }
+    let sel = opt.n > 0 ? all.slice().sort((a, b) => b.r.dur - a.r.dur).slice(0, opt.n) : all.slice();
+    sel.sort((a, b) => a.F.fi - b.F.fi || a.r.t0 - b.r.t0);
+    const out = await mhRender(sel, opt);
+    if (!out) { mhStatus('멈췄어요 — [하이라이트 만들기]를 다시 누르면 분석 결과로 바로 만들어요', null); return; }
+    mhOut = out;
+    const ov = $('mh-out'); if (ov) { try { if (ov.src) URL.revokeObjectURL(ov.src); } catch (e) {} ov.src = URL.createObjectURL(out.blob); }
+    if (res) res.style.display = 'block';
+    const lst = $('mh-list'); if (lst) lst.textContent = '찾은 랠리 ' + all.length + '개 중 ' + sel.length + '개 · ' + sel.map(q => (mhFiles.length > 1 ? (q.F.fi + 1) + '번 ' : '') + mhFmtT(q.r.t0) + ' (' + Math.round(q.r.dur) + '초)').join(', ') + (mhAn.files.some(F => F.H) ? '' : ' · 코트 자동 인식이 안 돼 옆 코트 공도 섞일 수 있어요');
+    mhStatus('완성 — ' + Math.round(out.blob.size / 1048576) + 'MB · [저장 · 공유]로 사진첩이나 카톡에 보내세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : ''), null);
+  } catch (e) {
+    console.warn('mh', e); mhStatus('실패: ' + ((e && e.message) || e), null);
+  } finally {
+    mhBusy = false; mhPlaying = false; try { mhVid.pause(); } catch (e) {} try { mhRVid.pause(); } catch (e) {} { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; }
+    try { if (mhWake) { mhWake.release(); mhWake = null; } } catch (e) {}
+    if (go) go.disabled = !mhFiles.length; if (st) st.style.display = 'none';
+  }
+}
+async function mhShare() {
+  if (!mhOut) return;
+  const name = '테니스_하이라이트_' + todayStr() + '.' + mhOut.ext;
+  await ccExportFiles([new File([mhOut.blob], name, { type: mhOut.type })], '테니스 하이라이트');
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && mhBusy && navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { mhWake = w; }).catch(() => {}); });
 function aiTrackCands(frames, vw, maxSteps) { // maxSteps(v1.07): 라이브 모델 경로처럼 프레임 간격이 띄엄띄엄일 때 연결 반경 상한 // v0.81: frames [{t, cands:[{x,y,conf}]}] → 움직이는 공 궤적 [{t,x,y,s}]
   // 1) 놓인 공: 반경 vw*1%(≈13px) 안에 전체 프레임의 40% 이상 나타나는 위치는 정적 → 제거
   const R = vw * 0.01, N = frames.length; const clusters = [];
