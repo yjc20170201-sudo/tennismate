@@ -1204,6 +1204,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <input id="cc-code-in2" placeholder="반대편 캠 코드 (두 대일 때)" maxlength="6" style="flex:1;text-transform:uppercase">
           <button type="button" class="btn small outline" onclick="cvWatchB()">B 추가</button>
         </div>
+        <div class="muted" style="font-size:11.5px;margin-top:2px">두 대면 양쪽 베이스라인 뒤에 달고 둘 다 코트 보정. 각 캠은 자기 쪽 코트만 콜하고, 같은 바운스는 가까운 캠 판정으로 합쳐요.</div>
         <div id="cc-cam-wrap" style="display:none">
           <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
           <div style="position:relative;margin-top:8px" id="cc-stage">
@@ -2053,7 +2054,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.26';
+const APP_VERSION = 'v1.27';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9326,6 +9327,16 @@ function ccVoiceSet(on) { ccVoiceOn = !!on; try { localStorage.setItem('tm-cc-vo
 let clAutoCall = true; try { clAutoCall = localStorage.getItem('tm-cl-autocall') !== '0'; } catch (e) {}
 function clAutoCallSet(on) { clAutoCall = !!on; try { localStorage.setItem('tm-cl-autocall', clAutoCall ? '1' : '0'); } catch (e) {} }
 let ccLastScoreAt = 0, clCallsSinceScore = 99; // 점수판 이벤트 이후 바운스 수 (첫 바운스 = 서브)
+let clDual = null; // v1.27 두 캠 짝 {slot, until} — 뷰어가 10초마다 갱신, 35초 안 오면 풀림
+function clDualOn() { return !!(clDual && Date.now() < clDual.until); }
+function clDualSet(p) {
+  if (!p || typeof p !== 'object') return;
+  const was = clDualOn();
+  clDual = p.on ? { slot: p.slot === 'B' ? 'B' : 'A', until: Date.now() + 35000 } : null;
+  if (clDualOn() && !was) toast('반대편 캠과 짝이 됐어요 (' + clDual.slot + ' 캠) — 내 쪽 코트만 콜해요');
+  if (!clDualOn() && was) toast('두 캠 짝이 풀렸어요 — 코트 전체를 콜해요');
+}
+function clDualNearOk(mC) { return !clDualOn() || !!(mC && mC[1] >= AI_COURT_L / 2); } // 두 캠이면 가까운 절반(보정 좌표 y ≥ L/2)만 자동 콜
 function clAutoCallFor(vd, mC, isServe) { // v0.84: 확실한 것만 → 'OUT' | 'FAULT' | null
   if (!vd || !mC) return null;
   const cx = mC[0], cy = mC[1];
@@ -9783,6 +9794,8 @@ async function ccToggle() {
   chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
   chan.on('broadcast', { event: 'mark' }, p => ccKeepClip(p.payload)); // 포인트 하이라이트 클립 보관 (v0.72)
   chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload)); // 📥 PC로 영상 전송 신호 (v0.96)
+  chan.on('broadcast', { event: 'ping' }, p => { const q = (p && p.payload) || {}; try { chan.send({ type: 'broadcast', event: 'pong', payload: { id: String(q.id || '').slice(0, 20), t0: Number(q.t0) || 0, tc: Date.now() } }); } catch (e) {} }); // v1.27 두 캠 시간 맞춤
+  chan.on('broadcast', { event: 'dual' }, p => clDualSet(p && p.payload)); // v1.27 두 캠 짝
   try {
     await new Promise((res, rej) => chan.subscribe(st => {
       if (st === 'SUBSCRIBED') res();
@@ -10210,6 +10223,7 @@ async function cvWatch() {
   chan.on('broadcast', { event: 'frame' }, p => { cvFrame(p.payload); cvPullTick(); });
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload)); // 🤖 라이브 판정 피드
+  chan.on('broadcast', { event: 'pong' }, p => cvPong('A', p && p.payload)); // v1.27
   chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'A')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'A')); // v1.16
   chan.on('broadcast', { event: 'rtc' }, p => cvPullRtc(p.payload)); // 📥 PC로 받기 응답 (v0.96)
   try {
@@ -10244,6 +10258,7 @@ async function cvWatchB() { // 반대편 캠(B) 추가 시청 (v0.65)
   chan.on('broadcast', { event: 'frame' }, p => cvFrameB(p.payload));
   chan.on('broadcast', { event: 'camclip' }, p => cvClipB(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload, 'B'));
+  chan.on('broadcast', { event: 'pong' }, p => cvPong('B', p && p.payload)); // v1.27
   chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'B')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'B')); // v1.16
   try {
     await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
@@ -10256,7 +10271,8 @@ async function cvWatchB() { // 반대편 캠(B) 추가 시청 (v0.65)
   chan.send({ type: 'broadcast', event: 'hello', payload: {} });
   $('cc-view-wrap').style.display = 'block';
   const w = $('cc-live-b-wrap'); if (w) w.style.display = 'block';
-  toast('👀 B 캠 ' + code + ' 연결 — 두 캠 판정을 합쳐서 보여줘요');
+  cvSyncStart(); // v1.27 두 캠 시간 맞춤 + 짝 알림
+  toast('B 캠 ' + code + ' 연결 — 두 캠 시간을 맞춘 뒤 판정을 합쳐요 (각 캠은 자기 쪽 코트만 콜)');
 }
 function cvFrameB(p) {
   if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
@@ -10264,6 +10280,7 @@ function cvFrameB(p) {
   const img = $('cc-live2'); if (img) img.src = p.d;
 }
 async function cvStopB(silent) {
+  cvSyncStop(); // v1.27
   if (cvChanB) { try { await cvChanB.unsubscribe(); } catch (e) {} cvChanB = null; }
   if (cvTimerB) { clearInterval(cvTimerB); cvTimerB = null; }
   cvCodeB = null;
@@ -10762,7 +10779,7 @@ function clDetect(tw, th, v) {
   const shot = clShotInfo(pts, bi, sx, sy, px, py); // 🌀 스핀·속도·코스·깊이 (v0.64, 참고치)
   const sinceScore = (at - ccLastScoreAt) / 1000;
   const isServe = clCallsSinceScore === 0 && sinceScore >= 3 && sinceScore <= 45; clCallsSinceScore++;
-  const auto = clAutoCallFor(vd, mC, isServe); // v0.84
+  const auto = clDualNearOk(mC) ? clAutoCallFor(vd, mC, isServe) : null; // v0.84 · v1.27 두 캠이면 내 쪽 코트 절반만 콜
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt: at - Math.round((performance.now() / 1000 - rb.t) * 1000) }; // bounceAt = 벽시계 기준 착지 시각 (v1.14 챌린지 창)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
@@ -10773,7 +10790,7 @@ function clDetect(tw, th, v) {
   const trail = trailN.filter((_, i) => i % trailStep === 0 || i === bi || i === trailN.length - 1);
   clDraw();
   clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + (isServe ? ' · 서브' : '') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null } });
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null, cx: mC ? Math.round(mC[0] * 100) / 100 : null, bounceAt: clLast.bounceAt, near: mC ? mC[1] >= AI_COURT_L / 2 : null, dual: clDualOn() } }); // v1.27 cx·bounceAt·near
   clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
@@ -10819,6 +10836,52 @@ function clShotText(sh) {
 }
 // ── 뷰어 쪽 ──
 let cvCalls = [];
+// ── v1.27 두 캠 시간 맞춤·합치기 ──
+let cvClock = { A: null, B: null }, cvSyncTimer = null, cvAutoSaid = 0;
+function cvBounceT(p, slot) { // 착지 시각을 뷰어 시계로 (캠 시계 − 시계 차)
+  const t = Number.isFinite(p.bounceAt) ? p.bounceAt : (Number(p.at) || Date.now());
+  const k = cvClock[slot === 'B' ? 'B' : 'A'];
+  return t - (k ? k.off : 0);
+}
+function cvPong(slot, p) { // 시계 차 = 캠 시각 − 왕복 중간 시각, 왕복이 짧은 표본을 믿음(60초 지나면 새로)
+  if (!p || !Number.isFinite(p.t0) || !Number.isFinite(p.tc) || !p.t0) return;
+  const t1 = Date.now(), rtt = t1 - p.t0;
+  if (rtt < 0 || rtt > 5000) return;
+  const off = p.tc - (p.t0 + t1) / 2, cur = cvClock[slot];
+  if (!cur || rtt <= cur.rtt * 1.5 || t1 - cur.at > 60000) cvClock[slot] = { off, rtt, at: t1 };
+  cvSyncInfo();
+}
+function cvSyncTick() {
+  const t0 = Date.now();
+  [['A', cvChan], ['B', cvChanB]].forEach(([sl, ch]) => { if (!ch) return; try { ch.send({ type: 'broadcast', event: 'ping', payload: { id: sl + t0, t0 } }); ch.send({ type: 'broadcast', event: 'dual', payload: { on: !!(cvChan && cvChanB), slot: sl } }); } catch (e) {} });
+}
+function cvSyncStart() { cvClock = { A: null, B: null }; if (cvSyncTimer) clearInterval(cvSyncTimer); cvSyncTick(); setTimeout(cvSyncTick, 1500); cvSyncTimer = setInterval(cvSyncTick, 10000); cvSyncInfo(); }
+function cvSyncStop() {
+  if (cvSyncTimer) { clearInterval(cvSyncTimer); cvSyncTimer = null; }
+  [cvChan, cvChanB].forEach(ch => { if (ch) { try { ch.send({ type: 'broadcast', event: 'dual', payload: { on: false } }); } catch (e) {} } });
+  cvClock.B = null;
+}
+function cvSyncInfo() {
+  const el = $('cc-view-info'); if (!el || !cvChan || !cvChanB) return;
+  const a = cvClock.A, b = cvClock.B;
+  el.textContent = '캠 A ' + cvCode + ' + B ' + cvCodeB + ' 시청 중 · ' + (a && b ? '두 캠 시간 맞춤 완료 (오차 약 ' + Math.round(Math.max(a.rtt, b.rtt) / 2) + 'ms)' : '두 캠 시간 맞추는 중…');
+}
+function cvToA(c) { return c.cx == null || c.cy == null ? null : c.slot === 'B' ? [AI_COURT_W - c.cx, AI_COURT_L - c.cy] : [c.cx, c.cy]; } // B 캠 좌표는 코트를 뒤집어 A 기준으로
+function cvDualSame(a, b) {
+  if (Math.abs(a.tb - b.tb) > (a.synced && b.synced ? 500 : 900)) return false;
+  const pa = cvToA(a), pb = cvToA(b);
+  return !(pa && pb && Math.hypot(pa[0] - pb[0], pa[1] - pb[1]) > 3);
+}
+function cvDualPrimary(me, c) { // 가까운 쪽(near) 캠 우선, 정보 없으면 코트 y 큰 쪽, 그것도 없으면 먼저 온 것
+  if (me.near != null && c.near != null && me.near !== c.near) return me.near ? me : c;
+  if (me.cy != null && c.cy != null) return me.cy > c.cy ? me : c;
+  return c;
+}
+function cvChallengeSlot() { // 마지막 바운스를 (가까이서) 본 캠 — 모르면 null(둘 다)
+  const c = cvCalls[0];
+  if (!c || Date.now() - c.rx > 90000 || c.farOnly) return null;
+  return c.slot;
+}
 function cvCall(p, slot) {
   if (!p || typeof p !== 'object') return;
   slot = slot === 'B' ? 'B' : 'A';
@@ -10828,18 +10891,19 @@ function cvCall(p, slot) {
     spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh >= 15 && p.kmh <= 170 ? Math.round(p.kmh) : null,
     trail: Array.isArray(p.trail) ? p.trail.slice(0, 40).filter(q => Array.isArray(q) && q.length === 2 && q.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) : [],
     course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
-    slot, cy: Number.isFinite(p.cy) ? p.cy : null, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve });
-  if (cvCalls[0].auto) { clCallSay(cvCalls[0].auto === 'OUT' ? '아웃!' : '폴트!'); toast(cvCalls[0].auto === 'OUT' ? '📣 아웃!' : '📣 폴트!'); } // v0.84 본폰도 외침
+    slot, cy: Number.isFinite(p.cy) ? p.cy : null, cx: Number.isFinite(p.cx) ? p.cx : null, near: typeof p.near === 'boolean' ? p.near : null, tb: cvBounceT(p, slot), synced: !!cvClock[slot], rx: Date.now(), farOnly: false, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve });
+  if (cvCalls[0].auto && Date.now() - cvAutoSaid > 1500) { cvAutoSaid = Date.now(); clCallSay(cvCalls[0].auto === 'OUT' ? '아웃!' : '폴트!'); toast(cvCalls[0].auto === 'OUT' ? '📣 아웃!' : '📣 폴트!'); } // v0.84 본폰도 외침 · v1.27 두 캠이 같은 콜을 보내도 한 번만
   // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
-  if (cvChanB || cvCalls.some(c => c.slot === 'B')) {
+  if (cvChanB || cvCalls.some(c => c.slot === 'B')) { // v1.27: 시계 맞춘 착지 시각 0.5초 안 + 같은 자리(3m) → 같은 바운스, 가까운 캠 우선
     const me = cvCalls[0];
-    for (let i = 1; i < Math.min(cvCalls.length, 5); i++) {
+    if (cvChanB && me.near === false) me.farOnly = true; // 가까운 캠이 아직 못 봄 → 참고로만
+    for (let i = 1; i < Math.min(cvCalls.length, 6); i++) {
       const c = cvCalls[i];
-      if (c.slot === slot || c.alt || Math.abs(c.at - me.at) > 800) continue;
-      const meCloser = me.cy != null && c.cy != null ? me.cy > c.cy : false; // 정보 없으면 먼저 온 것(기존) 우선
-      const prim = meCloser ? me : c, sec = meCloser ? c : me;
+      if (c.slot === slot || c.alt || !cvDualSame(me, c)) continue;
+      const prim = cvDualPrimary(me, c), sec = prim === me ? c : me;
       prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm };
       prim.conflict = !!(prim.call && sec.call && prim.call !== sec.call);
+      prim.farOnly = prim.near === false && sec.near === false;
       cvCalls = cvCalls.filter(x => x !== sec);
       if (cvCalls[0] !== prim) { cvCalls = cvCalls.filter(x => x !== prim); cvCalls.unshift(prim); }
       break;
@@ -10859,7 +10923,7 @@ function cvRenderCalls() {
   if (!last || !feed) return;
   if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; const su = $('cc-call-sum'); if (su) su.innerHTML = ''; return; }
   const fmt = at => { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
-  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${c.close ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
+  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${(c.close || c.farOnly) ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}${c.farOnly ? ' (먼 쪽 캠만 봄)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
   const c0 = cvCalls[0];
   const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
   const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
@@ -10912,8 +10976,9 @@ function cvCamUp(p, slot) {
 function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
   const m = { type: 'broadcast', event: 'cut', payload: { at: Date.now(), challenge: true } };
-  if (cvChan) cvChan.send(m);
-  if (cvChanB) { try { cvChanB.send(m); } catch (e) {} }
+  const pick = cvChan && cvChanB ? cvChallengeSlot() : null; // v1.27: 두 캠이면 마지막 바운스를 본 캠에만
+  if (cvChan && pick !== 'B') cvChan.send(m);
+  if (cvChanB && pick !== 'A') { try { cvChanB.send(m); } catch (e) {} }
   const st = $('cc-view-status');
   if (st) st.textContent = '챌린지 요청 보냄 — 캠이 바운스 앞뒤 4초를 올리면 자동으로 판독해요 (10초쯤)';
 }
