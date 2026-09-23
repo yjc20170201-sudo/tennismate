@@ -2053,7 +2053,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.25';
+const APP_VERSION = 'v1.26';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9813,14 +9813,15 @@ async function ccToggle() {
   toast('📡 클럽캠 시작! 캠 코드 ' + code);
 }
 
+let ccRecT0 = 0; // v1.26: 영상 0초의 벽시계(ms) — 녹화기 시작이 늦으면(첫 조각이 1.5초 넘게 늦음) 첫 조각 − 1초
 let ccRecAt = 0; // v1.25: 이 녹화 구간의 시작 벽시계(ms) — 클립 안 시각 = 벽시계 − ccRecAt
 function ccStartRec() {
-  ccChunks = []; ccRecAt = Date.now();
+  ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0;
   ccFmt = recPick(false);
   const mime = ccFmt.mime;
-  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined);
+  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000, videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
   if (ccRec.mimeType) ccFmt.type = ccRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', ccFmt.ext = ccFmt.type === 'video/mp4' ? 'mp4' : 'webm';
-  ccRec.ondataavailable = e => { if (e.data && e.data.size) ccChunks.push({ blob: e.data, at: Date.now() }); };
+  ccRec.ondataavailable = e => { if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); } };
   ccRec.start(1000); // 1초 단위 청크
 }
 async function ccStopRec() {
@@ -9993,14 +9994,15 @@ function ccHlRender() { const el = $('cc-hl-n'); if (el) el.textContent = ccHlN;
 async function ccKeepClip(p) { // 본폰 점수판이 포인트를 넣으면: 직전 10초 청크를 라벨과 함께 보관 (업로드 없음)
   if (ccBusy || !ccStream || !ccDb || !p || typeof p !== 'object') return; ccBusy = true;
   try {
-    const recAt = ccRecAt, vEl = $('cc-cam'), vw = vEl ? vEl.videoWidth : 0, vh = vEl ? vEl.videoHeight : 0; // v1.25
+    const recAt = ccRecT0 || ccRecAt, vEl = $('cc-cam'), vw = vEl ? vEl.videoWidth : 0, vh = vEl ? vEl.videoHeight : 0; // v1.25
     const chunks = await ccSealSeg();
     const cutoff = Date.now() - CC_HL_SEC * 1000;
     const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff);
     if (cut.length >= 2) {
       const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
       let hl = null; try { hl = ccHlPack(cutoff, recAt, vw, vh); } catch (e) {}
-      await ccHlPut({ at: Date.now(), label: String(p.label || '').replace(/[<>]/g, '').slice(0, 60), side: p.side === 1 ? 1 : 0, blob, hl, vw, vh });
+      const s0 = cut.length < chunks.length && cut[1] ? Math.max(0, Math.round(cut[1].at - 1000 - recAt) / 1000) : 0; // v1.26: 남긴 부분이 영상 몇 초부터인지
+      await ccHlPut({ at: Date.now(), label: String(p.label || '').replace(/[<>]/g, '').slice(0, 60), side: p.side === 1 ? 1 : 0, blob, hl, vw, vh, s0 });
       ccHlN++; ccHlRender();
       const all = await ccHlAll(); if (all.length > CC_HL_MAX) { const tx = ccDb.transaction('hl', 'readwrite'); all.slice(0, all.length - CC_HL_MAX).forEach(r => tx.objectStore('hl').delete(r.at)); }
     }
@@ -10029,13 +10031,16 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       status('하이라이트 만드는 중 ' + (i + 1) + '/' + clips.length + ' — 화면을 끄지 마세요');
       const url = URL.createObjectURL(c.blob); v.src = url;
       await new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; setTimeout(res, 3000); });
+      const s0 = ccHlStart(c); // v1.26: 이어 붙인 클립은 빈 구간까지 원래 시각대로 재생됨 → 남긴 부분 시작으로 이동
+      if (s0 > 0.3) await new Promise(res => { v.onseeked = res; try { v.currentTime = s0 + 1; } catch (e) { res(); } setTimeout(res, 3000); }); // +1초: 이동 직후 첫 키프레임 전은 화면이 멈춤
+      const seekOk = s0 <= 0.3 || v.currentTime >= s0 - 1;
       try { await v.play(); } catch (e) {}
       const vs = vert ? ccHlVertState(c, cv) : null; // v1.25
       await new Promise((res) => {
-        const t0 = performance.now();
+        const t0 = performance.now(), lim = (CC_HL_SEC + 3) * (seekOk && vs ? 2 : 1) * 1000; // 슬로모션만큼 여유
         const draw = () => {
-          if (v.ended || v.paused && v.currentTime > 0 || performance.now() - t0 > (CC_HL_SEC + 3) * 1000) return res();
-          if (vs) { ccHlVertFrame(g, v, vs, c, i, clips.length); requestAnimationFrame(draw); return; }
+          if (v.ended || v.paused && v.currentTime > 0 || performance.now() - t0 > lim || seekOk && v.currentTime > s0 + CC_HL_SEC + 2.5) return res();
+          if (vs) { const rate = ccHlSlowAt(vs, v.currentTime) ? 0.4 : 1; if (v.playbackRate !== rate) { try { v.playbackRate = rate; } catch (e) {} } ccHlVertFrame(g, v, vs, c, i, clips.length); requestAnimationFrame(draw); return; }
           const fit = aiFitRect(v.videoWidth || 16, v.videoHeight || 9, 640, 360);
           g.fillStyle = '#000'; g.fillRect(0, 0, 640, 360);
           if (fit) { try { g.drawImage(v, fit.x, fit.y, fit.w, fit.h); } catch (e) {} }
@@ -10071,7 +10076,21 @@ function ccHlVertState(c, cv) { // 클립 하나의 세로 그리기 상태
   const bn = (hl.bn || []).filter(b => b && isFinite(b.s)).sort((a, b) => a.s - b.s);
   let court = null;
   if (hl.cal && bn.some(b => isFinite(b.cx))) { court = document.createElement('canvas'); court.width = 80; court.height = 160; try { aiMiniCourt(court, null, null, null); } catch (e) { court = null; } }
-  return { pts, bn, court, cx: 0.5, has: pts.length > 0, W: cv.width, H: cv.height };
+  return { pts, bn, court, cx: 0.5, has: pts.length > 0, W: cv.width, H: cv.height, cal: !!hl.cal };
+}
+function ccHlStart(c) { // v1.26: 클립에서 남긴 부분이 시작하는 초 — 옛 클립(s0 없음)은 공 기록 첫 시각으로 추정
+  if (c && isFinite(c.s0)) return c.s0;
+  const p = c && c.hl && Array.isArray(c.hl.pts) && c.hl.pts.length ? c.hl.pts[0][0] : null;
+  return isFinite(p) && p > 0 ? Math.max(0, p - 1) : 0;
+}
+function ccHlCallLabel(b) { // v1.26: 세로 라벨은 자동 콜과 같은 규칙 — IN 또는 확실한 OUT(아슬아슬 아님, 먼 코트 60cm↑·가까운 코트 15cm↑)만
+  if (!b || !b.call) return null;
+  if (b.call === 'IN') return 'IN' + (b.distCm ? ' ' + b.distCm + 'cm' : '');
+  const far = typeof b.cy === 'number' && b.cy < AI_COURT_L / 2;
+  return !b.close && b.distCm >= (far ? 60 : 15) ? 'OUT ' + b.distCm + 'cm' : null;
+}
+function ccHlSlowAt(vs, s) { // v1.26: 판정이 붙은 착지 0.3초 전 ~ 0.35초 뒤는 슬로모션 (보정이 없으면 모든 착지)
+  return vs.bn.some(b => (b.call || !vs.cal) && s >= b.s - 0.3 && s <= b.s + 0.35);
 }
 function ccHlBallAt(pts, s) { // s초의 공 위치(비율) — 앞뒤 0.6초 안 표본을 선형 보간, 없으면 null
   if (!pts.length) return null;
@@ -10101,13 +10120,14 @@ function ccHlVertFrame(g, v, vs, c, i, total) {
     const dt = s - b.s; if (dt < -0.05 || dt > 1.2) return;
     const bx = X(b.x), by = Y(b.y), r = 8 + dt * 40, al = Math.max(0, 1 - dt / 1.2);
     g.strokeStyle = 'rgba(255,255,255,' + al.toFixed(2) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(bx, by, r, 0, 7); g.stroke();
-    if (dt <= 0.9 && b.call) { const txt = (b.call === 'IN' ? 'IN' : 'OUT') + (b.distCm ? ' ' + b.distCm + 'cm' : ''); g.font = 'bold 26px sans-serif'; const tw = g.measureText(txt).width + 20; const lx = Math.max(6, Math.min(W - tw - 6, bx - tw / 2)), ly = Math.max(40, by - 46); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(lx, ly - 30, tw, 38); g.fillStyle = b.call === 'IN' ? '#2ecc71' : '#e74c3c'; g.fillText(txt, lx + 10, ly); }
+    const lab = ccHlCallLabel(b); // v1.26
+    if (dt <= 0.9 && lab) { const txt = lab; g.font = 'bold 26px sans-serif'; const tw = g.measureText(txt).width + 20; const lx = Math.max(6, Math.min(W - tw - 6, bx - tw / 2)), ly = Math.max(40, by - 46); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(lx, ly - 30, tw, 38); g.fillStyle = b.call === 'IN' ? '#2ecc71' : '#e74c3c'; g.fillText(txt, lx + 10, ly); }
   });
   // 미니 코트(반투명, 오른쪽 위): 지금까지의 낙하점
   if (vs.court) {
     const mw = 80, mh = 160, mx = W - mw - 10, my = 14; g.globalAlpha = 0.7; g.drawImage(vs.court, mx, my); g.globalAlpha = 1;
     const m = 10, sc = Math.min((mw - 2 * m) / AI_COURT_W, (mh - 2 * m) / AI_COURT_L), ox = mx + (mw - AI_COURT_W * sc) / 2, oy = my + (mh - AI_COURT_L * sc) / 2;
-    vs.bn.forEach(b => { if (!isFinite(b.cx) || b.s > s) return; const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, b.cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, b.cy)); const px = ox + qx * sc, py = oy + qy * sc; const cur = s - b.s < 1.0; g.fillStyle = b.call === 'OUT' ? '#e74c3c' : '#2ecc71'; g.beginPath(); g.arc(px, py, cur ? 5 : 3.5, 0, 7); g.fill(); if (cur) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(px, py, 8, 0, 7); g.stroke(); } });
+    vs.bn.forEach(b => { if (!isFinite(b.cx) || b.s > s) return; const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, b.cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, b.cy)); const px = ox + qx * sc, py = oy + qy * sc; const cur = s - b.s < 1.0; g.fillStyle = b.call === 'OUT' ? (ccHlCallLabel(b) ? '#e74c3c' : '#f1c40f') : '#2ecc71'; g.beginPath(); g.arc(px, py, cur ? 5 : 3.5, 0, 7); g.fill(); if (cur) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(px, py, 8, 0, 7); g.stroke(); } });
   }
   // 아래 라벨
   g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, H - 56, W, 56);
@@ -10536,16 +10556,40 @@ let clTrail = null; // v0.78: 마지막 샷 궤적 {at, pts:[[x,y]...](비디오
 let clHlLog = [], clHlBounces = [];
 function clHlLogAdd(pts, b) {
   const now = Date.now(), keep = now - 25000;
-  const seen = new Set(clHlLog.map(p => p.t));
-  pts.forEach(p => { if (isFinite(p.t) && isFinite(p.x) && isFinite(p.y) && !seen.has(p.t)) { clHlLog.push(p); seen.add(p.t); } });
+  const seen = new Set(clHlLog.map(p => Math.round(p.t / 8))); // v1.26: 두 경로(트랙·바운스)가 같은 점을 몇 ms 다르게 넣음 → 8ms 단위로 중복 제거
+  pts.forEach(p => { const k = Math.round(p.t / 8); if (isFinite(p.t) && isFinite(p.x) && isFinite(p.y) && !seen.has(k)) { clHlLog.push(p); seen.add(k); } });
   if (b && isFinite(b.t) && !clHlBounces.some(q => Math.abs(q.t - b.t) < 150)) clHlBounces.push(b);
   clHlLog = clHlLog.filter(p => p.t >= keep).sort((a, c) => a.t - c.t); clHlBounces = clHlBounces.filter(p => p.t >= keep);
   if (clHlLog.length > 2000) clHlLog = clHlLog.slice(-2000);
 }
+let clHlBandH = null, clHlBandFn = null;
+function clHlBand() { // v1.26: 사이드라인 ±1.5m 띠(화면 px) — 옆 코트 공 제외. 먼 베이스라인 위(로브)는 위로 갈수록 가까운 폭까지 넓힘 (PC판 court_band와 같은 규칙)
+  if (!clH) return null;
+  if (clHlBandH === clH) return clHlBandFn;
+  clHlBandH = clH; clHlBandFn = null;
+  const Hi = aiInv3(clH); if (!Hi) return null;
+  const P = (x, y) => aiCourtToImg(Hi, x, y), l0 = P(-1.5, 0), l1 = P(-1.5, AI_COURT_L), r0 = P(AI_COURT_W + 1.5, 0), r1 = P(AI_COURT_W + 1.5, AI_COURT_L);
+  if (![l0, l1, r0, r1].every(q => isFinite(q[0]) && isFinite(q[1]))) return null;
+  const yf = Math.min(l0[1], l1[1], r0[1], r1[1]), yn = Math.max(l0[1], l1[1], r0[1], r1[1]);
+  const on = (a, b, y) => Math.abs(b[1] - a[1]) < 1e-6 ? a[0] : a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
+  clHlBandFn = (x, y) => {
+    let a, b;
+    if (y >= yf) { a = on(l0, l1, y); b = on(r0, r1, y); }
+    else { const t = (yf - y) / Math.max(1, yf); a = on(l0, l1, yf) + (on(l0, l1, yn) - on(l0, l1, yf)) * t; b = on(r0, r1, yf) + (on(r0, r1, yn) - on(r0, r1, yf)) * t; }
+    return x >= Math.min(a, b) && x <= Math.max(a, b);
+  };
+  return clHlBandFn;
+}
+function clHlTrackLog(pts, tw, th, v) { // v1.26: 판정 틱마다 트랙 점을 공 기록에 (바운스가 없어도 세로 창이 공을 따라가게)
+  if (!v || !v.videoWidth || !pts || pts.length < 6) return;
+  const sx = v.videoWidth / tw, sy = v.videoHeight / th, nowW = Date.now(), nowP = performance.now() / 1000, band = clHlBand();
+  const q = pts.map(p => ({ t: nowW - Math.round((nowP - p.t) * 1000), x: p.x * sx, y: p.y * sy })).filter(p => !band || band(p.x, p.y));
+  if (q.length >= 4) clHlLogAdd(q, null);
+}
 function ccHlPack(cutoff, recAt, vw, vh) { // 클립에 실을 공 자료: s = 녹화 시작 기준 초, x/y = 화면 비율
   if (!vw || !vh || !recAt) return null;
   const pts = clHlLog.filter(p => p.t >= cutoff - 800).map(p => [Math.round((p.t - recAt)) / 1000, Math.round(p.x / vw * 1000) / 1000, Math.round(p.y / vh * 1000) / 1000]);
-  const bn = clHlBounces.filter(p => p.t >= cutoff - 800).map(p => ({ s: Math.round(p.t - recAt) / 1000, x: Math.round(p.x / vw * 1000) / 1000, y: Math.round(p.y / vh * 1000) / 1000, cx: p.cx, cy: p.cy, call: p.call, distCm: p.distCm }));
+  const bn = clHlBounces.filter(p => p.t >= cutoff - 800).map(p => ({ s: Math.round(p.t - recAt) / 1000, x: Math.round(p.x / vw * 1000) / 1000, y: Math.round(p.y / vh * 1000) / 1000, cx: p.cx, cy: p.cy, call: p.call, distCm: p.distCm, close: !!p.close }));
   if (!pts.length && !bn.length) return null;
   return { pts, bn, cal: !!clH };
 }
@@ -10698,6 +10742,7 @@ function clDetect(tw, th, v) {
   const track = clModelLive ? clModelTrack(clFrames, tw) : clPickTrack(clFrames, tw); // v1.07
   if (!track || track.pts.length < 6) return;
   const pts = track.pts;
+  try { clHlTrackLog(pts, tw, th, v); } catch (e) {} // v1.26
   let bi;
   if (clModelLive) { bi = 0; pts.forEach((p, i) => { if (p.y > pts[bi].y) bi = i; }); if (bi === 0 || bi === pts.length - 1) bi = -1; } // 모델 경로: 표본이 성겨 이동평균이 한 칸 밀림 → 원시 최대점
   else bi = aiBounceIdx(pts.map(p => p.y));
@@ -10721,7 +10766,7 @@ function clDetect(tw, th, v) {
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt: at - Math.round((performance.now() / 1000 - rb.t) * 1000) }; // bounceAt = 벽시계 기준 착지 시각 (v1.14 챌린지 창)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
-  clHlLogAdd(pts.map(p => ({ t: at - Math.round((performance.now() / 1000 - p.t) * 1000), x: p.x * sx, y: p.y * sy })), { t: clLast.bounceAt, x: px, y: py, cx: mC ? mC[0] : null, cy: mC ? mC[1] : null, call: vd ? vd.call : null, distCm: vd ? vd.distCm : 0 }); // v1.25 세로 하이라이트용
+  clHlLogAdd(pts.map(p => ({ t: at - Math.round((performance.now() / 1000 - p.t) * 1000), x: p.x * sx, y: p.y * sy })), { t: clLast.bounceAt, x: px, y: py, cx: mC ? mC[0] : null, cy: mC ? mC[1] : null, call: vd ? vd.call : null, distCm: vd ? vd.distCm : 0, close: !!(vd && vd.close) }); // v1.25 세로 하이라이트용
   [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
   const trailN = pts.map(p => [Math.round(p.x * sx / v.videoWidth * 1000) / 1000, Math.round(p.y * sy / v.videoHeight * 1000) / 1000]); // 뷰어용 정규화 좌표
   const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
