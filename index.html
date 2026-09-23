@@ -1261,6 +1261,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div class="row" style="gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap">
               <span class="muted" style="font-size:12px">하이라이트 클립 <b id="cc-hl-n">0</b>개 (본폰 점수판 포인트마다 직전 10초)</span>
               <button type="button" class="btn small" style="flex:0 0 auto" onclick="ccBuildHighlight()">하이라이트 만들기</button>
+              <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="cc-hl-vert" checked onchange="ccHlVertSet(this.checked)"> 세로(쇼츠) — 공 따라가기·낙하점 (라이브 판정 켜 두면 공 자료가 붙음)</label>
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
@@ -2052,7 +2053,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.24';
+const APP_VERSION = 'v1.25';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9333,7 +9334,7 @@ function clAutoCallFor(vd, mC, isServe) { // v0.84: 확실한 것만 → 'OUT' |
     const inBoxes = cx >= AI_SINGLES_IN - M && cx <= AI_COURT_W - AI_SINGLES_IN + M && cy >= AI_COURT_L / 2 - 6.40 - M && cy <= AI_COURT_L / 2 + 6.40 + M;
     return inBoxes ? null : 'FAULT';
   }
-  if (vd.call === 'OUT' && !vd.close && vd.distCm >= 15) return 'OUT';
+  if (vd.call === 'OUT' && !vd.close && vd.distCm >= (cy < AI_COURT_L / 2 ? 60 : 15)) return 'OUT'; // v1.25: 먼 코트는 60cm 이상만(한 대 카메라 오차)
   return null;
 }
 function clCallSay(text) { // 자동 콜 음성 (토글 cl-autocall) — 캠·뷰어 공용
@@ -9812,8 +9813,9 @@ async function ccToggle() {
   toast('📡 클럽캠 시작! 캠 코드 ' + code);
 }
 
+let ccRecAt = 0; // v1.25: 이 녹화 구간의 시작 벽시계(ms) — 클립 안 시각 = 벽시계 − ccRecAt
 function ccStartRec() {
-  ccChunks = [];
+  ccChunks = []; ccRecAt = Date.now();
   ccFmt = recPick(false);
   const mime = ccFmt.mime;
   ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000 } : undefined);
@@ -9910,6 +9912,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
 // ── v1.15 촬영 지킴이: ① 세로(옆으로 누운) 영상 경고·자동 복구 ② 손대지 않으면 자동 절전(발열) ──
 let ccOrientWarnAt = 0, ccOrientFixN = 0, ccLastTouch = Date.now(), ccEcoAuto = true;
 try { ccEcoAuto = localStorage.getItem('tm-cc-eco-auto') !== '0'; } catch (e) {}
+document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-vert'); if (e) e.checked = ccHlVert(); } catch (e) {} }); // v1.25
 function ccEcoAutoSet(on) { ccEcoAuto = !!on; try { localStorage.setItem('tm-cc-eco-auto', ccEcoAuto ? '1' : '0'); } catch (e) {} }
 document.addEventListener('pointerdown', () => { ccLastTouch = Date.now(); }, true);
 const CC_ECO_AUTO_MS = 180000;
@@ -9990,12 +9993,14 @@ function ccHlRender() { const el = $('cc-hl-n'); if (el) el.textContent = ccHlN;
 async function ccKeepClip(p) { // 본폰 점수판이 포인트를 넣으면: 직전 10초 청크를 라벨과 함께 보관 (업로드 없음)
   if (ccBusy || !ccStream || !ccDb || !p || typeof p !== 'object') return; ccBusy = true;
   try {
+    const recAt = ccRecAt, vEl = $('cc-cam'), vw = vEl ? vEl.videoWidth : 0, vh = vEl ? vEl.videoHeight : 0; // v1.25
     const chunks = await ccSealSeg();
     const cutoff = Date.now() - CC_HL_SEC * 1000;
     const cut = chunks.filter((c, i) => i === 0 || c.at >= cutoff);
     if (cut.length >= 2) {
       const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
-      await ccHlPut({ at: Date.now(), label: String(p.label || '').replace(/[<>]/g, '').slice(0, 60), side: p.side === 1 ? 1 : 0, blob });
+      let hl = null; try { hl = ccHlPack(cutoff, recAt, vw, vh); } catch (e) {}
+      await ccHlPut({ at: Date.now(), label: String(p.label || '').replace(/[<>]/g, '').slice(0, 60), side: p.side === 1 ? 1 : 0, blob, hl, vw, vh });
       ccHlN++; ccHlRender();
       const all = await ccHlAll(); if (all.length > CC_HL_MAX) { const tx = ccDb.transaction('hl', 'readwrite'); all.slice(0, all.length - CC_HL_MAX).forEach(r => tx.objectStore('hl').delete(r.at)); }
     }
@@ -10007,12 +10012,13 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   if (!ccDb) { toast('저장소를 열 수 없어요'); return; }
   const clips = await ccHlAll().catch(() => []);
   if (!clips.length) { toast('하이라이트 클립이 아직 없어요 — 본폰 점수판에서 포인트를 넣으면 쌓여요'); return; }
-  const cv = document.createElement('canvas'); cv.width = 640; cv.height = 360;
+  const vert = ccHlVert(); // v1.25 세로(쇼츠) 모드
+  const cv = document.createElement('canvas'); cv.width = vert ? 540 : 640; cv.height = vert ? 960 : 360;
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') { toast('이 폰은 영상 합치기를 지원하지 않아요 — 클립을 낱개로 저장할게요'); for (const c of clips) { const a = document.createElement('a'); a.href = URL.createObjectURL(c.blob); a.download = '하이라이트_' + c.at + '.' + ccFmt.ext; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 500)); } return; }
   const g = cv.getContext('2d');
   const stream = cv.captureStream(30);
   const fmt = recPick(false);
-  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: 3000000 } : undefined);
+  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 4000000 : 3000000 } : undefined);
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
   rec.start(1000);
@@ -10024,10 +10030,12 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       const url = URL.createObjectURL(c.blob); v.src = url;
       await new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; setTimeout(res, 3000); });
       try { await v.play(); } catch (e) {}
+      const vs = vert ? ccHlVertState(c, cv) : null; // v1.25
       await new Promise((res) => {
         const t0 = performance.now();
         const draw = () => {
           if (v.ended || v.paused && v.currentTime > 0 || performance.now() - t0 > (CC_HL_SEC + 3) * 1000) return res();
+          if (vs) { ccHlVertFrame(g, v, vs, c, i, clips.length); requestAnimationFrame(draw); return; }
           const fit = aiFitRect(v.videoWidth || 16, v.videoHeight || 9, 640, 360);
           g.fillStyle = '#000'; g.fillRect(0, 0, 640, 360);
           if (fit) { try { g.drawImage(v, fit.x, fit.y, fit.w, fit.h); } catch (e) {} }
@@ -10053,6 +10061,58 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       else status('저장은 됐고 본폰 전송은 실패: ' + error.message);
     } catch (e) { status('저장은 됐고 본폰 전송은 실패'); }
   } else status('하이라이트 저장 완료 (' + clips.length + '개 장면)');
+}
+// ── v1.25 세로 하이라이트 그리기 ──
+function ccHlVert() { try { return localStorage.getItem('tm-cc-hl-vert') !== '0'; } catch (e) { return true; } }
+function ccHlVertSet(on) { try { localStorage.setItem('tm-cc-hl-vert', on ? '1' : '0'); } catch (e) {} }
+function ccHlVertState(c, cv) { // 클립 하나의 세로 그리기 상태
+  const hl = c && c.hl && Array.isArray(c.hl.pts) ? c.hl : { pts: [], bn: [], cal: false };
+  const pts = hl.pts.filter(p => Array.isArray(p) && p.length >= 3 && isFinite(p[0])).sort((a, b) => a[0] - b[0]);
+  const bn = (hl.bn || []).filter(b => b && isFinite(b.s)).sort((a, b) => a.s - b.s);
+  let court = null;
+  if (hl.cal && bn.some(b => isFinite(b.cx))) { court = document.createElement('canvas'); court.width = 80; court.height = 160; try { aiMiniCourt(court, null, null, null); } catch (e) { court = null; } }
+  return { pts, bn, court, cx: 0.5, has: pts.length > 0, W: cv.width, H: cv.height };
+}
+function ccHlBallAt(pts, s) { // s초의 공 위치(비율) — 앞뒤 0.6초 안 표본을 선형 보간, 없으면 null
+  if (!pts.length) return null;
+  let lo = -1; for (let i = 0; i < pts.length; i++) { if (pts[i][0] <= s) lo = i; else break; }
+  const a = lo >= 0 ? pts[lo] : null, b = lo + 1 < pts.length ? pts[lo + 1] : null;
+  if (a && b && b[0] - a[0] <= 0.6 && b[0] > a[0]) { const k = (s - a[0]) / (b[0] - a[0]); return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k]; }
+  if (a && s - a[0] <= 0.6) return [a[1], a[2]];
+  if (b && b[0] - s <= 0.6) return [b[1], b[2]];
+  return null;
+}
+function ccHlVertFrame(g, v, vs, c, i, total) {
+  const W = vs.W, H = vs.H, vw = v.videoWidth || 16, vh = v.videoHeight || 9, s = v.currentTime || 0;
+  const ball = ccHlBallAt(vs.pts, s);
+  const target = ball ? ball[0] : (vs.has ? vs.cx : 0.5);
+  vs.cx += (target - vs.cx) * (ball ? 0.12 : 0.03); // EMA — 공을 부드럽게 따라감, 공이 없으면 천천히 멈춤
+  const cw = vh * W / H, ch = vh; // 원본에서 자르는 9:16 창(px)
+  const left = Math.max(0, Math.min(vw - cw, vs.cx * vw - cw / 2));
+  g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+  try { g.drawImage(v, left, 0, cw, ch, 0, 0, W, H); } catch (e) {}
+  const X = x => (x * vw - left) * (W / cw), Y = y => y * vh * (H / ch);
+  // 꼬리(직전 0.7초)
+  const tail = vs.pts.filter(p => p[0] <= s && p[0] >= s - 0.7);
+  if (tail.length >= 2) { g.lineWidth = 3; g.lineCap = 'round'; for (let k = 1; k < tail.length; k++) { const al = 0.15 + 0.85 * (k / tail.length); g.strokeStyle = 'rgba(212,233,78,' + al.toFixed(2) + ')'; g.beginPath(); g.moveTo(X(tail[k - 1][1]), Y(tail[k - 1][2])); g.lineTo(X(tail[k][1]), Y(tail[k][2])); g.stroke(); } }
+  if (ball) { g.fillStyle = '#d4e94e'; g.beginPath(); g.arc(X(ball[0]), Y(ball[1]), 5, 0, 7); g.fill(); }
+  // 착지 고리 + 판정 라벨(0.9초)
+  vs.bn.forEach(b => {
+    const dt = s - b.s; if (dt < -0.05 || dt > 1.2) return;
+    const bx = X(b.x), by = Y(b.y), r = 8 + dt * 40, al = Math.max(0, 1 - dt / 1.2);
+    g.strokeStyle = 'rgba(255,255,255,' + al.toFixed(2) + ')'; g.lineWidth = 2; g.beginPath(); g.arc(bx, by, r, 0, 7); g.stroke();
+    if (dt <= 0.9 && b.call) { const txt = (b.call === 'IN' ? 'IN' : 'OUT') + (b.distCm ? ' ' + b.distCm + 'cm' : ''); g.font = 'bold 26px sans-serif'; const tw = g.measureText(txt).width + 20; const lx = Math.max(6, Math.min(W - tw - 6, bx - tw / 2)), ly = Math.max(40, by - 46); g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(lx, ly - 30, tw, 38); g.fillStyle = b.call === 'IN' ? '#2ecc71' : '#e74c3c'; g.fillText(txt, lx + 10, ly); }
+  });
+  // 미니 코트(반투명, 오른쪽 위): 지금까지의 낙하점
+  if (vs.court) {
+    const mw = 80, mh = 160, mx = W - mw - 10, my = 14; g.globalAlpha = 0.7; g.drawImage(vs.court, mx, my); g.globalAlpha = 1;
+    const m = 10, sc = Math.min((mw - 2 * m) / AI_COURT_W, (mh - 2 * m) / AI_COURT_L), ox = mx + (mw - AI_COURT_W * sc) / 2, oy = my + (mh - AI_COURT_L * sc) / 2;
+    vs.bn.forEach(b => { if (!isFinite(b.cx) || b.s > s) return; const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, b.cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, b.cy)); const px = ox + qx * sc, py = oy + qy * sc; const cur = s - b.s < 1.0; g.fillStyle = b.call === 'OUT' ? '#e74c3c' : '#2ecc71'; g.beginPath(); g.arc(px, py, cur ? 5 : 3.5, 0, 7); g.fill(); if (cur) { g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.beginPath(); g.arc(px, py, 8, 0, 7); g.stroke(); } });
+  }
+  // 아래 라벨
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, H - 56, W, 56);
+  g.fillStyle = '#d4e94e'; g.font = 'bold 22px sans-serif'; g.textAlign = 'left'; g.fillText(String(c.label || ''), 14, H - 20);
+  g.fillStyle = '#fff'; g.font = '15px sans-serif'; g.textAlign = 'right'; g.fillText((i + 1) + ' / ' + total, W - 14, H - 20); g.textAlign = 'left';
 }
 async function ccHlClearAll() { if (!ccDb) return; if (!confirm('하이라이트 클립 ' + ccHlN + '개를 지울까요?')) return; await ccHlClear().catch(() => {}); ccHlN = 0; ccHlRender(); toast('하이라이트 클립을 지웠어요'); }
 async function ccExportFiles(files, title) { // 공유 시트 우선 (아이폰: 비디오 저장→사진 앨범 / 드라이브), 안 되면 다운로드 (v0.74)
@@ -10472,6 +10532,23 @@ function clCanvasClick(ev) {
   clDraw();
 }
 let clTrail = null; // v0.78: 마지막 샷 궤적 {at, pts:[[x,y]...](비디오 좌표), bi}
+// ── v1.25 세로 하이라이트용 공 로그: 최근 25초의 공 위치(벽시계 ms, 비디오 px)와 바운스 ──
+let clHlLog = [], clHlBounces = [];
+function clHlLogAdd(pts, b) {
+  const now = Date.now(), keep = now - 25000;
+  const seen = new Set(clHlLog.map(p => p.t));
+  pts.forEach(p => { if (isFinite(p.t) && isFinite(p.x) && isFinite(p.y) && !seen.has(p.t)) { clHlLog.push(p); seen.add(p.t); } });
+  if (b && isFinite(b.t) && !clHlBounces.some(q => Math.abs(q.t - b.t) < 150)) clHlBounces.push(b);
+  clHlLog = clHlLog.filter(p => p.t >= keep).sort((a, c) => a.t - c.t); clHlBounces = clHlBounces.filter(p => p.t >= keep);
+  if (clHlLog.length > 2000) clHlLog = clHlLog.slice(-2000);
+}
+function ccHlPack(cutoff, recAt, vw, vh) { // 클립에 실을 공 자료: s = 녹화 시작 기준 초, x/y = 화면 비율
+  if (!vw || !vh || !recAt) return null;
+  const pts = clHlLog.filter(p => p.t >= cutoff - 800).map(p => [Math.round((p.t - recAt)) / 1000, Math.round(p.x / vw * 1000) / 1000, Math.round(p.y / vh * 1000) / 1000]);
+  const bn = clHlBounces.filter(p => p.t >= cutoff - 800).map(p => ({ s: Math.round(p.t - recAt) / 1000, x: Math.round(p.x / vw * 1000) / 1000, y: Math.round(p.y / vh * 1000) / 1000, cx: p.cx, cy: p.cy, call: p.call, distCm: p.distCm }));
+  if (!pts.length && !bn.length) return null;
+  return { pts, bn, cal: !!clH };
+}
 function clShotPanelLines(c) { // 구질 패널 줄들 (캠·뷰어 공용)
   if (!c) return [];
   const l1 = c.call ? ((c.call === 'IN' ? 'IN' : 'OUT') + (c.close ? '?' : '') + (c.distCm != null ? ' · ' + c.distCm + 'cm' : '')) : '바운스';
@@ -10633,6 +10710,7 @@ function clDetect(tw, th, v) {
   let vd = null;
   let mC = null;
   if (clH) { mC = aiMapPt(clH, px, py); vd = aiVerdict(mC[0], mC[1]); }
+  if (mC && Math.max(-mC[0], mC[0] - AI_COURT_W, -mC[1], mC[1] - AI_COURT_L) > 2.5) { clFrames = clFrames.filter(f => f.t > rb.t + 0.05); return; } // v1.25: 코트 밖 2.5m 넘게 찍히면 공중 타구(발리)의 투영 — 바운스 아님
   clLastCall = performance.now() / 1000; clNCalls++;
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
   const at = Date.now();
@@ -10643,6 +10721,7 @@ function clDetect(tw, th, v) {
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt: at - Math.round((performance.now() / 1000 - rb.t) * 1000) }; // bounceAt = 벽시계 기준 착지 시각 (v1.14 챌린지 창)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
+  clHlLogAdd(pts.map(p => ({ t: at - Math.round((performance.now() / 1000 - p.t) * 1000), x: p.x * sx, y: p.y * sy })), { t: clLast.bounceAt, x: px, y: py, cx: mC ? mC[0] : null, cy: mC ? mC[1] : null, call: vd ? vd.call : null, distCm: vd ? vd.distCm : 0 }); // v1.25 세로 하이라이트용
   [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
   const trailN = pts.map(p => [Math.round(p.x * sx / v.videoWidth * 1000) / 1000, Math.round(p.y * sy / v.videoHeight * 1000) / 1000]); // 뷰어용 정규화 좌표
   const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
