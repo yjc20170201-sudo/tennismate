@@ -1,4 +1,4 @@
-> ⚠️ 이 파일은 `C:\Projects\Tennis`(학습 PC)의 원본을 공개 저장소 `sync/`에 복사한 것(2026-09-23 16:21). 이메일 등 개인정보는 지웠음. **원본이 기준** — PC 세션에서 갱신하면 `deploy/sync-docs.ps1`로 다시 복사. 저장소에서 연 세션은 코드(app/)만 있고 research/·training-data/·deploy/tests/는 PC에만 있음.
+> ⚠️ 이 파일은 `C:\Projects\Tennis`(학습 PC)의 원본을 공개 저장소 `sync/`에 복사한 것(2026-09-23 16:22). 이메일 등 개인정보는 지웠음. **원본이 기준** — PC 세션에서 갱신하면 `deploy/sync-docs.ps1`로 다시 복사. 저장소에서 연 세션은 코드(app/)만 있고 research/·training-data/·deploy/tests/는 PC에만 있음.
 
 # 테니스메이트 (TennisMate) — 프로젝트 지침
 
@@ -131,6 +131,7 @@ claude/         구 인수인계 문서(08-30, v0.38 기준 — 참고용, 일�
 15. 단일 HTML 542KB → 모듈 분리·빌드(Phase 3와 함께), 미니게임 3종 코드 통합, 테스트 자동화(현재 스모크 스크립트 수동).
 
 ## 9. 관련 문서
+- **저장소(GitHub)로 연 세션용 사본**: `pages-repo/sync/`에 인수인계·CLAUDE.md·최신 세션기록을 이메일 제거 후 복사(9/23, `deploy/sync-docs.ps1` — 문서 갱신 뒤 실행하면 커밋·푸시까지). 원본은 이 PC. 폰에서 이어 가려면 원격 제어 → Tennis PC 세션이 정석(로컬 파일·research·테스트 전부 있음).
 - **`인수인계_다음세션.md` — 새 세션이 가장 먼저 읽을 요약**(현재 버전·최근 작업·다음 할 일·규칙 요약·아티팩트 URL). 세션 끝날 때마다 갱신할 것.
 - `세션기록_YYYY-MM-DD.md` — 그날 작업 인수인계(최신본 먼저). 폰용 페이지는 `deploy/build-sessions.mjs`로 생성(md → HTML, 스크래치패드에 `tennismate-sessions.html`) 후 아티팩트 "테니스메이트 세션기록"에 같은 URL로 재발행(메모리 `tennismate-status-artifact` 참고)
 - `claude/인수인계-ClaudeCode.md` — 08-30 구버전(v0.38 기준), Phase 2 설계 배경 참고용. (루트의 handoff.md는 중복이라 2026-09-03 삭제)
