@@ -2090,7 +2090,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.30';
+const APP_VERSION = 'v1.31';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8693,7 +8693,7 @@ async function mhRender(sel, opt) {
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') throw new Error('이 폰 브라우저는 영상 만들기를 지원하지 않아요 (크롬·사파리 최신 버전에서 해 주세요)');
   const cs = cv.captureStream(30); let tracks = cs.getVideoTracks().slice(), dest = null;
   if (opt.audio && mhActx && mhSrcNode) { try { dest = mhActx.createMediaStreamDestination(); mhSrcNode.connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); } catch (e) { dest = null; } }
-  const fmt = recPick(!!dest), bps = opt.n === 0 ? 4000000 : (vert ? 6000000 : 7000000);
+  const fmt = recPickShare(!!dest), bps = opt.n === 0 ? 4000000 : (vert ? 6000000 : 7000000);
   let rec; try { rec = new MediaRecorder(new MediaStream(tracks), fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: bps, videoKeyFrameIntervalDuration: 1000 } : { videoBitsPerSecond: bps }); } catch (e) { rec = new MediaRecorder(new MediaStream(tracks)); }
   if (rec.mimeType) { fmt.type = rec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'; fmt.ext = fmt.type === 'video/mp4' ? 'mp4' : 'webm'; }
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
@@ -9467,6 +9467,13 @@ function recPick(withAudio) {
   const m = list.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
   const type = m.startsWith('video/mp4') ? 'video/mp4' : m ? 'video/webm' : '';
   return { mime: m, type: type || 'video/mp4', ext: type === 'video/webm' ? 'webm' : 'mp4' };
+}
+function recPickShare(withAudio) { // v1.31: 카톡·인스타로 보낼 결과물은 MP4(H.264+AAC) 우선 — WebM은 카톡이 안 받음
+  const list = withAudio
+    ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4;codecs=avc1,opus', 'video/mp4']
+    : ['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4'];
+  const m = list.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t));
+  return m ? { mime: m, type: 'video/mp4', ext: 'mp4' } : recPick(withAudio);
 }
 let mrFmt = recPick(true), ccFmt = recPick(false);
 function mrStartRec() {
@@ -10418,7 +10425,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   const g = cv.getContext('2d');
   { const hl = $('cc-hl-live'); if (hl) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 220 : 360) + 'px;display:block;margin:0 auto;border-radius:8px;background:#000'; hl.innerHTML = ''; hl.appendChild(cv); hl.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지)
   const stream = cv.captureStream(30);
-  const fmt = recPick(false);
+  const fmt = recPickShare(false); // v1.31 카톡용 MP4
   const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 4000000 : 3000000 } : undefined);
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
