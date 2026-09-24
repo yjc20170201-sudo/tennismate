@@ -1071,6 +1071,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div id="mh-barw" style="display:none;height:6px;background:#e5e7eb;border-radius:3px;margin-top:8px;overflow:hidden"><div id="mh-bar" style="height:100%;width:0;background:#1b7a43"></div></div>
       <div id="mh-status" class="muted" style="font-size:12px;margin-top:6px"></div>
       <canvas id="mh-prev" width="384" height="216" style="display:none;width:100%;max-width:384px;margin-top:6px;border-radius:8px;background:#000"></canvas>
+      <div id="mh-live" style="display:none;margin-top:6px"></div>
       <div id="mh-result" style="display:none;margin-top:10px">
         <video id="mh-out" controls playsinline style="width:100%;max-height:70vh;background:#000;border-radius:10px"></video>
         <div class="row" style="gap:6px;margin-top:8px">
@@ -1300,6 +1301,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHlClearAll()">지우기</button>
             </div>
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
+            <div id="cc-hl-live" style="display:none;margin-top:6px"></div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">폰 보관 상한</span><select id="cc-keep" onchange="ccKeepSet(this.value)" style="flex:1"><option value="120">2시간 (120개, 약 2GB)</option><option value="240" selected>4시간 (240개, 약 4GB, 기본)</option><option value="480">8시간 (480개, 약 8.5GB)</option><option value="960">16시간 (960개, 약 17GB — 폰 용량 확인)</option></select></div>
             <div class="muted" style="font-size:11px;margin-top:3px">상한을 넘기면 옛 영상부터 자동으로 지워져요(설정 › 저장·삭제 이력에 prune으로 남음). 경기 뒤엔 [PC로 영상 보내기 대기]로 먼저 옮기세요. 폰 저장 공간이 모자라면 저장 실패가 상태 줄에 떠요.</div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
@@ -2088,7 +2090,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.28';
+const APP_VERSION = 'v1.29';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8624,12 +8626,15 @@ function mhPath(F, r) { // 세로 창 중심(원본 px): 공 위치 보간 → �
 }
 function mhPathAt(p, t) { return p.xs[Math.max(0, Math.min(p.xs.length - 1, Math.round((t - p.t0) / p.dt)))]; }
 function mhRRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+let mhSrcMode = 'el', mhBlackN = 0, mhVfUsed = false, mhDrawErr = '';
 function mhDraw(g, v, OW, OH, vert, t, path, S, i, total, r) {
   const vw = v.videoWidth || 16, vh = v.videoHeight || 9, u = OW / 720;
   g.fillStyle = '#000'; g.fillRect(0, 0, OW, OH);
-  let X, Y;
-  if (vert) { const cw = Math.min(vw, vh * OW / OH), left = Math.max(0, Math.min(vw - cw, mhPathAt(path, t) - cw / 2)); try { g.drawImage(v, left, 0, cw, vh, 0, 0, OW, OH); } catch (e) {} X = x => (x - left) * OW / cw; Y = y => y * OH / vh; }
-  else { const fr = aiFitRect(vw, vh, OW, OH) || { x: 0, y: 0, w: OW, h: OH }; try { g.drawImage(v, fr.x, fr.y, fr.w, fr.h); } catch (e) {} X = x => fr.x + x * fr.w / vw; Y = y => fr.y + y * fr.h / vh; }
+  let X, Y, src = v, vf = null;
+  if (mhSrcMode === 'vf' && window.VideoFrame) { try { vf = new VideoFrame(v); src = vf; mhVfUsed = true; } catch (e) { mhDrawErr = 'VideoFrame ' + (e && e.name); } } // v1.29c: 요소에서 바로 그리면 검을 때
+  if (vert) { const cw = Math.min(vw, vh * OW / OH), left = Math.max(0, Math.min(vw - cw, mhPathAt(path, t) - cw / 2)); try { g.drawImage(src, left, 0, cw, vh, 0, 0, OW, OH); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => (x - left) * OW / cw; Y = y => y * OH / vh; }
+  else { const fr = aiFitRect(vw, vh, OW, OH) || { x: 0, y: 0, w: OW, h: OH }; try { g.drawImage(src, fr.x, fr.y, fr.w, fr.h); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => fr.x + x * fr.w / vw; Y = y => fr.y + y * fr.h / vh; }
+  if (vf) { try { vf.close(); } catch (e) {} }
   // 공 자국(최근 0.6초): 오래될수록 작고 옅게
   const pts = []; S.forEach(q => q.pts.forEach(p => { if (p[0] <= t + 0.02 && p[0] >= t - 0.6) pts.push(p); })); pts.sort((a, b) => a[0] - b[0]);
   g.lineCap = 'round';
@@ -8655,7 +8660,7 @@ function mhCard(g, OW, OH, lines, p) { // 제목·끝 카드: [text, size, color
 }
 async function mhAnalyzeAll() {
   mhStatus('공 인식 모델 준비 중…', 0); await mhLoadModel();
-  const v = mhVid, an = { files: [] }; let total = 0, doneV = 0; const t0w = performance.now();
+  const v = mhVid, an = { files: [] }; v.style.display = 'block'; let total = 0, doneV = 0; const t0w = performance.now();
   for (let fi = 0; fi < mhFiles.length && !mhStop; fi++) {
     const f = mhFiles[fi], url = mhUrls[fi] || (mhUrls[fi] = URL.createObjectURL(f));
     mhStatus((fi + 1) + '/' + mhFiles.length + ' 영상 여는 중 — ' + f.name, null);
@@ -8682,7 +8687,9 @@ async function mhAnalyzeAll() {
 }
 async function mhRender(sel, opt) {
   const vert = opt.vert, OW = vert ? 720 : 1280, OH = vert ? 1280 : 720, v = mhRVid || mhVid;
-  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d');
+  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d', { willReadFrequently: true });
+  { const lv = $('mh-live'); if (lv) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 260 : 420) + 'px;display:block;margin:0 auto;border-radius:10px;background:#000'; lv.innerHTML = ''; lv.appendChild(cv); lv.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지) + 만드는 중 미리보기
+  { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; } v.style.display = 'block'; mhSrcMode = 'el'; mhBlackN = 0; mhVfUsed = false;
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') throw new Error('이 폰 브라우저는 영상 만들기를 지원하지 않아요 (크롬·사파리 최신 버전에서 해 주세요)');
   const cs = cv.captureStream(30); let tracks = cs.getVideoTracks().slice(), dest = null;
   if (opt.audio && mhActx && mhSrcNode) { try { dest = mhActx.createMediaStreamDestination(); mhSrcNode.connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); } catch (e) { dest = null; } }
@@ -8707,7 +8714,10 @@ async function mhRender(sel, opt) {
     await v.play().catch(() => {}); if (rec.state === 'paused') rec.resume();
     await new Promise(res => {
       let done = false; const fin = () => { if (!done) { done = true; clearTimeout(tm); try { v.pause(); } catch (e) {} res(); } };
-      const step = (now, md) => { if (done) return; const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime; mhDraw(g, v, OW, OH, vert, t, path, S, i, sel.length, r); if (t >= r.t1 || v.ended || mhStop) return fin(); v.requestVideoFrameCallback(step); };
+      let k = 0;
+      const step = (now, md) => { if (done) return; const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime; mhDraw(g, v, OW, OH, vert, t, path, S, i, sel.length, r);
+        if (++k % 30 === 0 && mhSrcMode === 'el') { try { const d = g.getImageData((OW >> 1) - 16, (OH >> 1) - 16, 32, 32).data; let a = 0; for (let q = 0; q < d.length; q += 4) a += d[q] + d[q + 1] + d[q + 2]; if (a / (d.length / 4) / 3 < 6) { if (++mhBlackN >= 2 && window.VideoFrame) { mhSrcMode = 'vf'; console.warn('mh black → VideoFrame'); } } else mhBlackN = 0; } catch (e) {} } // v1.29c 검은 화면 감지
+        if (t >= r.t1 || v.ended || mhStop) return fin(); v.requestVideoFrameCallback(step); };
       const tm = setTimeout(fin, (r.t1 - r.t0 + 8) * 1000);
       v.requestVideoFrameCallback(step);
     });
@@ -8717,15 +8727,16 @@ async function mhRender(sel, opt) {
   await new Promise(res => { rec.onstop = res; try { rec.stop(); } catch (e) { res(); } });
   if (dest) { try { mhSrcNode.disconnect(dest); } catch (e) {} }
   cs.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
+  v.style.display = 'none'; { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } }
   if (mhStop) return null;
-  return { blob: new Blob(parts, { type: fmt.type }), ext: fmt.ext, type: fmt.type, n: sel.length, longest };
+  return { blob: new Blob(parts, { type: fmt.type }), ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: (mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '') + (mhDrawErr ? ' · 그리기 오류 ' + mhDrawErr : '') };
 }
 async function mhGo() {
   if (mhBusy) return;
   if (!mhFiles.length) { toast('먼저 경기 영상을 골라 주세요'); return; }
   const opt = mhOpt();
   // 탭 안에서(제스처): 동영상 요소·소리 경로 준비 — iOS는 탭 안에서 한 번 재생해 둬야 나중에 소리 있는 재생이 됨
-  const mkV = () => { const e = document.createElement('video'); e.playsInline = true; e.preload = 'auto'; e.setAttribute('playsinline', ''); Object.assign(e.style, { position: 'fixed', left: '0', bottom: '0', width: '2px', height: '2px', opacity: '0.01', pointerEvents: 'none' }); document.body.appendChild(e); return e; };
+  const mkV = () => { const e = document.createElement('video'); e.playsInline = true; e.preload = 'auto'; e.setAttribute('playsinline', ''); Object.assign(e.style, { position: 'fixed', right: '10px', bottom: '84px', width: '128px', height: '72px', objectFit: 'contain', opacity: '1', zIndex: '10050', borderRadius: '8px', background: '#000', boxShadow: '0 2px 8px rgba(0,0,0,.35)', pointerEvents: 'none', display: 'none' }); document.body.appendChild(e); return e; }; // v1.29c: 2px·투명이면 안드로이드 크롬이 그리기를 멈출 수 있어 쓰는 동안 작은 썸네일로 보이게
   if (!mhVid) { mhVid = mkV(); mhVid.muted = true; }
   if (!mhRVid) mhRVid = mkV();
   if (opt.audio) { try { if (!mhActx) mhActx = new (window.AudioContext || window.webkitAudioContext)(); if (mhActx.state !== 'running') mhActx.resume(); if (!mhSrcNode) { mhSrcNode = mhActx.createMediaElementSource(mhRVid); mhSilent = mhActx.createGain(); mhSilent.gain.value = 0; mhSrcNode.connect(mhSilent); mhSilent.connect(mhActx.destination); } } catch (e) { console.warn('mh audio', e); } } // 노드가 어디에도 안 이어지면 재생이 멈춤 → 소리 0으로 항상 연결
@@ -8748,11 +8759,11 @@ async function mhGo() {
     const ov = $('mh-out'); if (ov) { try { if (ov.src) URL.revokeObjectURL(ov.src); } catch (e) {} ov.src = URL.createObjectURL(out.blob); }
     if (res) res.style.display = 'block';
     const lst = $('mh-list'); if (lst) lst.textContent = '찾은 랠리 ' + all.length + '개 중 ' + sel.length + '개 · ' + sel.map(q => (mhFiles.length > 1 ? (q.F.fi + 1) + '번 ' : '') + mhFmtT(q.r.t0) + ' (' + Math.round(q.r.dur) + '초)').join(', ') + (mhAn.files.some(F => F.H) ? '' : ' · 코트 자동 인식이 안 돼 옆 코트 공도 섞일 수 있어요');
-    mhStatus('완성 — ' + Math.round(out.blob.size / 1048576) + 'MB · [저장 · 공유]로 사진첩이나 카톡에 보내세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : ''), null);
+    mhStatus('완성 — ' + Math.round(out.blob.size / 1048576) + 'MB · [저장 · 공유]로 사진첩이나 카톡에 보내세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : '') + (out.diag ? ' · ' + out.diag : ''), null);
   } catch (e) {
     console.warn('mh', e); mhStatus('실패: ' + ((e && e.message) || e), null);
   } finally {
-    mhBusy = false; mhPlaying = false; try { mhVid.pause(); } catch (e) {} try { mhRVid.pause(); } catch (e) {} { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; }
+    mhBusy = false; mhPlaying = false; try { mhVid.pause(); mhVid.style.display = 'none'; } catch (e) {} try { mhRVid.pause(); mhRVid.style.display = 'none'; } catch (e) {} { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } } { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; }
     try { if (mhWake) { mhWake.release(); mhWake = null; } } catch (e) {}
     if (go) go.disabled = !mhFiles.length; if (st) st.style.display = 'none';
   }
@@ -9757,7 +9768,7 @@ function ccEcoPeek() { // 검은 화면 탭 → 5초만 보여주고 다시 절�
 }
 // 꺼진 원인 이력 (v1.06): 다음에 또 꺼지면 설정 › 저장·삭제 이력에서 열(track-ended)·화면 잠김(hidden)·페이지 닫힘(pagehide)을 구분
 let ccHiddenAt = 0;
-document.addEventListener('visibilitychange', () => { if (!ccStream) return; if (document.hidden) { ccHiddenAt = Date.now(); ccLog('hidden', '화면 잠김 또는 다른 앱으로(전화·알림 등)'); } else { const sec = ccHiddenAt ? Math.round((Date.now() - ccHiddenAt) / 1000) : 0; ccHiddenAt = 0; ccLog('visible', '복귀' + (sec ? ' — ' + sec + '초 동안 촬영이 끊겼을 수 있어요' : '')); } });
+document.addEventListener('visibilitychange', () => { if (!ccStream) return; if (document.hidden) { ccHiddenAt = Date.now(); ccLog('hidden', '화면 잠김 또는 다른 앱으로(전화·알림 등)'); if (!ccBusy && ccChunks.length > 1) { ccLog('hidden-save', ccChunks.length + '초분 바로 저장'); ccFlush(); } } else { ccVisibleAt = Date.now(); ccStallN = 0; const sec = ccHiddenAt ? Math.round((Date.now() - ccHiddenAt) / 1000) : 0; ccHiddenAt = 0; ccLog('visible', '복귀' + (sec ? ' — ' + sec + '초 동안 촬영이 끊겼을 수 있어요' : '')); } });
 window.addEventListener('pagehide', () => { if (ccStream) ccLog('pagehide', '페이지 닫힘/전환 (배터리·재부팅이면 이 줄이 마지막)'); });
 function ccFullSync() {
   ccEcoBtns();
@@ -9825,7 +9836,8 @@ async function ccReacquire(why) {
     ccPreviewStart(true);
     ccStartRec();
     ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
-    ccReacqFail = 0;
+    ccReacqFail = 0; ccLastChunkAt = Date.now(); ccStallN = 0;
+    if (why !== 'lens' && why !== 'orient') clAutoSay('촬영을 다시 시작했어요'); // v1.29
   } catch (e) {
     const notAllowed = !!(e && (e.name === 'NotAllowedError' || /not allowed/i.test(e.message || '')));
     if (notAllowed) { // iOS: 제스처 없이는 못 엶 → 사용자 탭 유도 (실패 횟수에 안 셈)
@@ -9840,8 +9852,25 @@ async function ccReacquire(why) {
   } finally { ccReacq = false; }
 }
 document.addEventListener('DOMContentLoaded', () => { const a = $('cc-aspect'); if (a) a.value = ccAspect(); }); // 화각 선택 복원 (v0.55)
+function ccAutoRestart() { // v1.29: 로그인이 복원되면 탭 없이 클럽캠 다시 시작(안드로이드) — 막히면(아이폰) 빨간 버튼 + 소리
+  let tries = 0;
+  const tick = setInterval(async () => {
+    tries++;
+    if (ccChan) { clearInterval(tick); return; }
+    if (!(serverMode() && TMAuth.isLoggedIn)) { if (tries > 40) clearInterval(tick); return; }
+    clearInterval(tick);
+    try { goSection('judge', 'cc-code-in'); } catch (e) {}
+    try { ccLog('auto-restart', '페이지가 새로 열려 클럽캠 자동 재시작'); } catch (e) {}
+    try { await ccToggle(); } catch (e) {}
+    if (ccChan && ccStream) { clAutoSay('촬영을 다시 시작했어요'); return; }
+    const b = $('cc-start-btn'); if (b) { b.style.background = '#c0392b'; b.textContent = '여기를 탭해서 클럽캠 다시 시작'; }
+    toast('촬영이 끊겼어요 — 클럽캠 시작 버튼을 탭해 주세요');
+    try { ccDownAlert(true, '촬영이 끊겼어요. 화면을 탭해서 다시 시작해 주세요'); } catch (e) {}
+  }, 500);
+}
 document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 클럽캠 자동 재시작 (v0.57)
-  let want = false; try { want = sessionStorage.getItem('tm-cc-autostart') === '1'; sessionStorage.removeItem('tm-cc-autostart'); } catch (e) {}
+  let want = false, killed = false; try { want = sessionStorage.getItem('tm-cc-autostart') === '1'; sessionStorage.removeItem('tm-cc-autostart'); killed = sessionStorage.getItem('tm-cc-running') === '1'; } catch (e) {}
+  if (killed || want) { ccAutoRestart(); return; } // v1.29: 촬영 중에 페이지가 꺼졌다 새로 열림(전화 중 크롬 정리 등)·자동 새로고침 — 안드로이드는 탭 없이 다시 켬
   if (!want) return;
   let tries = 0;
   const tick = setInterval(() => {
@@ -10132,6 +10161,7 @@ async function ccToggle() {
     toast('중계 연결 실패: ' + (e.message || e)); return;
   }
   ccChan = chan; ccCode = code;
+  try { sessionStorage.setItem('tm-cc-running', '1'); } catch (e) {} try { ccDownAlert(false); } catch (e) {} // v1.29: 전화 중 크롬이 페이지를 꺼도 새로 열리면 자동 재시작
   $('cc-cam-wrap').style.display = 'block'; $('cc-view-wrap').style.display = 'none'; // 보이는 상태에서 붙여야 iOS가 로드함 (v0.59)
   const v = $('cc-cam'); ccBindVideo(ccStream);
   ccPreviewStart(true); // 항상 캔버스로 표시 (v0.62)
@@ -10154,13 +10184,15 @@ async function ccToggle() {
 
 let ccRecT0 = 0; // v1.26: 영상 0초의 벽시계(ms) — 녹화기 시작이 늦으면(첫 조각이 1.5초 넘게 늦음) 첫 조각 − 1초
 let ccRecAt = 0; // v1.25: 이 녹화 구간의 시작 벽시계(ms) — 클립 안 시각 = 벽시계 − ccRecAt
+let ccLastChunkAt = 0, ccVisibleAt = 0, ccStallN = 0; // v1.29 녹화 지킴이
 function ccStartRec() {
-  ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0;
+  ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0; ccLastChunkAt = Date.now();
   ccFmt = recPick(false);
   const mime = ccFmt.mime;
   ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000, videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
   if (ccRec.mimeType) ccFmt.type = ccRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', ccFmt.ext = ccFmt.type === 'video/mp4' ? 'mp4' : 'webm';
-  ccRec.ondataavailable = e => { if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); } };
+  ccRec.ondataavailable = e => { if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); ccLastChunkAt = at; } };
+  ccRec.onerror = e => { try { ccLog('rec-error', String((e && e.error && e.error.name) || 'error')); } catch (x) {} }; // v1.29: 지킴이가 다시 시작
   ccRec.start(1000); // 1초 단위 청크
 }
 async function ccStopRec() {
@@ -10256,8 +10288,18 @@ document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-v
 function ccEcoAutoSet(on) { ccEcoAuto = !!on; try { localStorage.setItem('tm-cc-eco-auto', ccEcoAuto ? '1' : '0'); } catch (e) {} }
 document.addEventListener('pointerdown', () => { ccLastTouch = Date.now(); }, true);
 const CC_ECO_AUTO_MS = 180000;
+function ccRecWatch() { // v1.29: 화면이 보이는데 녹화가 멈춰 있으면 → 녹화 다시 시작 → 그래도 안 되면 카메라 다시 열기
+  if (!ccStream || !ccChan || ccBusy || ccReacq || ccSendMode || document.visibilityState !== 'visible') { ccStallN = 0; return; }
+  if (Date.now() - ccVisibleAt < 3000) return; // 화면이 막 돌아왔으면 카메라가 깨어날 시간을 줌
+  const ok = ccRec && ccRec.state === 'recording' && Date.now() - ccLastChunkAt < 8000;
+  if (ok) { ccStallN = 0; return; }
+  ccStallN++;
+  if (ccStallN === 2 && !ccTrackDead()) { ccLog('rec-restart', '녹화기 ' + (ccRec ? ccRec.state : '없음') + ' · 마지막 조각 ' + Math.round((Date.now() - ccLastChunkAt) / 1000) + '초 전'); try { if (ccRec && ccRec.state !== 'inactive') ccRec.stop(); } catch (e) {} try { ccStartRec(); } catch (e) {} }
+  else if (ccStallN >= 5) { ccStallN = 0; ccLog('rec-stall', '녹화가 안 붙어 카메라를 다시 엶'); ccReacquire('stall'); }
+}
 function ccGuardTick(v) {
   if (!ccStream) return;
+  try { ccRecWatch(); } catch (e) {}
   if (v && v.videoWidth && v.videoWidth < v.videoHeight) { // 폰은 가로로 걸었는데 화면 자동 회전이 꺼져 있으면 영상이 옆으로 누운 채 저장됨
     const pageLandscape = window.innerWidth > window.innerHeight;
     if (pageLandscape && ccOrientFixN < 2 && !ccReacq && !ccBusy) { ccOrientFixN++; ccLog('orient-fix', v.videoWidth + 'x' + v.videoHeight); ccReacquire('orient'); return; }
@@ -10297,6 +10339,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); } catch (e) {} } // v1.29: 사용자가 끈 것 — 자동 재시작 안 함
   { const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none'; if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; } if (ccEcoSince) ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분(캠 종료)'); ccEcoSince = 0; } // v1.06
   ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
   ccPreviewStop();
@@ -10357,13 +10400,14 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   const cv = document.createElement('canvas'); cv.width = vert ? 540 : 640; cv.height = vert ? 960 : 360;
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') { toast('이 폰은 영상 합치기를 지원하지 않아요 — 클립을 낱개로 저장할게요'); for (const c of clips) { const a = document.createElement('a'); a.href = URL.createObjectURL(c.blob); a.download = '하이라이트_' + c.at + '.' + ccFmt.ext; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 500)); } return; }
   const g = cv.getContext('2d');
+  { const hl = $('cc-hl-live'); if (hl) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 220 : 360) + 'px;display:block;margin:0 auto;border-radius:8px;background:#000'; hl.innerHTML = ''; hl.appendChild(cv); hl.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지)
   const stream = cv.captureStream(30);
   const fmt = recPick(false);
   const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 4000000 : 3000000 } : undefined);
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
   rec.start(1000);
-  const v = document.createElement('video'); v.muted = true; v.playsInline = true; v.style.position = 'fixed'; v.style.opacity = '0.01'; v.style.width = '2px'; document.body.appendChild(v);
+  const v = document.createElement('video'); v.muted = true; v.playsInline = true; Object.assign(v.style, { position: 'fixed', right: '10px', bottom: '84px', width: '128px', height: '72px', objectFit: 'contain', zIndex: '10050', borderRadius: '8px', background: '#000', pointerEvents: 'none' }); document.body.appendChild(v); // v1.29c: 보이게(2px·투명이면 안드로이드가 그리기를 멈출 수 있음)
   try {
     for (let i = 0; i < clips.length; i++) {
       const c = clips[i];
@@ -10392,7 +10436,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       });
       URL.revokeObjectURL(url);
     }
-  } finally { v.remove(); }
+  } finally { v.remove(); { const hl = $('cc-hl-live'); if (hl) { hl.style.display = 'none'; hl.innerHTML = ''; } } }
   await new Promise(res => { rec.onstop = res; rec.stop(); });
   const out = new Blob(parts, { type: fmt.type });
   status('하이라이트 완성 ' + Math.round(out.size / 1048576) + 'MB — 저장 중');
