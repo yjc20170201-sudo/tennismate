@@ -2092,7 +2092,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.32';
+const APP_VERSION = 'v1.33';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8914,11 +8914,63 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
     rebuild();
   }
   crops.length = 0;
+  try { await aiNativeRefine(v, seekTo); } catch (e) { console.warn('native refine', e); } // v1.33 바운스 주변 원래 해상도
   aiDeepMs = Math.round(performance.now() - tStart);
   aiDeep = { frames, t0: more ? aiDeep.t0 : t0, t1 };
   return { t0: aiDeep.t0, t1 };
 }
 let aiFarPass = false;
+let aiNativeInfo = null; // v1.33: { z, n(바꾼 점), add(채운 점), crop }
+function aiTrajAt(t) { // 궤적을 시각 t로 선형 보간 (범위 밖이면 null)
+  if (aiTraj.length < 2 || t < aiTraj[0].t - 0.02 || t > aiTraj[aiTraj.length - 1].t + 0.02) return null;
+  let i = 0; while (i < aiTraj.length - 2 && aiTraj[i + 1].t < t) i++;
+  const a = aiTraj[i], b = aiTraj[i + 1]; const k = b.t > a.t ? Math.max(0, Math.min(1, (t - a.t) / (b.t - a.t))) : 0;
+  return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+}
+async function aiNativeRefine(v, seekTo) { // v1.33: 바운스 ±0.25초를 바운스 중심 크롭(원래 해상도에 가깝게)으로 다시 추론해 궤적 점을 정밀화
+  aiNativeInfo = null;
+  const bi = aiBounceIdx(aiTraj.map(p => p.y)); if (bi < 1) return;
+  const vw = v.videoWidth, vh = v.videoHeight, W = WASB.W || 512, H = WASB.H || 288, b = aiTraj[bi];
+  const far = b.y < vh * 0.45, z = Math.min(far ? 3 : 2, vw / W);
+  if (z < 1.3) return; // 원본이 작아 확대 이득이 없음
+  const cw = vw / z, ch = cw * H / W;
+  const x0 = Math.max(0, Math.min(vw - cw, b.x - cw / 2)), y0 = Math.max(0, Math.min(vh - ch, b.y - ch * 0.6));
+  const tA = Math.max(0, b.t - 0.25), tB = Math.min(v.duration || 1e9, b.t + 0.25);
+  aiStatus('바운스 주변을 원래 해상도로 다시 보는 중 (' + z.toFixed(1) + '배 확대)…');
+  const grabN = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(v, x0, y0, cw, ch, 0, 0, W, H); return c; };
+  const caps = [];
+  if (typeof v.requestVideoFrameCallback === 'function') {
+    await seekTo(tA);
+    const wasMuted = v.muted, rate = v.playbackRate; v.muted = true; v.playbackRate = 0.5;
+    await new Promise(res => {
+      let done = false; const fin = () => { if (done) return; done = true; try { v.pause(); } catch (e) {} res(); };
+      const cb = (now, meta) => { const mt = meta && Number.isFinite(meta.mediaTime) ? meta.mediaTime : v.currentTime; if (mt >= tA - 0.02 && mt <= tB + 0.02) caps.push({ t: mt, c: grabN() }); if (mt >= tB || v.ended) fin(); else v.requestVideoFrameCallback(cb); };
+      v.requestVideoFrameCallback(cb); v.play().catch(() => fin()); setTimeout(fin, (tB - tA) * 2000 + 4000);
+    });
+    v.muted = wasMuted; v.playbackRate = rate;
+  } else { for (let t = tA; t <= tB + 1e-6; t += 1 / 30) { await seekTo(t); caps.push({ t, c: grabN() }); } }
+  if (caps.length < 3) return;
+  caps.sort((p, q) => p.t - q.t);
+  const R = Math.max(10, 3 * vw / W); // 거친 궤적과 이만큼(원본 px) 안의 후보만 — 줄인 화면 3칸
+  const found = [];
+  for (let i = 0; i < caps.length; i += 12) {
+    const chunk = caps.slice(i, i + 12); while (chunk.length % 3) chunk.push(chunk[chunk.length - 1]);
+    const ds = await WASB.detectFrames(chunk.map(r => r.c), cw, ch, { all: true, topk: 3, thr: aiModelThr() });
+    ds.forEach((d, j) => {
+      if (!d || i + j >= caps.length) return; const t = chunk[j].t, e = aiTrajAt(t); if (!e) return;
+      let best = null, bd = R; d.cands.forEach(c => { const x = x0 + c.x, y = y0 + c.y, dd = Math.hypot(x - e.x, y - e.y); if (dd < bd) { bd = dd; best = { t, x, y, s: c.conf }; } });
+      if (best) found.push(best);
+    });
+  }
+  let nRep = 0, nAdd = 0;
+  found.forEach(q => {
+    const p = aiTraj.find(o => Math.abs(o.t - q.t) < 0.006);
+    if (p) { p.x = q.x; p.y = q.y; p.nat = true; nRep++; }
+    else if (q.t > aiTraj[0].t && q.t < aiTraj[aiTraj.length - 1].t) { aiTraj.push({ t: q.t, x: q.x, y: q.y, s: q.s, nat: true }); nAdd++; }
+  });
+  aiTraj.sort((p, q) => p.t - q.t);
+  aiNativeInfo = { z, n: nRep, add: nAdd, crop: [Math.round(x0), Math.round(y0), Math.round(cw), Math.round(ch)] };
+}
 async function aiAnalyzeDeep(more) { // 🎯 딥러닝 추적: WASB(v0.79) 우선, 실패 시 TrackNet. more=true면 직전 분석에 이어서 2초 더 (v0.83)
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
@@ -9093,6 +9145,7 @@ function aiFinish(t0, t1) {
   const bi = aiBounceIdx(aiTraj.map(p => p.y));
   let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + String(WASB.model || 'wasb').replace('.onnx', '') + ' · ' + WASB.backend + (WASB.batchOK ? '(배치)' : '') + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs || 0) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
   let say = '';
+  if (aiNativeInfo && (aiNativeInfo.n + aiNativeInfo.add)) html += '<div class="muted" style="font-size:11px">바운스 주변 ' + (aiNativeInfo.n + aiNativeInfo.add) + '점을 원래 해상도(' + aiNativeInfo.z.toFixed(1) + '배 확대)로 다시 봐서 착지점을 다듬었어요</div>'; // v1.33
   if (bi < 0) {
     const flying = aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.35;
     // v0.93: 화면 밖으로 나간 경우 — 마지막 점이 가장자리 4% 안 + 직전 점들이 그쪽으로 이동
