@@ -1303,6 +1303,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
             <div id="cc-hl-live" style="display:none;margin-top:6px"></div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">폰 보관 상한</span><select id="cc-keep" onchange="ccKeepSet(this.value)" style="flex:1"><option value="120">2시간 (120개, 약 2GB)</option><option value="240" selected>4시간 (240개, 약 4GB, 기본)</option><option value="480">8시간 (480개, 약 8.5GB)</option><option value="960">16시간 (960개, 약 17GB — 폰 용량 확인)</option></select></div>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">녹화 화질</span><select id="cc-res" onchange="ccResSet(this.value)" style="flex:1"><option value="1080">1080p 선명 (1분 약 60MB)</option><option value="720">720p 가벼움 (1분 약 37MB)</option></select></div>
+            <div class="muted" style="font-size:11px;margin-top:3px">하이라이트·쇼츠를 선명하게 뽑으려면 1080p. 폰 공간이 부족하면 오래된 영상부터 자동으로 지워져요. 보관 상한의 용량 표시는 720p 기준이에요.</div>
             <div class="muted" style="font-size:11px;margin-top:3px">상한을 넘기면 옛 영상부터 자동으로 지워져요(설정 › 저장·삭제 이력에 prune으로 남음). 경기 뒤엔 [PC로 영상 보내기 대기]로 먼저 옮기세요. 폰 저장 공간이 모자라면 저장 실패가 상태 줄에 떠요.</div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
             <div class="muted" style="font-size:11.5px;margin-top:4px">한 번에 옮기려면: [캠 영상 파일로 다운로드] → 파일 앱 › 다운로드 폴더 › 선택 › 전체 선택 › 공유 › "비디오 저장" — 사진 앨범으로 한 번에 들어가요. 그다음 USB로 PC에서 <b>아이폰_영상_가져오기</b> 실행.</div>
@@ -2090,7 +2092,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.31';
+const APP_VERSION = 'v1.32';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8686,14 +8688,15 @@ async function mhAnalyzeAll() {
   return an;
 }
 async function mhRender(sel, opt) {
-  const vert = opt.vert, OW = vert ? 720 : 1280, OH = vert ? 1280 : 720, v = mhRVid || mhVid;
+  const hiSrc = sel.some(q => Math.min(q.F.vw || 0, q.F.vh || 0) >= 1000); // v1.32: 원본이 1080p 이상이면 결과도 1080p급
+  const vert = opt.vert, OW = vert ? (hiSrc ? 1080 : 720) : (hiSrc ? 1920 : 1280), OH = vert ? (hiSrc ? 1920 : 1280) : (hiSrc ? 1080 : 720), v = mhRVid || mhVid;
   const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d', { willReadFrequently: true });
-  { const lv = $('mh-live'); if (lv) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 260 : 420) + 'px;display:block;margin:0 auto;border-radius:10px;background:#000'; lv.innerHTML = ''; lv.appendChild(cv); lv.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지) + 만드는 중 미리보기
+  { const lv = $('mh-live'); if (lv) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 260 : 420) + 'px;display:block;margin:0 auto;border-radius:10px;background:#000'; g.imageSmoothingQuality = 'high'; lv.innerHTML = ''; lv.appendChild(cv); lv.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지) + 만드는 중 미리보기
   { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; } v.style.display = 'block'; mhSrcMode = 'el'; mhBlackN = 0; mhVfUsed = false;
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') throw new Error('이 폰 브라우저는 영상 만들기를 지원하지 않아요 (크롬·사파리 최신 버전에서 해 주세요)');
   const cs = cv.captureStream(30); let tracks = cs.getVideoTracks().slice(), dest = null;
   if (opt.audio && mhActx && mhSrcNode) { try { dest = mhActx.createMediaStreamDestination(); mhSrcNode.connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); } catch (e) { dest = null; } }
-  const fmt = recPickShare(!!dest), bps = opt.n === 0 ? 4000000 : (vert ? 6000000 : 7000000);
+  const fmt = recPickShare(!!dest), bps = opt.n === 0 ? (hiSrc ? 8000000 : 5000000) : (hiSrc ? 12000000 : 8000000); // v1.32
   let rec; try { rec = new MediaRecorder(new MediaStream(tracks), fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: bps, videoKeyFrameIntervalDuration: 1000 } : { videoBitsPerSecond: bps }); } catch (e) { rec = new MediaRecorder(new MediaStream(tracks)); }
   if (rec.mimeType) { fmt.type = rec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'; fmt.ext = fmt.type === 'video/mp4' ? 'mp4' : 'webm'; }
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
@@ -9578,9 +9581,16 @@ function ccPickChunks(chunks, startMs, endMs) { // 청크 at = 1초 청크가 �
 // 화각: 아이폰은 16:9 영상이 4:3 센서를 위아래로 잘라낸 것 → 4:3으로 받으면 세로 시야가 약 30% 넓어져 가까운 코트가 더 들어옴 (v0.55, 기본 4:3)
 function ccAspect() { return '16:9'; } // v0.61: 화각 선택 제거 — 16:9 고정 (첫 실기기 성공 때와 동일 제약)
 function ccLensPref() { try { return localStorage.getItem('tm-cc-lens') || ''; } catch (e) { return ''; } }
+function ccResPref() { // v1.32 녹화 화질: '1080' | '720' — 저장값이 없으면 안드로이드 1080, 아이폰 720
+  try { const v = localStorage.getItem('tm-cc-res'); if (v === '1080' || v === '720') return v; } catch (e) {}
+  return /iP(hone|ad|od)/.test(navigator.userAgent) ? '720' : '1080';
+}
+function ccResSet(v) { try { localStorage.setItem('tm-cc-res', v === '720' ? '720' : '1080'); } catch (e) {} toast('다음 클럽캠 시작부터 ' + (v === '720' ? '720p' : '1080p') + '로 녹화해요' + (ccStream ? ' — 지금 바로 바꾸려면 클럽캠을 껐다 켜세요' : '')); }
+function ccBitrate() { return ccResPref() === '1080' ? 8000000 : 5000000; } // v1.32: 예전 2.5Mbps는 60fps 테니스엔 과압축
 function ccCamConstraints() {
   const id = ccLensPref() || (typeof ccLensSessionId === 'string' ? ccLensSessionId : ''); // v1.17 사용자 선택 > v1.20 이 세션에서 자동으로 고른 렌즈 > 자동
-  const base = { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } };
+  const hd = ccResPref() === '1080';
+  const base = { width: { ideal: hd ? 1920 : 1280 }, height: { ideal: hd ? 1080 : 720 }, frameRate: { ideal: 60 } }; // v1.32 화질 설정
   return { video: id ? Object.assign({ deviceId: { exact: id } }, base) : Object.assign({ facingMode: 'environment' }, base), audio: false };
 }
 async function ccLensRefresh() { // 권한을 받은 뒤에야 이름이 보임 → 카메라가 열린 다음 호출
@@ -9951,8 +9961,11 @@ async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS
     const rq = ccDb.transaction('segs', 'readonly').objectStore('segs').getAllKeys();
     rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
   });
-  if (keys.length <= CC_MAX_SEGS) return;
-  const drop = keys.sort((a, b) => a - b).slice(0, keys.length - CC_MAX_SEGS);
+  let spaceDrop = 0; // v1.32: 브라우저 저장 한도의 90%를 넘으면 오래된 것부터 더 지움(1080p는 파일이 커서 개수 상한 전에 공간이 먼저 참)
+  try { if (navigator.storage && navigator.storage.estimate) { const est = await navigator.storage.estimate(); if (est.quota && est.usage > est.quota * 0.9 && keys.length > 10) { spaceDrop = Math.max(5, Math.ceil(keys.length * 0.1)); ccLog('prune-space', Math.round(est.usage / 1048576) + '/' + Math.round(est.quota / 1048576) + 'MB → ' + spaceDrop + '개 더 삭제'); } } } catch (e) {}
+  if (keys.length <= CC_MAX_SEGS && !spaceDrop) return;
+  const drop = keys.sort((a, b) => a - b).slice(0, Math.min(keys.length - 10, Math.max(keys.length - CC_MAX_SEGS, 0) + spaceDrop));
+  if (!drop.length) return;
   await new Promise((res, rej) => {
     const tx = ccDb.transaction('segs', 'readwrite'); const st = tx.objectStore('segs');
     drop.forEach(k => st.delete(k));
@@ -10197,7 +10210,7 @@ function ccStartRec() {
   ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0; ccLastChunkAt = Date.now();
   ccFmt = recPick(false);
   const mime = ccFmt.mime;
-  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: 2500000, videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
+  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: ccBitrate(), videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.32 화질 설정에 따른 비트레이트 // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
   if (ccRec.mimeType) ccFmt.type = ccRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', ccFmt.ext = ccFmt.type === 'video/mp4' ? 'mp4' : 'webm';
   ccRec.ondataavailable = e => { if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); ccLastChunkAt = at; } };
   ccRec.onerror = e => { try { ccLog('rec-error', String((e && e.error && e.error.name) || 'error')); } catch (x) {} }; // v1.29: 지킴이가 다시 시작
@@ -10297,7 +10310,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
 // ── v1.15 촬영 지킴이: ① 세로(옆으로 누운) 영상 경고·자동 복구 ② 손대지 않으면 자동 절전(발열) ──
 let ccOrientWarnAt = 0, ccOrientFixN = 0, ccLastTouch = Date.now(), ccEcoAuto = true;
 try { ccEcoAuto = localStorage.getItem('tm-cc-eco-auto') !== '0'; } catch (e) {}
-document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-vert'); if (e) e.checked = ccHlVert(); } catch (e) {} }); // v1.25
+document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-vert'); if (e) e.checked = ccHlVert(); } catch (e) {} try { const r = $('cc-res'); if (r) r.value = ccResPref(); } catch (e) {} }); // v1.25 · v1.32 화질
 function ccEcoAutoSet(on) { ccEcoAuto = !!on; try { localStorage.setItem('tm-cc-eco-auto', ccEcoAuto ? '1' : '0'); } catch (e) {} }
 document.addEventListener('pointerdown', () => { ccLastTouch = Date.now(); }, true);
 const CC_ECO_AUTO_MS = 180000;
@@ -10426,7 +10439,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   { const hl = $('cc-hl-live'); if (hl) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 220 : 360) + 'px;display:block;margin:0 auto;border-radius:8px;background:#000'; hl.innerHTML = ''; hl.appendChild(cv); hl.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지)
   const stream = cv.captureStream(30);
   const fmt = recPickShare(false); // v1.31 카톡용 MP4
-  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 4000000 : 3000000 } : undefined);
+  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 7000000 : 5000000 } : undefined); // v1.32 화질
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
   rec.start(1000);
