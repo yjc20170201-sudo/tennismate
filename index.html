@@ -2096,7 +2096,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.38';
+const APP_VERSION = 'v1.39';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8707,6 +8707,7 @@ async function mhAnalyzeAll() {
   }
   return an;
 }
+let mhRendN = 0, mhRendSec = 0;
 async function mhRender(sel, opt) {
   const hiSrc = sel.some(q => Math.min(q.F.vw || 0, q.F.vh || 0) >= 1000); // v1.32: 원본이 1080p 이상이면 결과도 1080p급
   const vert = opt.vert, OW = vert ? (hiSrc ? 1080 : 720) : (hiSrc ? 1920 : 1280), OH = vert ? (hiSrc ? 1920 : 1280) : (hiSrc ? 1080 : 720), v = mhRVid || mhVid;
@@ -8723,13 +8724,14 @@ async function mhRender(sel, opt) {
   const longest = Math.max(...sel.map(q => q.r.dur)), day = new Date(sel[0].F.date || Date.now()), ds = day.getFullYear() + '.' + String(day.getMonth() + 1).padStart(2, '0') + '.' + String(day.getDate()).padStart(2, '0');
   const card = async (lines, sec) => { const t0 = performance.now(); while (!mhStop) { const p = (performance.now() - t0) / (sec * 1000); if (p >= 1) break; mhCard(g, OW, OH, lines, p); await new Promise(r => requestAnimationFrame(r)); } };
   mhCard(g, OW, OH, [['오늘의 랠리', 64, '#d4e94e']], 0);
+  mhRendN = 0; mhRendSec = 0;
   rec.start(1000);
   await card([['오늘의 랠리', 64, '#d4e94e'], [ds, 30, '#ffffff'], ['랠리 ' + sel.length + '개 · 가장 긴 랠리 ' + Math.round(longest) + '초', 26, '#cfe3d6']], 1.6);
   let curUrl = null;
   for (let i = 0; i < sel.length && !mhStop; i++) {
     const { F, r } = sel[i];
     mhStatus('하이라이트 만드는 중 ' + (i + 1) + '/' + sel.length + ' — 화면을 켜 두세요', 100 * i / sel.length);
-    if (rec.state === 'recording') rec.pause();
+    { g.fillStyle = '#0d1f16'; g.fillRect(0, 0, OW, OH); g.fillStyle = '#d4e94e'; g.textAlign = 'center'; g.font = '700 ' + Math.round(OW * 0.07) + 'px sans-serif'; g.fillText('RALLY ' + (i + 1), OW / 2, OH / 2); g.textAlign = 'left'; } // v1.39: 녹화기를 멈추지 않고 이동 중엔 전환 화면(폰 크롬 MP4가 pause 뒤 끊기던 문제)
     if (curUrl !== F.url) { const ok = await mhMeta(v, F.url); curUrl = F.url; if (!ok) continue; }
     await mhSeek(v, r.t0); v.playbackRate = 1; v.muted = !dest;
     const path = mhPath(F, r), S = F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1);
@@ -8744,6 +8746,7 @@ async function mhRender(sel, opt) {
       const tm = setTimeout(fin, (r.t1 - r.t0 + 8) * 1000);
       v.requestVideoFrameCallback(step);
     });
+    mhRendN++; mhRendSec += Math.max(0, Math.min(v.currentTime, r.t1) - r.t0); // v1.39 진단
   }
   if (rec.state === 'paused') rec.resume();
   await card([['테니스메이트', 58, '#d4e94e'], ['경기 영상만 넣으면', 28, '#ffffff'], ['랠리 하이라이트가 자동으로', 28, '#ffffff']], 1.8);
@@ -8752,8 +8755,9 @@ async function mhRender(sel, opt) {
   cs.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
   v.style.display = 'none'; { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } }
   if (mhStop) return null;
-  let blob = new Blob(parts, { type: fmt.type }); if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
-  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: (mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '') + (mhDrawErr ? ' · 그리기 오류 ' + mhDrawErr : '') };
+  let blob = new Blob(parts, { type: fmt.type }); const raw0 = blob.size; mp4Defrag.info = null; if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
+  const di = mp4Defrag.info, mp4d = di ? (di.err ? 'MP4 정리 안 함(' + di.err + ')' : 'MP4 ' + di.tracks.join(', ')) : '';
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화', mp4d, '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
 }
 async function mhGo() {
   if (mhBusy) return;
@@ -9553,7 +9557,10 @@ async function mp4Defrag(blob) { // v1.38: 조각 MP4 → 보통 MP4(길이가 �
     const kids = (d, a, b) => { const out = []; let o = a; while (o + 8 <= b) { let sz = u32(d, o), h = 8; const t = typ(d, o + 4); if (sz === 1) { sz = u64(d, o + 8); h = 16; } else if (sz === 0) sz = b - o; if (sz < h || o + sz > b) break; out.push({ t, o, sz, h }); o += sz; } return out; };
     const find = (d, a, b, t) => kids(d, a, b).find(k => k.t === t);
     // 1) 맨 위 상자들
-    const top = []; { let o = 0; while (o + 8 <= blob.size) { const d = await rd(o, Math.min(blob.size, o + 16)); let sz = u32(d, 0), h = 8; const t = typ(d, 4); if (sz === 1) { sz = u64(d, 8); h = 16; } else if (sz === 0) sz = blob.size - o; if (sz < 8) break; top.push({ t, o, sz, h }); o += sz; } }
+    const top = []; let walkEnd = 0; { let o = 0; while (o + 8 <= blob.size) { const d = await rd(o, Math.min(blob.size, o + 16)); let sz = u32(d, 0), h = 8; const t = typ(d, 4); if (sz === 1) { sz = u64(d, 8); h = 16; } else if (sz === 0) sz = blob.size - o; if (sz < 8 || o + sz > blob.size) break; top.push({ t, o, sz, h }); o += sz; } walkEnd = o; }
+    const fail = m => { mp4Defrag.info = { err: m }; return blob; }; // v1.39: 조금이라도 못 읽으면 원본 그대로
+    if (walkEnd < blob.size) return fail('구조를 끝까지 못 읽음 ' + Math.round(walkEnd / 1048576) + '/' + Math.round(blob.size / 1048576) + 'MB');
+    if (top.filter(b => b.t === 'moov').length > 1) return fail('moov 여러 개');
     const mv = top.find(b => b.t === 'moov'); if (!mv || !top.some(b => b.t === 'moof')) return blob; // 조각 MP4가 아님
     const M = await rd(mv.o, mv.o + mv.sz), mvB = { a: mv.h, b: mv.sz };
     const mvhd = find(M, mvB.a, mvB.b, 'mvhd'); const mvTs = u32(M, mvhd.o + 8 + (M.getUint8(mvhd.o + 8) === 1 ? 20 : 12));
@@ -9570,7 +9577,7 @@ async function mp4Defrag(blob) { // v1.38: 조각 MP4 → 보통 MP4(길이가 �
       const D = await rd(mf.o, mf.o + mf.sz);
       for (const tf of kids(D, 8, mf.sz).filter(k => k.t === 'traf')) {
         const th = find(D, tf.o + 8, tf.o + tf.sz, 'tfhd'), fl = u32(D, th.o + 8) & 0xffffff, id = u32(D, th.o + 12), T = tracks[id], X = trex[id] || { dur: 0, size: 0, flags: 0 };
-        if (!T) continue;
+        if (!T) return fail('모르는 트랙 ' + id);
         let p = th.o + 16, base = mf.o;
         if (fl & 1) { base = u64(D, p); p += 8; } if (fl & 2) p += 4;
         const dDur = fl & 8 ? u32(D, (p += 4) - 4) : X.dur, dSize = fl & 0x10 ? u32(D, (p += 4) - 4) : X.size, dFlags = fl & 0x20 ? u32(D, (p += 4) - 4) : X.flags;
@@ -9631,7 +9638,9 @@ async function mp4Defrag(blob) { // v1.38: 조각 MP4 → 보통 MP4(길이가 �
     };
     const ftyp = box('ftyp', [...'isom'].map(c => c.charCodeAt(0)), be32(512), [...'isomiso2avc1mp41'].map(c => c.charCodeAt(0)));
     const runsAll = []; TL.forEach((T, ti) => T.runs.forEach((r, ri) => runsAll.push({ ti, ri, r }))); runsAll.sort((a, b) => a.r.off - b.r.off); // 원래 순서(소리·화면 섞임) 유지
-    const mdatLen = runsAll.reduce((a, x) => a + x.r.bytes, 0); if (mdatLen + 1e6 > 4294967295) return blob;
+    const mdatLen = runsAll.reduce((a, x) => a + x.r.bytes, 0); if (mdatLen + 1e6 > 4294967295) return fail('4GB 넘음');
+    const mdat0 = top.filter(b => b.t === 'mdat').reduce((a, b) => a + b.sz - b.h, 0); if (mdatLen < mdat0 * 0.97) return fail('영상 데이터 ' + Math.round(100 * mdatLen / Math.max(1, mdat0)) + '%만 읽힘');
+    if (runsAll.some(x => x.r.off < 0 || x.r.off + x.r.bytes > blob.size)) return fail('조각 위치가 파일 밖');
     const offs = moovLen => { const co = TL.map(T => new Array(T.runs.length)); let p = ftyp.length + moovLen + 8; runsAll.forEach(x => { co[x.ti][x.ri] = p; p += x.r.bytes; }); return co; };
     const moovLen = build(offs(0)).length; const moov = build(offs(moovLen));
     const parts = [new Uint8Array(ftyp), new Uint8Array(moov), new Uint8Array(be32(8 + mdatLen).concat([109, 100, 97, 116]))];
