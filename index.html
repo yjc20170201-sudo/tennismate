@@ -2125,7 +2125,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.43';
+const APP_VERSION = 'v1.44';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8522,6 +8522,26 @@ function mhPick(ev) {
   const go = $('mh-go'); if (go) go.disabled = !fl.length; const r = $('mh-result'); if (r) r.style.display = 'none';
   mhStatus(fl.length ? '[하이라이트 만들기]를 누르면 분석을 시작해요 — 분석은 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 두세요' : '', null);
   try { if (ev && ev.target) ev.target.value = ''; } catch (e) {}
+  if (fl.length) { const g2 = $('mh-go'); if (g2) g2.disabled = true; mhStaging = mhStage(fl).then(out => { if (mhFiles === fl) { mhFiles = out; mhUrls = []; } }).catch(e => { mhStatus('영상을 읽지 못했어요 (' + ((e && (e.name + ' ' + e.message)) || e) + ') — 영상을 다시 골라 주세요', null); if (mhFiles === fl) mhFiles = []; }).finally(() => { mhStaging = null; const g3 = $('mh-go'); if (g3) g3.disabled = !mhFiles.length; }); }
+}
+let mhStaging = null;
+async function mhStage(files) { // v1.44: 앱 전용 저장소(OPFS)로 복사 → 원본이 나중에 바뀌어도(사진 백업 등) 읽을 수 있게
+  if (!navigator.storage || !navigator.storage.getDirectory) return files;
+  const root = await navigator.storage.getDirectory().catch(() => null); if (!root) return files;
+  try { await root.removeEntry('mh-src', { recursive: true }); } catch (e) {} // 옛 앱 사본(원본은 사진첩에 그대로)
+  const need = files.reduce((a, x) => a + (x.size || 0), 0);
+  try { const e = await navigator.storage.estimate(); if (e.quota && (e.usage || 0) + need > e.quota * 0.7) { mhStatus('폰 공간이 모자라 원본에서 바로 분석해요 — 사진 백업이 돌면 중간에 안 열릴 수 있어요', null); return files; } } catch (e) {}
+  const dir = await root.getDirectoryHandle('mh-src', { create: true }), out = []; let done = 0;
+  for (let i = 0; i < files.length; i++) {
+    const x = files[i], fh = await dir.getFileHandle(i + '_' + String(x.name || 'v').replace(/[^\w.\-가-힣]/g, '_'), { create: true });
+    if (!fh.createWritable) return files; // 사파리 일부: 복사 못 함 → 원본 그대로
+    const w = await fh.createWritable(), rd = x.stream().getReader();
+    try { for (;;) { const { value, done: fin } = await rd.read(); if (fin) break; await w.write(value); done += value.byteLength; mhStatus('영상 준비 중 ' + (i + 1) + '/' + files.length + ' · ' + Math.round(100 * done / Math.max(1, need)) + '% — 고른 영상을 앱 안으로 옮기는 중(원본은 그대로)', 100 * done / Math.max(1, need)); } await w.close(); }
+    catch (e) { try { await w.abort(); } catch (x2) {} throw e; }
+    const cf = await fh.getFile(); out.push(new File([cf], x.name, { type: x.type || cf.type || 'video/mp4', lastModified: x.lastModified }));
+  }
+  mhStatus('[하이라이트 만들기]를 누르면 분석을 시작해요 — 분석은 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 두세요', null);
+  return out;
 }
 let mhEd = null; // v1.41 편집 화면: { an, rows: [{F, r, keep, win}] }
 function mhEdBuild(all) {
@@ -8705,7 +8725,7 @@ async function mhOpenFile(v, fi, all) { // v1.43: 열기 전 비우고, 실패�
   if (await mhMeta(v, mhUrls[fi])) return true;
   const e1 = mhMeta.err; await new Promise(r => setTimeout(r, 500)); mhFree(v, true);
   try { URL.revokeObjectURL(mhUrls[fi]); } catch (e) {} mhUrls[fi] = URL.createObjectURL(f);
-  const ok = await mhMeta(v, mhUrls[fi]); if (!ok) mhMeta.err = e1 + ' → 다시 해도 ' + mhMeta.err; return ok;
+  const ok = await mhMeta(v, mhUrls[fi]); if (!ok) { let rd = '읽힘'; try { await f.slice(0, 16).arrayBuffer(); } catch (e) { rd = '안 읽힘 ' + ((e && e.name) || ''); } mhMeta.err = e1 + ' → 다시 해도 ' + mhMeta.err + ' · 파일 ' + rd; } return ok;
 }
 function mhMeta(v, url) { mhMeta.err = ''; return new Promise(res => { let done = false; const fin = ok => { if (!done) { done = true; if (!ok) mhMeta.err = v.error ? '오류 ' + v.error.code + (v.error.message ? ' ' + v.error.message.slice(0, 60) : '') : '15초 안에 안 열림'; res(ok); } }; v.onloadedmetadata = () => fin(true); v.onerror = () => fin(false); setTimeout(() => fin(v.readyState >= 1), 15000); v.src = url; try { v.load(); } catch (e) {} }); }
 function mhCalib(v) { // 판독 센터 aiAutoCalibCore와 같은 규칙(전역은 안 건드림) → H(이미지 px → 코트 m) | null
@@ -9035,6 +9055,7 @@ async function mhRender(sel, opt) {
 }
 async function mhGo(onlyIdx) {
   if (mhBusy) return;
+  if (mhStaging) { toast('영상을 준비하는 중이에요 — 잠시 뒤 다시 눌러 주세요'); return; } // v1.44
   if (!mhFiles.length) { toast('먼저 경기 영상을 골라 주세요'); return; }
   const opt = mhOpt(); const one = typeof onlyIdx === 'number' && mhEd && mhEd.rows[onlyIdx]; if (one) opt.single = true;
   { const pv = $('mh-pv'); if (pv) try { pv.pause(); } catch (e) {} }
