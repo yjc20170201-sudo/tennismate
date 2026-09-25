@@ -1303,8 +1303,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div id="cc-hl-status" class="muted" style="font-size:12px;margin-top:4px"></div>
             <div id="cc-hl-live" style="display:none;margin-top:6px"></div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">폰 보관 상한</span><select id="cc-keep" onchange="ccKeepSet(this.value)" style="flex:1"><option value="120">2시간 (120개, 약 2GB)</option><option value="240" selected>4시간 (240개, 약 4GB, 기본)</option><option value="480">8시간 (480개, 약 8.5GB)</option><option value="960">16시간 (960개, 약 17GB — 폰 용량 확인)</option></select></div>
-            <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">녹화 화질</span><select id="cc-res" onchange="ccResSet(this.value)" style="flex:1"><option value="1080">1080p 선명 (1분 약 60MB)</option><option value="720">720p 가벼움 (1분 약 37MB)</option></select></div>
-            <div class="muted" style="font-size:11px;margin-top:3px">하이라이트·쇼츠를 선명하게 뽑으려면 1080p. 폰 공간이 부족하면 오래된 영상부터 자동으로 지워져요. 보관 상한의 용량 표시는 720p 기준이에요.</div>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">녹화 화질</span><select id="cc-res" onchange="ccResSet(this.value)" style="flex:1"><option value="1080">1080p 선명 (1분 약 45MB)</option><option value="720">720p 가벼움 (1분 약 37MB)</option></select></div>
+            <div class="muted" style="font-size:11px;margin-top:3px">하이라이트·쇼츠를 선명하게 뽑으려면 1080p. 저장 공간이 65%를 넘으면 남은 시간을 말로 알려 주고, 80%에 가까워지면 찍은 영상을 지키려고 녹화를 멈춰요 — 경기 뒤엔 꼭 PC로 옮기세요.</div>
             <div class="muted" style="font-size:11px;margin-top:3px">상한을 넘기면 옛 영상부터 자동으로 지워져요(설정 › 저장·삭제 이력에 prune으로 남음). 경기 뒤엔 [PC로 영상 보내기 대기]로 먼저 옮기세요. 폰 저장 공간이 모자라면 저장 실패가 상태 줄에 떠요.</div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
             <div class="muted" style="font-size:11.5px;margin-top:4px">한 번에 옮기려면: [캠 영상 파일로 다운로드] → 파일 앱 › 다운로드 폴더 › 선택 › 전체 선택 › 공유 › "비디오 저장" — 사진 앨범으로 한 번에 들어가요. 그다음 USB로 PC에서 <b>아이폰_영상_가져오기</b> 실행.</div>
@@ -2096,7 +2096,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.35';
+const APP_VERSION = 'v1.36';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9643,7 +9643,7 @@ function ccResPref() { // v1.32 녹화 화질: '1080' | '720' — 저장값이 �
   return /iP(hone|ad|od)/.test(navigator.userAgent) ? '720' : '1080';
 }
 function ccResSet(v) { try { localStorage.setItem('tm-cc-res', v === '720' ? '720' : '1080'); } catch (e) {} toast('다음 클럽캠 시작부터 ' + (v === '720' ? '720p' : '1080p') + '로 녹화해요' + (ccStream ? ' — 지금 바로 바꾸려면 클럽캠을 껐다 켜세요' : '')); }
-function ccBitrate() { return ccResPref() === '1080' ? 8000000 : 5000000; } // v1.32: 예전 2.5Mbps는 60fps 테니스엔 과압축
+function ccBitrate() { return ccResPref() === '1080' ? 6000000 : 5000000; } // v1.36: 1080p 8→6Mbps(1분 약 45MB) // v1.32: 예전 2.5Mbps는 60fps 테니스엔 과압축
 function ccCamConstraints() {
   const id = ccLensPref() || (typeof ccLensSessionId === 'string' ? ccLensSessionId : ''); // v1.17 사용자 선택 > v1.20 이 세션에서 자동으로 고른 렌즈 > 자동
   const hd = ccResPref() === '1080';
@@ -10288,6 +10288,7 @@ let ccRecT0 = 0; // v1.26: 영상 0초의 벽시계(ms) — 녹화기 시작이 
 let ccRecAt = 0; // v1.25: 이 녹화 구간의 시작 벽시계(ms) — 클립 안 시각 = 벽시계 − ccRecAt
 let ccLastChunkAt = 0, ccVisibleAt = 0, ccStallN = 0; // v1.29 녹화 지킴이
 function ccStartRec() {
+  if (ccSpaceStopped) { ccChunks = []; return; } // v1.36: 공간이 차서 멈춘 상태 — 옮긴 뒤 클럽캠을 다시 켜야 풀림
   ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0; ccLastChunkAt = Date.now();
   ccFmt = recPick(false);
   const mime = ccFmt.mime;
@@ -10313,14 +10314,43 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
   if (chunks.length > 1 && ccDb) {
     try {
       const blob = new Blob(chunks.map(c => c.blob), { type: ccFmt.type });
-      await ccPutSeg(Date.now(), blob);
+      if (!(await ccSpaceOk(blob.size))) return chunks; // v1.36: 한도 80%를 넘을 저장은 하지 않고 녹화를 멈춤(DB 전체 소실 방지)
+      try { await ccPutSeg(Date.now(), blob); }
+      catch (e1) { // v1.36: 연결이 닫혔으면 다시 열어 한 번 더
+        ccLog('save-retry', String((e1 && e1.message) || e1).slice(0, 80));
+        try { ccDb.close(); } catch (x) {} ccDb = await ccOpenDb();
+        await ccPutSeg(Date.now(), blob);
+      }
+      ccSaveFailN = 0;
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
       if (ccSegN % 5 === 1) ccLog('save', ccSegN + '개째 ' + Math.round(blob.size / 1048576) + 'MB/구간, 누적 ' + Math.round(ccSegBytes / 1048576) + 'MB');
       await ccPrune();
-    } catch (e) { ccStatus('⚠️ 폰 저장 공간 부족 — 이 구간은 저장되지 않았어요. 💾 전체 저장 후 비우거나 공간을 확보하세요 (' + ((e && e.message) || e) + ')'); ccLog('save-fail', String((e && e.message) || e)); }
+    } catch (e) { ccStatus('⚠️ 영상 저장 실패 — 이 구간은 저장되지 않았어요 (' + ((e && e.message) || e) + ')'); ccLog('save-fail', String((e && e.message) || e)); if (++ccSaveFailN >= 1) { try { ccDownAlert(true, '영상 저장이 안 되고 있어요. 확인해 주세요'); } catch (x) {} } } // v1.36: 조용히 실패하지 않게
   }
   return chunks;
   } finally { ccSealP = null; sealDone(); }
+}
+let ccSaveFailN = 0, ccSpaceStopped = false, ccSpaceSaidAt = 0;
+async function ccSpaceOk(addBytes) { // v1.36: 저장 전 공간 검사 — 한도 80% 넘으면 멈춤, 65%부터 남은 시간 안내
+  try {
+    if (!navigator.storage || !navigator.storage.estimate) return true;
+    const e = await navigator.storage.estimate(); if (!e.quota) return true;
+    const after = (e.usage || 0) + addBytes, lim = e.quota * 0.8;
+    if (after > lim) {
+      if (!ccSpaceStopped) {
+        ccSpaceStopped = true; ccLog('space-stop', Math.round(after / 1048576) + '/' + Math.round(e.quota / 1048576) + 'MB — 영상을 지키려고 녹화 멈춤');
+        ccStatus('⛔ 저장 공간이 가득 차 가서 녹화를 멈췄어요 (' + Math.round(e.usage / 1048576) + '/' + Math.round(e.quota / 1048576) + 'MB). 찍힌 영상은 안전해요 — PC로 옮긴 뒤 클럽캠을 껐다 켜세요');
+        try { ccDownAlert(true, '저장 공간이 가득 차서 녹화를 멈췄어요. 영상을 옮겨 주세요'); } catch (x) {}
+      }
+      return false;
+    }
+    if (after > e.quota * 0.65 && Date.now() - ccSpaceSaidAt > 600000) {
+      ccSpaceSaidAt = Date.now(); const perMin = Math.max(1, addBytes); const mins = Math.max(0, Math.floor((lim - after) / perMin));
+      ccLog('space-warn', Math.round(after / 1048576) + '/' + Math.round(e.quota / 1048576) + 'MB · 약 ' + mins + '분 남음');
+      clAutoSay('저장 공간이 많이 찼어요. 약 ' + mins + '분 더 찍을 수 있어요');
+    }
+  } catch (x) {}
+  return true;
 }
 async function ccFlush() { // 1분마다: 자체 재생 가능한 세그먼트로 끊어 저장
   if (ccBusy || !ccStream) return; ccBusy = true;
@@ -10407,7 +10437,7 @@ function ccLandscapeUnlock() { try { if (screen.orientation && screen.orientatio
 function ccRecWatch() { // v1.29: 화면이 보이는데 녹화가 멈춰 있으면 → 녹화 다시 시작 → 그래도 안 되면 카메라 다시 열기
   if (!ccStream || !ccChan || ccSendMode || document.visibilityState !== 'visible') { ccStallN = 0; return; }
   if (ccBusy || ccReacq) return; // v1.30b: 저장·재획득 중엔 세지 않고 기다림(0으로 되돌리면 2단계로 못 넘어감)
-  if (Date.now() - ccVisibleAt < 3000) return; // 화면이 막 돌아왔으면 카메라가 깨어날 시간을 줌
+  if (Date.now() - ccVisibleAt < 3000 || ccSpaceStopped) return; // 화면이 막 돌아왔으면 카메라가 깨어날 시간을 줌 · v1.36 공간 멈춤은 일부러 멈춘 것
   const ok = ccRec && ccRec.state === 'recording' && Date.now() - ccLastChunkAt < 8000;
   if (ok) { ccStallN = 0; return; }
   ccStallN++;
@@ -10469,7 +10499,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
-  if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); } catch (e) {} ccLandscapeUnlock(); } // v1.29: 사용자가 끈 것 — 자동 재시작 안 함 · v1.30 가로 고정 풀기
+  if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); } catch (e) {} ccLandscapeUnlock(); } ccSpaceStopped = false; ccSaveFailN = 0; // v1.36 끄면 공간 멈춤 해제(다시 켤 때 검사) // v1.29: 사용자가 끈 것 — 자동 재시작 안 함 · v1.30 가로 고정 풀기
   { const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none'; if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; } if (ccEcoSince) ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분(캠 종료)'); ccEcoSince = 0; } // v1.06
   ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
   ccPreviewStop();
