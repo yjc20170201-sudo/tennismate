@@ -1359,6 +1359,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div class="row" style="gap:6px;margin-top:8px">
           <button type="button" class="btn small outline" style="flex:1" onclick="ccShareAll()">캠 영상 내보내기 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 사진 앨범·드라이브로</button>
           <button type="button" class="btn small outline" style="flex:0 0 auto;color:#c0392b;border-color:#c0392b" onclick="ccClearAll()">지우기</button>
+          <button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccStoreCheck()">저장소 확인</button>
+        </div>
+        <pre id="cc-store" hidden class="muted" style="font-size:11px;white-space:pre-wrap;margin:6px 0 0;max-height:260px;overflow:auto"></pre>
+        <div style="display:none">
         </div>
       </div>
     </div>
@@ -2092,7 +2096,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.34';
+const APP_VERSION = 'v1.35';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10027,16 +10031,39 @@ async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS
   });
   ccStatus('🧹 오래된 구간 ' + drop.length + '개를 지웠어요 (최근 ' + CC_MAX_SEGS + '분만 보관)'); ccLog('prune', drop.length + '개 삭제, ' + CC_MAX_SEGS + '개 유지');
 }
+let ccDbErr = '';
+async function ccStoreCheck() { // v1.35 저장소 확인: 0개가 진짜 없음인지 못 읽음인지
+  const el = $('cc-store'); if (!el) return; el.hidden = false; el.textContent = '확인 중…';
+  const L = []; const mb = x => Math.round(x / 1048576);
+  try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); L.push('브라우저 저장 공간: ' + mb(e.usage || 0) + 'MB 사용 / 한도 ' + mb(e.quota || 0) + 'MB' + (e.usageDetails && e.usageDetails.indexedDB != null ? ' (영상 저장소 ' + mb(e.usageDetails.indexedDB) + 'MB)' : '')); } } catch (e) { L.push('저장 공간 확인 실패: ' + e.message); }
+  try { if (navigator.storage && navigator.storage.persisted) L.push('영구 보관: ' + ((await navigator.storage.persisted()) ? '예' : '아니오')); } catch (e) {}
+  let db = ccDb;
+  try { if (!db) db = ccDb = await ccOpenDb(); L.push('영상 저장소 열기: 성공'); } catch (e) { L.push('영상 저장소 열기 실패: ' + (e && (e.name + ' ' + e.message))); }
+  if (db) {
+    try {
+      const cnt = await new Promise((res, rej) => { const rq = db.transaction('segs', 'readonly').objectStore('segs').count(); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); });
+      const keys = await new Promise((res, rej) => { const rq = db.transaction('segs', 'readonly').objectStore('segs').getAllKeys(); rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error); });
+      const d = t => { const x = new Date(t); return (x.getMonth() + 1) + '/' + x.getDate() + ' ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); };
+      L.push('저장된 구간: ' + cnt + '개' + (keys.length ? ' (' + d(Math.min(...keys)) + ' ~ ' + d(Math.max(...keys)) + ')' : ''));
+    } catch (e) { L.push('구간 읽기 실패: ' + (e && (e.name + ' ' + e.message))); }
+  }
+  if (ccDbErr) L.push('앱 시작 때 오류: ' + ccDbErr);
+  L.push('앱 ' + APP_VERSION + ' · ' + (/SamsungBrowser/.test(navigator.userAgent) ? '삼성 인터넷' : /Chrome\//.test(navigator.userAgent) ? '크롬' : '기타 브라우저') + (matchMedia('(display-mode: standalone)').matches ? ' (홈 화면 앱)' : ''));
+  let arr = []; try { arr = JSON.parse(localStorage.getItem('tm-cclog') || '[]'); } catch (e) {}
+  const pad = x => String(x).padStart(2, '0');
+  L.push('— 최근 이력 —'); arr.slice(-30).reverse().forEach(x => { const t = new Date(x.t); L.push(pad(t.getMonth() + 1) + '/' + pad(t.getDate()) + ' ' + pad(t.getHours()) + ':' + pad(t.getMinutes()) + ' ' + x.k + (x.d ? ' — ' + x.d : '')); });
+  el.textContent = L.join('\n');
+}
 async function ccLoadSegInfo() { // 저장된 세그먼트 개수·용량을 DB에서 읽어 표시 (v0.75 — 재시작 후 0개로 보이던 버그)
   try {
-    if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
-    if (!ccDb) return;
+    if (!ccDb) ccDb = await ccOpenDb().catch(e => { ccDbErr = String((e && (e.name + ' ' + e.message)) || e); ccLog('db-open-fail', ccDbErr); return null; }); // v1.35: 못 열면 조용히 0개로 보이지 않게
+    if (!ccDb) { const el = $('cc-seg-n'); if (el) el.textContent = '?'; return; }
     const segs = await ccAllSegs();
     ccSegN = segs.length; ccSegBytes = segs.reduce((a, x) => a + ((x.blob && x.blob.size) || 0), 0);
     ccRenderSegInfo();
     const q = await ccStorageInfo();
     ccLog('boot', segs.length + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB' + (q ? ' (공간 ' + q.used + '/' + q.quota + 'MB)' : ''));
-  } catch (e) {}
+  } catch (e) { ccDbErr = String((e && (e.name + ' ' + e.message)) || e); ccLog('db-read-fail', ccDbErr); const el = $('cc-seg-n'); if (el) el.textContent = '?'; } // v1.35
 }
 document.addEventListener('DOMContentLoaded', () => { setTimeout(ccLoadSegInfo, 800); });
 // ── v0.96 📥 캠 영상 → PC (WebRTC 데이터 채널) ──
