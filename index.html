@@ -2092,7 +2092,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.33';
+const APP_VERSION = 'v1.34';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9703,6 +9703,7 @@ function ccAspectChange(v) {
   try { localStorage.setItem('tm-ccaspect', v === '16:9' ? '16:9' : '4:3'); } catch (e) {}
   if (ccStream && ccChan) ccReacquire('aspect'); else toast('화각 ' + (v === '16:9' ? '16:9' : '넓게 4:3') + ' — 다음 클럽캠 시작부터 적용');
 }
+let ccSpaceWarnAt = 0; // v1.34
 let CC_MAX_SEGS = 240; // 폰에 보관할 최대 세그먼트 수(1분 단위, 기본 240 ≈ 4시간·약 4.3GB) — 넘치면 오래된 것부터 삭제. v1.10: 설정 tm-cc-keep (v0.47~v1.09는 120 고정 → 2시간 넘게 찍으면 앞부분이 사라졌음)
 try { const k = parseInt(localStorage.getItem('tm-cc-keep') || '', 10); if (k >= 60 && k <= 2000) CC_MAX_SEGS = k; } catch (e) {}
 function ccKeepSet(v) { const k = parseInt(v, 10); if (!(k >= 60 && k <= 2000)) return; CC_MAX_SEGS = k; try { localStorage.setItem('tm-cc-keep', String(k)); } catch (e) {} toast('폰에 최근 ' + (k / 60) + '시간(' + k + '개, 약 ' + Math.round(k * 18 / 1024 * 10) / 10 + 'GB)까지 보관해요 — 넘치면 옛 영상부터 지워지니 그 전에 PC로 옮기세요'); }
@@ -10015,7 +10016,7 @@ async function ccPrune() { // 오래된 세그먼트부터 삭제해 CC_MAX_SEGS
     rq.onsuccess = () => res(rq.result || []); rq.onerror = () => rej(rq.error);
   });
   let spaceDrop = 0; // v1.32: 브라우저 저장 한도의 90%를 넘으면 오래된 것부터 더 지움(1080p는 파일이 커서 개수 상한 전에 공간이 먼저 참)
-  try { if (navigator.storage && navigator.storage.estimate) { const est = await navigator.storage.estimate(); if (est.quota && est.usage > est.quota * 0.9 && keys.length > 10) { spaceDrop = Math.max(5, Math.ceil(keys.length * 0.1)); ccLog('prune-space', Math.round(est.usage / 1048576) + '/' + Math.round(est.quota / 1048576) + 'MB → ' + spaceDrop + '개 더 삭제'); } } } catch (e) {}
+  try { if (navigator.storage && navigator.storage.estimate) { const est = await navigator.storage.estimate(); if (est.quota && est.usage > est.quota * 0.9 && Date.now() - ccSpaceWarnAt > 600000) { ccSpaceWarnAt = Date.now(); ccLog('space-full', Math.round(est.usage / 1048576) + '/' + Math.round(est.quota / 1048576) + 'MB — 지우지 않고 경고만'); ccStatus('⚠️ 폰 저장 공간이 거의 찼어요 (' + Math.round(est.usage / 1048576) + '/' + Math.round(est.quota / 1048576) + 'MB) — 영상을 PC로 옮기거나 녹화 화질을 720p로 바꿔 주세요. 옛 영상은 지우지 않아요'); clAutoSay('폰 저장 공간이 거의 찼어요. 영상을 옮겨 주세요'); } } } catch (e) {} // v1.34: 공간 때문에 지우지 않음(옮기기 전 영상 보호)
   if (keys.length <= CC_MAX_SEGS && !spaceDrop) return;
   const drop = keys.sort((a, b) => a - b).slice(0, Math.min(keys.length - 10, Math.max(keys.length - CC_MAX_SEGS, 0) + spaceDrop));
   if (!drop.length) return;
@@ -10386,9 +10387,22 @@ function ccRecWatch() { // v1.29: 화면이 보이는데 녹화가 멈춰 있으
   if (ccStallN === 2 && !ccTrackDead()) { ccLog('rec-restart', '녹화기 ' + (ccRec ? ccRec.state : '없음') + ' · 마지막 조각 ' + Math.round((Date.now() - ccLastChunkAt) / 1000) + '초 전'); ccFlush(); } // v1.30: 멈추기 전 조각을 저장하고 녹화 재시작
   else if (ccStallN >= 5) { ccStallN = 0; ccLog('rec-stall', '녹화가 안 붙어 카메라를 다시 엶'); ccReacquire('stall'); }
 }
+let ccBattAt = 0, ccBattStep = -1, ccBattSaidLow = 0;
+function ccBatteryWatch() { // v1.34: 배터리 이력·경고 — 폰이 꺼지기 전에 알리고, 아주 낮으면 지금 구간을 저장
+  if (Date.now() - ccBattAt < 60000 || !navigator.getBattery) return; ccBattAt = Date.now();
+  navigator.getBattery().then(b => {
+    const pct = Math.round(b.level * 100), step = Math.floor(pct / 10);
+    if (step !== ccBattStep) { ccBattStep = step; ccLog('battery', pct + '%' + (b.charging ? ' 충전 중' : '')); }
+    if (b.charging) { ccBattSaidLow = 0; return; }
+    if (pct <= 20 && ccBattSaidLow < 1) { ccBattSaidLow = 1; clAutoSay('배터리가 ' + pct + '퍼센트 남았어요. 충전해 주세요'); ccStatus('🔋 배터리 ' + pct + '% — 충전기를 연결해 주세요 (꺼지면 촬영이 멈춰요)'); }
+    else if (pct <= 10 && ccBattSaidLow < 2) { ccBattSaidLow = 2; clAutoSay('배터리가 거의 없어요. 곧 꺼질 수 있어요'); }
+    if (pct <= 8 && !ccBusy) { ccLog('battery-save', pct + '% — 지금 구간 저장'); ccFlush(); }
+  }).catch(() => {});
+}
 function ccGuardTick(v) {
   if (!ccStream) return;
   try { ccRecWatch(); } catch (e) {}
+  try { ccBatteryWatch(); } catch (e) {}
   if (v && v.videoWidth && v.videoWidth < v.videoHeight) { // 폰은 가로로 걸었는데 화면 자동 회전이 꺼져 있으면 영상이 옆으로 누운 채 저장됨
     const pageLandscape = window.innerWidth > window.innerHeight;
     if (pageLandscape && ccOrientFixN < 2 && !ccReacq && !ccBusy) { ccOrientFixN++; ccLog('orient-fix', v.videoWidth + 'x' + v.videoHeight); ccReacquire('orient'); return; }
