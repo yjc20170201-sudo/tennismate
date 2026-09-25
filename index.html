@@ -2125,7 +2125,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.42';
+const APP_VERSION = 'v1.43';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8566,7 +8566,10 @@ let mhPvT1 = 0, mhPvT0 = 0, mhPvDt = 1 / 30;
 function mhEdPlay(i) { // 미리 보기 + 프레임 단위 보기
   if (!mhEd) return; const x = mhEd.rows[i], v = $('mh-pv'), c = $('mh-pvc'); if (!v) return;
   v.style.display = 'block'; if (c) c.style.display = 'flex';
-  const url = x.F.url; if (v.src !== url) v.src = url;
+  mhFree(v, false); // v1.43 분석·만들기 요소가 쥔 재생기를 놓음
+  if (!mhUrls[x.F.fi]) mhUrls[x.F.fi] = URL.createObjectURL(mhFiles[x.F.fi]); x.F.url = mhUrls[x.F.fi];
+  const url = x.F.url; if (v.src !== url) { v.src = url; v._mhRetry = 0; }
+  v.onerror = () => { const er = v.error ? '오류 ' + v.error.code + (v.error.message ? ' ' + v.error.message.slice(0, 60) : '') : ''; if (!v._mhRetry) { v._mhRetry = 1; mhFree(v, true); try { URL.revokeObjectURL(mhUrls[x.F.fi]); } catch (e) {} mhUrls[x.F.fi] = x.F.url = URL.createObjectURL(mhFiles[x.F.fi]); v.src = x.F.url; v.addEventListener('loadedmetadata', () => { try { v.currentTime = mhPvT0; } catch (e) {} v.play().catch(() => {}); }, { once: true }); } else mhStatus('미리 보기를 열지 못했어요 (' + er + ') — 다른 앱을 닫고 다시 눌러 보세요', null); };
   mhPvT0 = x.r.t0; mhPvT1 = x.r.t1; v.playbackRate = 1;
   const go = () => { try { v.currentTime = mhPvT0; } catch (e) {} v.play().catch(() => {}); };
   if (v.readyState >= 1) go(); else v.addEventListener('loadedmetadata', go, { once: true });
@@ -8694,7 +8697,17 @@ async function mhLoadModel() {
   if (WASB.model !== mf || !WASB.backend) await WASB.load('', t => mhStatus('공 인식 모델 ' + t, null), mf, ep);
 }
 function mhSeek(v, t) { return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; res(); } }; v.addEventListener('seeked', fin, { once: true }); setTimeout(fin, 5000); try { v.currentTime = Math.max(0, t); } catch (e) { fin(); } }); }
-function mhMeta(v, url) { return new Promise(res => { let done = false; const fin = ok => { if (!done) { done = true; res(ok); } }; v.onloadedmetadata = () => fin(true); v.onerror = () => fin(false); setTimeout(() => fin(v.readyState >= 1), 15000); v.src = url; try { v.load(); } catch (e) {} }); }
+function mhFree(keep, all) { // v1.43: 안 쓰는 영상 요소가 쥔 재생기를 놓게(폰은 동시에 열 수 있는 영상 수가 적음)
+  [mhVid, mhRVid, $('mh-pv'), all ? $('mh-out') : null].forEach(e => { if (!e || e === keep || !e.getAttribute('src')) return; try { e.pause(); } catch (x) {} e.removeAttribute('src'); try { e.load(); } catch (x) {} });
+}
+async function mhOpenFile(v, fi, all) { // v1.43: 열기 전 비우고, 실패하면 새 주소로 한 번 더
+  mhFree(v, all); const f = mhFiles[fi]; if (!mhUrls[fi]) mhUrls[fi] = URL.createObjectURL(f);
+  if (await mhMeta(v, mhUrls[fi])) return true;
+  const e1 = mhMeta.err; await new Promise(r => setTimeout(r, 500)); mhFree(v, true);
+  try { URL.revokeObjectURL(mhUrls[fi]); } catch (e) {} mhUrls[fi] = URL.createObjectURL(f);
+  const ok = await mhMeta(v, mhUrls[fi]); if (!ok) mhMeta.err = e1 + ' → 다시 해도 ' + mhMeta.err; return ok;
+}
+function mhMeta(v, url) { mhMeta.err = ''; return new Promise(res => { let done = false; const fin = ok => { if (!done) { done = true; if (!ok) mhMeta.err = v.error ? '오류 ' + v.error.code + (v.error.message ? ' ' + v.error.message.slice(0, 60) : '') : '15초 안에 안 열림'; res(ok); } }; v.onloadedmetadata = () => fin(true); v.onerror = () => fin(false); setTimeout(() => fin(v.readyState >= 1), 15000); v.src = url; try { v.load(); } catch (e) {} }); }
 function mhCalib(v) { // 판독 센터 aiAutoCalibCore와 같은 규칙(전역은 안 건드림) → H(이미지 px → 코트 m) | null
   const w2 = 640, h2 = Math.max(2, Math.round(w2 * v.videoHeight / v.videoWidth));
   const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2; const cx = cv.getContext('2d', { willReadFrequently: true });
@@ -8943,10 +8956,10 @@ async function mhAnalyzeAll() {
   mhStatus('공 인식 모델 준비 중…', 0); await mhLoadModel();
   const v = mhVid, an = { files: [] }; v.style.display = 'block'; let total = 0, doneV = 0; const t0w = performance.now();
   for (let fi = 0; fi < mhFiles.length && !mhStop; fi++) {
-    const f = mhFiles[fi], url = mhUrls[fi] || (mhUrls[fi] = URL.createObjectURL(f));
+    const f = mhFiles[fi];
     mhStatus((fi + 1) + '/' + mhFiles.length + ' 영상 여는 중 — ' + f.name, null);
-    const ok = await mhMeta(v, url);
-    if (!ok || !v.videoWidth) { an.files.push({ fi, name: f.name, err: '이 폰에서 열 수 없는 영상 형식이에요' }); continue; }
+    const ok = await mhOpenFile(v, fi, true); const url = mhUrls[fi];
+    if (!ok || !v.videoWidth) { an.files.push({ fi, name: f.name, err: '영상을 열지 못했어요(' + (mhMeta.err || '크기 0') + ')' }); continue; }
     let dur = v.duration;
     if (!isFinite(dur) || dur <= 0) { await mhSeek(v, 1e7); dur = isFinite(v.duration) ? v.duration : v.currentTime; await mhSeek(v, 0); } // 녹화 앱이 만든 webm은 길이 정보가 없음
     if (!(dur > 1)) { an.files.push({ fi, name: f.name, err: '영상 길이를 알 수 없어요' }); continue; }
@@ -8967,7 +8980,7 @@ async function mhAnalyzeAll() {
   }
   return an;
 }
-let mhRendN = 0, mhRendSec = 0;
+let mhRendN = 0, mhRendSec = 0, mhRendErr = '';
 async function mhRender(sel, opt) {
   const hiSrc = sel.some(q => Math.min(q.F.vw || 0, q.F.vh || 0) >= 1000); // v1.32: 원본이 1080p 이상이면 결과도 1080p급
   const vert = opt.vert, OW = vert ? (hiSrc ? 1080 : 720) : (hiSrc ? 1920 : 1280), OH = vert ? (hiSrc ? 1920 : 1280) : (hiSrc ? 1080 : 720), v = mhRVid || mhVid;
@@ -8984,7 +8997,7 @@ async function mhRender(sel, opt) {
   const longest = Math.max(...sel.map(q => q.r.dur)), day = new Date(sel[0].F.date || Date.now()), ds = day.getFullYear() + '.' + String(day.getMonth() + 1).padStart(2, '0') + '.' + String(day.getDate()).padStart(2, '0');
   const card = async (lines, sec) => { const t0 = performance.now(); while (!mhStop) { const p = (performance.now() - t0) / (sec * 1000); if (p >= 1) break; mhCard(g, OW, OH, lines, p); await new Promise(r => requestAnimationFrame(r)); } };
   mhCard(g, OW, OH, [['오늘의 랠리', 64, '#d4e94e']], 0);
-  mhRendN = 0; mhRendSec = 0;
+  mhRendN = 0; mhRendSec = 0; mhRendErr = '';
   rec.start(1000);
   if (opt.single) await card([['RALLY ' + (sel[0].r.no || 1), 64, '#d4e94e'], [ds, 30, '#ffffff'], [(sel[0].r.shots != null ? sel[0].r.shots + '타 · ' : '') + Math.round(sel[0].r.dur) + '초', 26, '#cfe3d6']], 0.8); // v1.41 한 포인트
   else await card([['오늘의 랠리', 64, '#d4e94e'], [ds, 30, '#ffffff'], ['랠리 ' + sel.length + '개 · 가장 긴 랠리 ' + Math.round(longest) + '초', 26, '#cfe3d6']], 1.6);
@@ -8993,7 +9006,7 @@ async function mhRender(sel, opt) {
     const { F, r } = sel[i];
     mhStatus('하이라이트 만드는 중 ' + (i + 1) + '/' + sel.length + ' — 화면을 켜 두세요', 100 * i / sel.length);
     { g.fillStyle = '#0d1f16'; g.fillRect(0, 0, OW, OH); g.fillStyle = '#d4e94e'; g.textAlign = 'center'; g.font = '700 ' + Math.round(OW * 0.07) + 'px sans-serif'; g.fillText('RALLY ' + (i + 1), OW / 2, OH / 2); g.textAlign = 'left'; } // v1.39: 녹화기를 멈추지 않고 이동 중엔 전환 화면(폰 크롬 MP4가 pause 뒤 끊기던 문제)
-    if (curUrl !== F.url) { const ok = await mhMeta(v, F.url); curUrl = F.url; if (!ok) continue; }
+    if (curUrl !== F.fi) { const ok = await mhOpenFile(v, F.fi, true); F.url = mhUrls[F.fi]; curUrl = F.fi; if (!ok) { mhRendErr = mhMeta.err; continue; } } // v1.43
     await mhSeek(v, r.t0); v.playbackRate = 1; v.muted = !dest;
     const path = mhPath(F, r, opt.zoom ? (vert ? 1.3 : 1.8) : 1), S = F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1);
     mhDraw(g, v, OW, OH, vert, r.t0, path, S, i, sel.length, r);
@@ -9018,7 +9031,7 @@ async function mhRender(sel, opt) {
   if (mhStop) return null;
   let blob = new Blob(parts, { type: fmt.type }); const raw0 = blob.size; mp4Defrag.info = null; if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
   const di = mp4Defrag.info, mp4d = di ? (di.err ? 'MP4 정리 안 함(' + di.err + ')' : 'MP4 ' + di.tracks.join(', ')) : '';
-  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화', mp4d, '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
 }
 async function mhGo(onlyIdx) {
   if (mhBusy) return;
