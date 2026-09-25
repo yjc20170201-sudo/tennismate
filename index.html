@@ -2096,7 +2096,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.37';
+const APP_VERSION = 'v1.38';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8752,7 +8752,8 @@ async function mhRender(sel, opt) {
   cs.getTracks().forEach(t => { try { t.stop(); } catch (e) {} });
   v.style.display = 'none'; { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } }
   if (mhStop) return null;
-  return { blob: new Blob(parts, { type: fmt.type }), ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: (mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '') + (mhDrawErr ? ' · 그리기 오류 ' + mhDrawErr : '') };
+  let blob = new Blob(parts, { type: fmt.type }); if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: (mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '') + (mhDrawErr ? ' · 그리기 오류 ' + mhDrawErr : '') };
 }
 async function mhGo() {
   if (mhBusy) return;
@@ -9543,6 +9544,102 @@ function recPick(withAudio) {
   const m = list.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
   const type = m.startsWith('video/mp4') ? 'video/mp4' : m ? 'video/webm' : '';
   return { mime: m, type: type || 'video/mp4', ext: type === 'video/webm' ? 'webm' : 'mp4' };
+}
+async function mp4Defrag(blob) { // v1.38: 조각 MP4 → 보통 MP4(길이가 머리에 적힘). 실패하면 원본
+  try {
+    const rd = async (a, b) => new DataView(await blob.slice(a, b).arrayBuffer());
+    const u32 = (d, o) => d.getUint32(o), u64 = (d, o) => d.getUint32(o) * 4294967296 + d.getUint32(o + 4);
+    const typ = (d, o) => String.fromCharCode(d.getUint8(o), d.getUint8(o + 1), d.getUint8(o + 2), d.getUint8(o + 3));
+    const kids = (d, a, b) => { const out = []; let o = a; while (o + 8 <= b) { let sz = u32(d, o), h = 8; const t = typ(d, o + 4); if (sz === 1) { sz = u64(d, o + 8); h = 16; } else if (sz === 0) sz = b - o; if (sz < h || o + sz > b) break; out.push({ t, o, sz, h }); o += sz; } return out; };
+    const find = (d, a, b, t) => kids(d, a, b).find(k => k.t === t);
+    // 1) 맨 위 상자들
+    const top = []; { let o = 0; while (o + 8 <= blob.size) { const d = await rd(o, Math.min(blob.size, o + 16)); let sz = u32(d, 0), h = 8; const t = typ(d, 4); if (sz === 1) { sz = u64(d, 8); h = 16; } else if (sz === 0) sz = blob.size - o; if (sz < 8) break; top.push({ t, o, sz, h }); o += sz; } }
+    const mv = top.find(b => b.t === 'moov'); if (!mv || !top.some(b => b.t === 'moof')) return blob; // 조각 MP4가 아님
+    const M = await rd(mv.o, mv.o + mv.sz), mvB = { a: mv.h, b: mv.sz };
+    const mvhd = find(M, mvB.a, mvB.b, 'mvhd'); const mvTs = u32(M, mvhd.o + 8 + (M.getUint8(mvhd.o + 8) === 1 ? 20 : 12));
+    const trex = {}; { const mx = find(M, mvB.a, mvB.b, 'mvex'); if (mx) kids(M, mx.o + 8, mx.o + mx.sz).filter(k => k.t === 'trex').forEach(k => { const b = k.o + 12; trex[u32(M, b)] = { sdi: u32(M, b + 4), dur: u32(M, b + 8), size: u32(M, b + 12), flags: u32(M, b + 16) }; }); }
+    const tracks = {}; const trakBoxes = kids(M, mvB.a, mvB.b).filter(k => k.t === 'trak');
+    trakBoxes.forEach(tk => {
+      const tkhd = find(M, tk.o + 8, tk.o + tk.sz, 'tkhd'), v1 = M.getUint8(tkhd.o + 8) === 1, id = u32(M, tkhd.o + 8 + (v1 ? 20 : 12));
+      const mdia = find(M, tk.o + 8, tk.o + tk.sz, 'mdia'), mdhd = find(M, mdia.o + 8, mdia.o + mdia.sz, 'mdhd'), ts = u32(M, mdhd.o + 8 + (M.getUint8(mdhd.o + 8) === 1 ? 20 : 12));
+      const hdlr = find(M, mdia.o + 8, mdia.o + mdia.sz, 'hdlr'), kind = typ(M, hdlr.o + 16);
+      tracks[id] = { id, tk, ts, kind, s: [], t0: null };
+    });
+    // 2) 조각(moof)마다 샘플 표
+    for (const mf of top.filter(b => b.t === 'moof')) {
+      const D = await rd(mf.o, mf.o + mf.sz);
+      for (const tf of kids(D, 8, mf.sz).filter(k => k.t === 'traf')) {
+        const th = find(D, tf.o + 8, tf.o + tf.sz, 'tfhd'), fl = u32(D, th.o + 8) & 0xffffff, id = u32(D, th.o + 12), T = tracks[id], X = trex[id] || { dur: 0, size: 0, flags: 0 };
+        if (!T) continue;
+        let p = th.o + 16, base = mf.o;
+        if (fl & 1) { base = u64(D, p); p += 8; } if (fl & 2) p += 4;
+        const dDur = fl & 8 ? u32(D, (p += 4) - 4) : X.dur, dSize = fl & 0x10 ? u32(D, (p += 4) - 4) : X.size, dFlags = fl & 0x20 ? u32(D, (p += 4) - 4) : X.flags;
+        const tfdt = find(D, tf.o + 8, tf.o + tf.sz, 'tfdt'); if (tfdt && T.t0 == null) T.t0 = D.getUint8(tfdt.o + 8) === 1 ? u64(D, tfdt.o + 12) : u32(D, tfdt.o + 12);
+        let pos = base;
+        for (const tr of kids(D, tf.o + 8, tf.o + tf.sz).filter(k => k.t === 'trun')) {
+          const ver = D.getUint8(tr.o + 8), tfl = u32(D, tr.o + 8) & 0xffffff, cnt = u32(D, tr.o + 12); let q = tr.o + 16;
+          if (tfl & 1) { pos = base + D.getInt32(q); q += 4; }
+          let first = null; if (tfl & 4) { first = u32(D, q); q += 4; }
+          const run = { off: pos, n: 0, bytes: 0 };
+          for (let i = 0; i < cnt; i++) {
+            const dur = tfl & 0x100 ? u32(D, (q += 4) - 4) : dDur, size = tfl & 0x200 ? u32(D, (q += 4) - 4) : dSize;
+            let sf = tfl & 0x400 ? u32(D, (q += 4) - 4) : (i === 0 && first != null ? first : dFlags); if (i === 0 && first != null) sf = first;
+            const cto = tfl & 0x800 ? (ver ? D.getInt32((q += 4) - 4) : u32(D, (q += 4) - 4)) : 0;
+            T.s.push({ dur, size, sync: !(sf & 0x10000), cto }); run.n++; run.bytes += size;
+          }
+          (T.runs || (T.runs = [])).push(run); pos += run.bytes;
+        }
+      }
+    }
+    const TL = Object.values(tracks).filter(T => T.s.length); if (!TL.length) return blob;
+    // 3) 새 moov 쓰기
+    const W = []; let wl = 0; const put = a => { W.push(a); wl += a.length; };
+    const be32 = v => [v >>> 24 & 255, v >>> 16 & 255, v >>> 8 & 255, v & 255];
+    const box = (t, ...parts) => { const body = []; parts.forEach(p => { for (const x of p) body.push(x); }); return [...be32(8 + body.length), ...[...t].map(c => c.charCodeAt(0)), ...body]; };
+    const full = (t, vf, ...parts) => box(t, be32(vf), ...parts);
+    const raw = (d, k) => Array.from(new Uint8Array(d.buffer, d.byteOffset + k.o, k.sz));
+    const setDur = (arr, isTk, dur) => { const v1 = arr[8] === 1, o = 8 + (v1 ? (isTk ? 28 : 24) : (isTk ? 20 : 16)); if (v1) { const hi = Math.floor(dur / 4294967296); be32(hi).forEach((x, i) => arr[o + i] = x); be32(dur >>> 0).forEach((x, i) => arr[o + 4 + i] = x); } else be32(Math.min(dur, 4294967295) >>> 0).forEach((x, i) => arr[o + i] = x); return arr; };
+    const mvDurOf = T => Math.round((T.s.reduce((a, x) => a + x.dur, 0) + (T.t0 || 0)) * mvTs / T.ts);
+    const mvDur = Math.max(...TL.map(mvDurOf));
+    const build = (chunkOff) => {
+      const traks = TL.map((T, ti) => {
+        const tk = T.tk, sub = kids(M, tk.o + 8, tk.o + tk.sz);
+        const tkhdA = setDur(raw(M, sub.find(k => k.t === 'tkhd')), true, mvDurOf(T));
+        const mdia = sub.find(k => k.t === 'mdia'), msub = kids(M, mdia.o + 8, mdia.o + mdia.sz);
+        const mdur = T.s.reduce((a, x) => a + x.dur, 0) + (T.t0 || 0);
+        const mdhdA = setDur(raw(M, msub.find(k => k.t === 'mdhd')), false, mdur);
+        const minf = msub.find(k => k.t === 'minf'), nsub = kids(M, minf.o + 8, minf.o + minf.sz), stbl = nsub.find(k => k.t === 'stbl');
+        const stsd = raw(M, kids(M, stbl.o + 8, stbl.o + stbl.sz).find(k => k.t === 'stsd'));
+        const stts = []; T.s.forEach(x => { const l = stts[stts.length - 1]; if (l && l[1] === x.dur) l[0]++; else stts.push([1, x.dur]); });
+        const hasCto = T.s.some(x => x.cto), ctts = []; if (hasCto) T.s.forEach(x => { const l = ctts[ctts.length - 1]; if (l && l[1] === x.cto) l[0]++; else ctts.push([1, x.cto]); });
+        const allSync = T.s.every(x => x.sync);
+        const stsc = []; T.runs.forEach((r, i) => { const l = stsc[stsc.length - 1]; if (!l || l[1] !== r.n) stsc.push([i + 1, r.n]); });
+        const L = a => a.flatMap(v => be32(v >>> 0));
+        const stblA = box('stbl', stsd,
+          full('stts', 0, be32(stts.length), L(stts.flat())),
+          hasCto ? full('ctts', T.s.some(x => x.cto < 0) ? 0x01000000 : 0, be32(ctts.length), L(ctts.flat())) : [],
+          allSync ? [] : full('stss', 0, (() => { const k = []; T.s.forEach((x, i) => { if (x.sync) k.push(i + 1); }); return [...be32(k.length), ...L(k)]; })()),
+          full('stsc', 0, be32(stsc.length), L(stsc.flatMap(x => [x[0], x[1], 1]))),
+          full('stsz', 0, be32(0), be32(T.s.length), L(T.s.map(x => x.size))),
+          full('stco', 0, be32(T.runs.length), L(chunkOff[ti])));
+        const minfA = box('minf', ...nsub.filter(k => k.t !== 'stbl').map(k => raw(M, k)), stblA);
+        const mdiaA = box('mdia', mdhdA, ...msub.filter(k => k.t === 'hdlr').map(k => raw(M, k)), minfA);
+        const edts = T.t0 ? box('edts', full('elst', 0, be32(2), be32(Math.round(T.t0 * mvTs / T.ts)), be32(0xffffffff), be32(0x00010000), be32(Math.round(T.s.reduce((a, x) => a + x.dur, 0) * mvTs / T.ts)), be32(0), be32(0x00010000))) : []; // 앞이 비어 있으면 빈 편집(소리·화면 맞춤)
+        return box('trak', tkhdA, edts, mdiaA);
+      });
+      return box('moov', setDur(raw(M, mvhd), false, mvDur), ...traks);
+    };
+    const ftyp = box('ftyp', [...'isom'].map(c => c.charCodeAt(0)), be32(512), [...'isomiso2avc1mp41'].map(c => c.charCodeAt(0)));
+    const runsAll = []; TL.forEach((T, ti) => T.runs.forEach((r, ri) => runsAll.push({ ti, ri, r }))); runsAll.sort((a, b) => a.r.off - b.r.off); // 원래 순서(소리·화면 섞임) 유지
+    const mdatLen = runsAll.reduce((a, x) => a + x.r.bytes, 0); if (mdatLen + 1e6 > 4294967295) return blob;
+    const offs = moovLen => { const co = TL.map(T => new Array(T.runs.length)); let p = ftyp.length + moovLen + 8; runsAll.forEach(x => { co[x.ti][x.ri] = p; p += x.r.bytes; }); return co; };
+    const moovLen = build(offs(0)).length; const moov = build(offs(moovLen));
+    const parts = [new Uint8Array(ftyp), new Uint8Array(moov), new Uint8Array(be32(8 + mdatLen).concat([109, 100, 97, 116]))];
+    runsAll.forEach(x => parts.push(blob.slice(x.r.off, x.r.off + x.r.bytes)));
+    const out = new Blob(parts, { type: 'video/mp4' });
+    mp4Defrag.info = { tracks: TL.map(T => T.kind + ' ' + T.s.length + '개 ' + (T.s.reduce((a, x) => a + x.dur, 0) / T.ts).toFixed(2) + '초'), size: out.size };
+    return out;
+  } catch (e) { console.warn('mp4Defrag', e); mp4Defrag.info = { err: String(e && e.message || e) }; return blob; }
 }
 function recPickShare(withAudio) { // v1.31: 카톡·인스타로 보낼 결과물은 MP4(H.264+AAC) 우선 — WebM은 카톡이 안 받음
   const list = withAudio
@@ -10614,7 +10711,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
     }
   } finally { v.remove(); { const hl = $('cc-hl-live'); if (hl) { hl.style.display = 'none'; hl.innerHTML = ''; } } }
   await new Promise(res => { rec.onstop = res; rec.stop(); });
-  const out = new Blob(parts, { type: fmt.type });
+  let out = new Blob(parts, { type: fmt.type }); if (fmt.type === 'video/mp4') out = await mp4Defrag(out); // v1.38
   status('하이라이트 완성 ' + Math.round(out.size / 1048576) + 'MB — 저장 중');
   await ccExportFiles([new File([out], '하이라이트_' + todayStr() + '.' + fmt.ext, { type: fmt.type })], '하이라이트');
   if (ccChan && out.size < 45 * 1048576) { // 본폰으로 전송 (판독 센터에 자동 오픈)
