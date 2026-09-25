@@ -2096,7 +2096,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.36';
+const APP_VERSION = 'v1.37';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8596,6 +8596,21 @@ function mhPrevDraw(src, s, vw, vh) { // 분석 중 미리보기(0.5초마다): 
   c.style.display = 'block'; const g = c.getContext('2d'); try { g.drawImage(src, 0, 0, c.width, c.height); } catch (e) { return; }
   if (s) { g.strokeStyle = '#d4e94e'; g.lineWidth = 2.5; g.beginPath(); g.arc(s.x / vw * c.width, s.y / vh * c.height, 9, 0, 7); g.stroke(); }
 }
+function mhDropStatic(samples, vw) { // v1.37: 네트에 걸린 공·형광 쓰레받기·바닥의 공처럼 한자리에 오래 있는 것 제거
+  const r = Math.max(6, vw * 0.005), r2 = r * r, S = samples.slice().sort((a, b) => a.t - b.t);
+  const G = new Map(), key = (cx, cy) => cx + ',' + cy; // 칸(r) 나눔 — 긴 영상(표본 수만 개)도 빠르게
+  S.forEach((s, i) => { const k = key(Math.floor(s.x / r), Math.floor(s.y / r)); if (!G.has(k)) G.set(k, []); G.get(k).push(i); });
+  const drop = S.map((s, i) => {
+    let near = 0; const cx = Math.floor(s.x / r), cy = Math.floor(s.y / r);
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const j of (G.get(key(cx + dx, cy + dy)) || [])) {
+      if (j === i) continue; const d = Math.abs(S[j].t - s.t); if (d < 0.5) continue;
+      const ex = S[j].x - s.x, ey = S[j].y - s.y; if (ex * ex + ey * ey > r2) continue;
+      near++; if (d <= 3 || near >= 3) return true;
+    }
+    return false;
+  });
+  const out = S.filter((s, i) => !drop[i]); out.dropped = S.length - out.length; return out;
+}
 function mhRallies(samples, dur, vw, vh) { // 표본 → 랠리 [{a,b,dur,t0,t1,n}]: 3초 넘게 끊기면 분리, 좁은 곳에서만 움직이는 구간(공 튀기기·줍기)은 제외
   const S = samples.slice().sort((a, b) => a.t - b.t);
   const wide = S.map((s, i) => { let x0 = s.x, x1 = s.x, y0 = s.y, y1 = s.y; for (let j = i; j >= 0 && S[j].t >= s.t - 1.0; j--) { x0 = Math.min(x0, S[j].x); x1 = Math.max(x1, S[j].x); y0 = Math.min(y0, S[j].y); y1 = Math.max(y1, S[j].y); } for (let j = i; j < S.length && S[j].t <= s.t + 1.5; j++) { x0 = Math.min(x0, S[j].x); x1 = Math.max(x1, S[j].x); y0 = Math.min(y0, S[j].y); y1 = Math.max(y1, S[j].y); } return (x1 - x0) > vw * 0.08 || (y1 - y0) > vh * 0.15; });
@@ -8681,11 +8696,12 @@ async function mhAnalyzeAll() {
     const band = H ? mhBandFor(H, vh) : null;
     await mhSeek(v, 0);
     const base = doneV;
-    const samples = await mhScan(v, dur, band, (t, rate, ns) => {
+    const samples0 = await mhScan(v, dur, band, (t, rate, ns) => {
       const doneNow = base + t, remainV = Math.max(0, mhFiles.slice(fi + 1).length ? (total - doneNow) + 0 : dur - t), wall = (performance.now() - t0w) / 1000, speed = doneNow / Math.max(1, wall);
       mhStatus('분석 중 ' + (fi + 1) + '/' + mhFiles.length + ' · ' + Math.round(100 * t / dur) + '% · 공 ' + ns + '번 확인 · ' + rate.toFixed(1) + '배속' + (speed > 0.05 && wall > 8 ? ' · 약 ' + mhFmtT(remainV / speed) + ' 남음' : '') + ' — 화면을 켜 두세요', 100 * (fi + t / dur) / mhFiles.length);
     });
     doneV += dur;
+    const samples = mhDropStatic(samples0, vw); // v1.37 멈춘 물체 제거
     const rallies = mhRallies(samples, dur, vw, vh);
     an.files.push({ fi, name: f.name, url, dur, vw, vh, H, samples, rallies, date: f.lastModified || Date.now() });
   }
