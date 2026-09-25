@@ -1,4 +1,4 @@
-> ⚠️ 이 파일은 `C:\Projects\Tennis`(학습 PC)의 원본을 공개 저장소 `sync/`에 복사한 것(2026-09-25 22:00). 이메일 등 개인정보는 지웠음. **원본이 기준** — PC 세션에서 갱신하면 `deploy/sync-docs.ps1`로 다시 복사. 저장소에서 연 세션은 코드(app/)만 있고 research/·training-data/·deploy/tests/는 PC에만 있음.
+> ⚠️ 이 파일은 `C:\Projects\Tennis`(학습 PC)의 원본을 공개 저장소 `sync/`에 복사한 것(2026-09-26 01:49). 이메일 등 개인정보는 지웠음. **원본이 기준** — PC 세션에서 갱신하면 `deploy/sync-docs.ps1`로 다시 복사. 저장소에서 연 세션은 코드(app/)만 있고 research/·training-data/·deploy/tests/는 PC에만 있음.
 
 # 테니스메이트 (TennisMate) — 프로젝트 지침
 
