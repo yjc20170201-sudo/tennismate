@@ -1054,14 +1054,15 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-judge">
     <div class="section-title" id="mh-sec">내 영상 하이라이트</div>
     <div class="card" id="mh-card">
-      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 길이 순으로 고르고, 화면이 공을 따라가는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
+      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 타수·길이 순으로 고르고, 화면이 공을 따라가며 먼 코트는 크게 확대하는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 서브도 찾아 표시해요. 타수는 공이 네트 너머로 오간 횟수를 화면으로 센 추정치라 먼 공을 놓치면 조금 적게 나올 수 있어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
       <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">경기 영상 고르기 (여러 개 가능)
         <input type="file" id="mh-file" accept="video/*" multiple style="display:none" onchange="mhPick(event)">
       </label>
       <div id="mh-files" class="muted" style="font-size:12px;margin-top:6px"></div>
       <div class="row" style="gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap">
         <select id="mh-n" style="flex:1;min-width:130px"><option value="5">긴 랠리 5개</option><option value="10" selected>긴 랠리 10개</option><option value="20">긴 랠리 20개</option><option value="0">랠리 전부 (경기 편집본)</option></select>
-        <select id="mh-fmt" style="flex:1;min-width:130px"><option value="v" selected>세로(쇼츠) · 공 따라가기</option><option value="h">가로 · 원래 화면</option></select>
+        <select id="mh-fmt" style="flex:1;min-width:130px"><option value="v" selected>세로(쇼츠) · 공 따라가기</option><option value="hz">가로 · 공 따라 확대</option><option value="h">가로 · 원래 화면</option></select>
+        <select id="mh-min" style="flex:1;min-width:130px"><option value="0" selected>타수 제한 없음</option><option value="3">3타 이상 랠리만</option><option value="5">5타 이상 랠리만</option><option value="7">7타 이상 랠리만</option><option value="10">10타 이상 랠리만</option></select>
       </div>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-audio" checked> 원래 소리(타구음) 넣기</label>
       <div class="row" style="gap:6px;margin-top:10px">
@@ -2096,7 +2097,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.39';
+const APP_VERSION = 'v1.40';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8482,7 +8483,7 @@ async function aiLoadWasb() { // v0.79: WASB 로더 (wasb.js + onnxruntime-web C
 // ── v1.28 내 영상 하이라이트(mh*): 폰으로 찍은 경기 영상 → 랠리 찾기(공 인식) → 긴 랠리로 세로(쇼츠)/가로 하이라이트. 전부 내 폰에서 ──
 let mhFiles = [], mhUrls = [], mhBusy = false, mhStop = false, mhAn = null, mhOut = null, mhActx = null, mhVid = null, mhRVid = null, mhSrcNode = null, mhSilent = null, mhWake = null, mhPlaying = false; // mhVid = 분석용(소리 없음), mhRVid = 만들기용(원래 소리를 녹화로)
 function mhStatus(t, pct) { const el = $('mh-status'); if (el) el.textContent = t; const w = $('mh-barw'), b = $('mh-bar'); if (w) w.style.display = pct == null ? 'none' : 'block'; if (b && pct != null) b.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; }
-function mhOpt() { const nv = parseInt(($('mh-n') || {}).value || '10', 10); return { n: isFinite(nv) ? nv : 10, vert: ($('mh-fmt') || {}).value !== 'h', audio: !!($('mh-audio') || {}).checked }; }
+function mhOpt() { const nv = parseInt(($('mh-n') || {}).value || '10', 10), fm = ($('mh-fmt') || {}).value || 'v', mn = parseInt(($('mh-min') || {}).value || '0', 10); return { n: isFinite(nv) ? nv : 10, vert: fm === 'v', zoom: fm !== 'h', minShots: isFinite(mn) ? mn : 0, audio: !!($('mh-audio') || {}).checked }; }
 function mhFmtT(sec) { sec = Math.max(0, Math.round(sec)); return sec >= 60 ? Math.floor(sec / 60) + '분 ' + (sec % 60) + '초' : sec + '초'; }
 function mhPick(ev) {
   const fl = Array.from((ev && ev.target && ev.target.files) || []).filter(f => /^video\//.test(f.type || '') || /\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name || ''));
@@ -8601,11 +8602,11 @@ function mhDropStatic(samples, vw) { // v1.37: 네트에 걸린 공·형광 쓰�
   const G = new Map(), key = (cx, cy) => cx + ',' + cy; // 칸(r) 나눔 — 긴 영상(표본 수만 개)도 빠르게
   S.forEach((s, i) => { const k = key(Math.floor(s.x / r), Math.floor(s.y / r)); if (!G.has(k)) G.set(k, []); G.get(k).push(i); });
   const drop = S.map((s, i) => {
-    let near = 0; const cx = Math.floor(s.x / r), cy = Math.floor(s.y / r);
+    let near = 0, nearW = 0; const cx = Math.floor(s.x / r), cy = Math.floor(s.y / r);
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const j of (G.get(key(cx + dx, cy + dy)) || [])) {
       if (j === i) continue; const d = Math.abs(S[j].t - s.t); if (d < 0.5) continue;
       const ex = S[j].x - s.x, ey = S[j].y - s.y; if (ex * ex + ey * ey > r2) continue;
-      near++; if (d <= 3 || near >= 3) return true;
+      near++; if (d <= 3) nearW++; if (nearW >= 2 || near >= 6) return true; // v1.40f/g: 토스(같은 자리 한 번 되지남·포인트마다 같은 자리)는 남김
     }
     return false;
   });
@@ -8632,7 +8633,46 @@ function mhRallies(samples, dur, vw, vh) { // 표본 → 랠리 [{a,b,dur,t0,t1,
   for (let i = 1; i < out.length; i++) if (out[i].t0 < out[i - 1].t1) { const m = (out[i - 1].b + out[i].a) / 2; out[i - 1].t1 = Math.min(out[i - 1].t1, m); out[i].t0 = Math.max(out[i].t0, m); } // 이웃 랠리와 겹치지 않게
   return out;
 }
-function mhPath(F, r) { // 세로 창 중심(원본 px): 공 위치 보간 → ±0.6초 평균 → 속도 제한(초당 폭의 50%), 0.05초 간격 표
+function mhShots(F, r) { // v1.40: 타수(먼 쪽 ↔ 가까운 쪽 구역을 넘어간 횟수)·서브 추정
+  const vw = F.vw, vh = F.vh, S = F.samples.filter(q => q.t >= r.a - 2.5 && q.t <= r.b + 0.3).sort((p, q) => p.t - q.t);
+  const R = S.filter(q => q.t >= r.a - 0.3 && q.t <= r.b), out = { shots: null, hits: [], serve: null, ylo: null, yhi: null };
+  if (R.length < 4) return out;
+  const ys = R.map(q => q.y).sort((a, b) => a - b), lo = ys[Math.floor(ys.length * 0.1)], hi = ys[Math.min(ys.length - 1, Math.floor(ys.length * 0.9))];
+  out.ylo = lo; out.yhi = hi;
+  if (hi - lo < vh * 0.1) return out; // 한쪽만 보임 → 타수 모름
+  const farY = lo + (hi - lo) * 0.35, nearY = lo + (hi - lo) * 0.65; let zone = null, nh = 0;
+  let lastHit = -1e9; R.forEach(q => { const z = q.y < farY ? 'far' : q.y > nearY ? 'near' : null; if (!z) return; if (zone && z !== zone) { if (q.t - lastHit < 0.9) return; nh++; out.hits.push({ t: q.t, to: z }); lastHit = q.t; } zone = z; }); // 0.9초 안에 되넘어감 = 다른 공·오탐
+  out.shots = nh;
+  // 서브: 첫 타 전 3초 안에 끝난 토스(mhServes)
+  const tEnd = out.hits.length ? out.hits[0].t : r.a + 1.5;
+  const sv = (F.serves || (F.serves = mhServes(F))).filter(q => q.t0 >= r.a - 2.5 && q.t0 <= tEnd && tEnd - q.t <= 3).pop();
+  out.serve = sv ? { t0: sv.t0, t: sv.t, side: sv.my > (lo + hi) / 2 ? 'near' : 'far' } : null; return out;
+}
+function mhServes(F) { // v1.40: 영상 전체에서 서브 토스 — 좁은 곳(좌우 3%)에서 0.3~2초 동안 위로 올라갔다(1.5%↑) 0.8초 안에 크게(폭 5%↑) 떠남
+  const vw = F.vw, vh = F.vh, S = F.samples.slice().sort((p, q) => p.t - q.t), out = []; let i = 0;
+  while (i < S.length) {
+    let j = i; while (j + 1 < S.length && Math.abs(S[j + 1].x - S[i].x) < vw * 0.04 && S[j + 1].t - S[j].t < 1.0) j++; // 토스 꼭대기는 느려 표본이 빠짐 → 빈틈 1초까지
+    const run = S.slice(i, j + 1); let away = 0; for (let q = j + 1; q < S.length && S[q].t - S[j].t <= 0.8; q++) away = Math.max(away, Math.hypot(S[q].x - S[j].x, S[q].y - S[j].y));
+    if (run.length >= 3 && away > vw * 0.05) {
+      const yv = run.map(q => q.y), ap = yv.indexOf(Math.min(...yv)), xv = run.slice(0, ap + 2).map(q => q.x), span = Math.max(...yv) - Math.min(...yv), d = S[j].t - S[i].t, up = yv[0] - Math.min(...yv);
+      const quiet = S.slice(Math.max(0, i - 30), i).filter(q => q.t >= S[i].t - 1.5).every(q => Math.hypot(q.x - S[i].x, q.y - S[i].y) < vw * 0.06); // 토스 전 1.5초는 조용해야
+      if (quiet && run[ap].t - S[i].t <= 1.0 && span >= vh * 0.02 && up >= vh * 0.015 && Math.max(...xv) - Math.min(...xv) < vw * 0.03 && d >= 0.3 && d <= 2.0) out.push({ t0: S[i].t, t: S[j].t, my: yv.reduce((a, b) => a + b, 0) / yv.length });
+    }
+    i = j + 1;
+  }
+  return out;
+}
+function mhSplitServe(F) { // v1.40: 랠리 한가운데 서브가 있으면 거기서 새 포인트로
+  const out = [];
+  (F.rallies || []).forEach(r => {
+    const cuts = (F.serves || []).filter(q => q.t0 > r.a + 2 && q.t0 < r.b - 2).map(q => q.t0);
+    if (!cuts.length) { out.push(r); return; }
+    let a = r.a; cuts.concat([null]).forEach(c => { const b = c == null ? r.b : c - 0.8; if (b - a >= 2.5) out.push({ a, b, dur: b - a, n: r.n, t0: Math.max(0, a - 2.0), t1: Math.min(F.dur || b + 1.5, b + 1.5) }); if (c != null) a = c; });
+  });
+  for (let i = 1; i < out.length; i++) if (out[i].t0 < out[i - 1].t1) { const m = (out[i - 1].b + out[i].a) / 2; out[i - 1].t1 = Math.min(out[i - 1].t1, m); out[i].t0 = Math.max(out[i].t0, m); }
+  return out;
+}
+function mhPath(F, r, zmax) { // 세로 창 중심(원본 px): 공 위치 보간 → ±0.6초 평균 → 속도 제한(초당 폭의 50%), 0.05초 간격 표
   const S = F.samples.filter(q => q.t >= r.t0 - 2 && q.t <= r.t1 + 2), dt = 0.05, n = Math.max(2, Math.ceil((r.t1 - r.t0) / dt) + 1), raw = new Float32Array(n);
   let j = 0;
   for (let i = 0; i < n; i++) {
@@ -8643,9 +8683,23 @@ function mhPath(F, r) { // 세로 창 중심(원본 px): 공 위치 보간 → �
   const K = Math.round(0.6 / dt), sm = new Float32Array(n);
   for (let i = 0; i < n; i++) { let a = 0, c = 0; for (let q = Math.max(0, i - K); q <= Math.min(n - 1, i + K); q++) { a += raw[q]; c++; } sm[i] = a / c; }
   const vmax = F.vw * 0.5 * dt; for (let i = 1; i < n; i++) sm[i] = sm[i - 1] + Math.max(-vmax, Math.min(vmax, sm[i] - sm[i - 1]));
-  return { t0: r.t0, dt, xs: sm };
+  const out = { t0: r.t0, dt, xs: sm, zoom: false };
+  if (!(zmax > 1.01)) return out;
+  // v1.40: 세로 위치·확대 배율 — 공이 먼 쪽(화면 위)일수록 크게, 공을 0.7초 넘게 못 보면 1배
+  const lo = r.ylo != null ? r.ylo : F.vh * 0.3, hi = r.yhi != null && r.yhi - lo > F.vh * 0.05 ? r.yhi : lo + F.vh * 0.4;
+  const yr = new Float32Array(n), zr = new Float32Array(n); j = 0;
+  for (let i = 0; i < n; i++) {
+    const t = r.t0 + i * dt; while (j < S.length - 1 && S[j + 1].t <= t) j++;
+    let y = F.vh / 2, near = false;
+    if (S.length) { if (t <= S[0].t) { y = S[0].y; near = S[0].t - t < 0.7; } else if (j >= S.length - 1) { y = S[S.length - 1].y; near = t - S[S.length - 1].t < 0.7; } else { const a = S[j], b = S[j + 1]; y = b.t - a.t > 2.5 ? a.y : a.y + (b.y - a.y) * (t - a.t) / (b.t - a.t); near = Math.min(t - a.t, b.t - t) < 0.7; } }
+    yr[i] = y; const yn = Math.max(0, Math.min(1, (y - lo) / Math.max(1, hi - lo))); zr[i] = near ? 1 + (zmax - 1) * (1 - yn) : 1;
+  }
+  const K2 = Math.round(0.8 / dt), ys = new Float32Array(n), zs = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let a = 0, b = 0, c = 0; for (let q = Math.max(0, i - K2); q <= Math.min(n - 1, i + K2); q++) { a += yr[q]; b += zr[q]; c++; } ys[i] = a / c; zs[i] = b / c; }
+  const zv = 0.6 * dt, yv = F.vh * 0.5 * dt; for (let i = 1; i < n; i++) { zs[i] = zs[i - 1] + Math.max(-zv, Math.min(zv, zs[i] - zs[i - 1])); ys[i] = ys[i - 1] + Math.max(-yv, Math.min(yv, ys[i] - ys[i - 1])); }
+  out.ys = ys; out.zs = zs; out.zoom = true; return out;
 }
-function mhPathAt(p, t) { return p.xs[Math.max(0, Math.min(p.xs.length - 1, Math.round((t - p.t0) / p.dt)))]; }
+function mhPathAt(p, t, arr) { const a = arr || p.xs; return a[Math.max(0, Math.min(a.length - 1, Math.round((t - p.t0) / p.dt)))]; }
 function mhRRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
 let mhSrcMode = 'el', mhBlackN = 0, mhVfUsed = false, mhDrawErr = '';
 function mhDraw(g, v, OW, OH, vert, t, path, S, i, total, r) {
@@ -8653,7 +8707,10 @@ function mhDraw(g, v, OW, OH, vert, t, path, S, i, total, r) {
   g.fillStyle = '#000'; g.fillRect(0, 0, OW, OH);
   let X, Y, src = v, vf = null;
   if (mhSrcMode === 'vf' && window.VideoFrame) { try { vf = new VideoFrame(v); src = vf; mhVfUsed = true; } catch (e) { mhDrawErr = 'VideoFrame ' + (e && e.name); } } // v1.29c: 요소에서 바로 그리면 검을 때
-  if (vert) { const cw = Math.min(vw, vh * OW / OH), left = Math.max(0, Math.min(vw - cw, mhPathAt(path, t) - cw / 2)); try { g.drawImage(src, left, 0, cw, vh, 0, 0, OW, OH); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => (x - left) * OW / cw; Y = y => y * OH / vh; }
+  if (vert || path.zoom) { // v1.40: 공 따라 이동 + 확대(z)
+    const z = path.zoom ? Math.max(1, mhPathAt(path, t, path.zs)) : 1; let ch = vh / z, cw = ch * OW / OH; if (cw > vw) { cw = vw; ch = cw * OH / OW; }
+    const left = Math.max(0, Math.min(vw - cw, mhPathAt(path, t) - cw / 2)), top = Math.max(0, Math.min(vh - ch, (path.zoom ? mhPathAt(path, t, path.ys) : vh / 2) - ch / 2));
+    try { g.drawImage(src, left, top, cw, ch, 0, 0, OW, OH); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => (x - left) * OW / cw; Y = y => (y - top) * OH / ch; }
   else { const fr = aiFitRect(vw, vh, OW, OH) || { x: 0, y: 0, w: OW, h: OH }; try { g.drawImage(src, fr.x, fr.y, fr.w, fr.h); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => fr.x + x * fr.w / vw; Y = y => fr.y + y * fr.h / vh; }
   if (vf) { try { vf.close(); } catch (e) {} }
   // 공 자국(최근 0.6초): 오래될수록 작고 옅게
@@ -8665,12 +8722,14 @@ function mhDraw(g, v, OW, OH, vert, t, path, S, i, total, r) {
     g.fillStyle = 'rgba(212,233,78,' + (0.3 + 0.7 * al).toFixed(2) + ')'; g.beginPath(); g.arc(X(p[1]), Y(p[2]), (2.5 + 5 * al) * u, 0, 7); g.fill();
   }
   // 제목 칩
-  const title = 'RALLY ' + (i + 1), sub = Math.round(r.dur) + '초 랠리';
+  const title = 'RALLY ' + (i + 1), sub = (r.shots != null ? r.shots + '타 · ' : '') + Math.round(r.dur) + '초 랠리';
   g.font = 'bold ' + Math.round(30 * u) + 'px sans-serif'; const tw = g.measureText(title).width; g.font = Math.round(20 * u) + 'px sans-serif'; const sw = g.measureText(sub).width;
   const bw = Math.max(tw, sw) + 32 * u; g.fillStyle = 'rgba(0,0,0,.55)'; mhRRect(g, 20 * u, 26 * u, bw, 78 * u, 14 * u); g.fill();
   g.textAlign = 'left'; g.fillStyle = '#d4e94e'; g.font = 'bold ' + Math.round(30 * u) + 'px sans-serif'; g.fillText(title, 36 * u, 62 * u);
   g.fillStyle = '#fff'; g.font = Math.round(20 * u) + 'px sans-serif'; g.fillText(sub, 36 * u, 92 * u);
   g.textAlign = 'right'; g.fillStyle = 'rgba(255,255,255,.85)'; g.font = 'bold ' + Math.round(20 * u) + 'px sans-serif'; g.fillText((i + 1) + ' / ' + total, OW - 22 * u, 58 * u);
+  if (r.shots != null) { const k = (r.hits || []).filter(h => h.t <= t).length; if (k > 0) { const txt = k + '타'; g.font = 'bold ' + Math.round(40 * u) + 'px sans-serif'; const w = g.measureText(txt).width + 26 * u; g.fillStyle = 'rgba(0,0,0,.55)'; mhRRect(g, OW - 20 * u - w, 72 * u, w, 56 * u, 12 * u); g.fill(); g.fillStyle = '#d4e94e'; g.fillText(txt, OW - 33 * u, 114 * u); } } // v1.40 공이 넘어갈 때마다 올라감
+  if (r.serve && t >= r.serve.t0 - 0.3 && t <= r.serve.t + 1.2) { g.textAlign = 'center'; g.font = 'bold ' + Math.round(34 * u) + 'px sans-serif'; const txt = 'SERVE', w = g.measureText(txt).width + 36 * u; g.fillStyle = 'rgba(27,122,67,.85)'; mhRRect(g, OW / 2 - w / 2, OH * 0.16, w, 54 * u, 27 * u); g.fill(); g.fillStyle = '#fff'; g.fillText(txt, OW / 2, OH * 0.16 + 39 * u); }
   g.textAlign = 'center'; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = 'bold ' + Math.round(18 * u) + 'px sans-serif'; g.fillText('테니스메이트', OW / 2, OH - 26 * u); g.textAlign = 'left';
 }
 function mhCard(g, OW, OH, lines, p) { // 제목·끝 카드: [text, size, color]
@@ -8734,7 +8793,7 @@ async function mhRender(sel, opt) {
     { g.fillStyle = '#0d1f16'; g.fillRect(0, 0, OW, OH); g.fillStyle = '#d4e94e'; g.textAlign = 'center'; g.font = '700 ' + Math.round(OW * 0.07) + 'px sans-serif'; g.fillText('RALLY ' + (i + 1), OW / 2, OH / 2); g.textAlign = 'left'; } // v1.39: 녹화기를 멈추지 않고 이동 중엔 전환 화면(폰 크롬 MP4가 pause 뒤 끊기던 문제)
     if (curUrl !== F.url) { const ok = await mhMeta(v, F.url); curUrl = F.url; if (!ok) continue; }
     await mhSeek(v, r.t0); v.playbackRate = 1; v.muted = !dest;
-    const path = mhPath(F, r), S = F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1);
+    const path = mhPath(F, r, opt.zoom ? (vert ? 1.3 : 1.8) : 1), S = F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1);
     mhDraw(g, v, OW, OH, vert, r.t0, path, S, i, sel.length, r);
     await v.play().catch(() => {}); if (rec.state === 'paused') rec.resume();
     await new Promise(res => {
@@ -8776,17 +8835,21 @@ async function mhGo() {
   try {
     if (!mhAn) mhAn = await mhAnalyzeAll();
     if (mhStop) { mhStatus('멈췄어요 — 다시 누르면 처음부터 분석해요', null); mhAn = null; return; }
+    mhAn.files.forEach(F => { if (!F.split && F.samples) { F.serves = mhServes(F); F.rallies = mhSplitServe(F); F.split = true; } }); // v1.40 서브로 포인트 나누기(한 번만)
     const all = []; mhAn.files.forEach(F => (F.rallies || []).forEach(r => all.push({ F, r })));
     const errs = mhAn.files.filter(F => F.err).map(F => F.name + ': ' + F.err);
     if (!all.length) { mhStatus('랠리를 못 찾았어요 — 코트 뒤쪽에서 가로로, 코트 전체가 보이게 찍은 영상인지 확인해 주세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : ''), null); return; }
-    let sel = opt.n > 0 ? all.slice().sort((a, b) => b.r.dur - a.r.dur).slice(0, opt.n) : all.slice();
+    all.forEach(q => { if (q.r.shotsDone) return; const k = mhShots(q.F, q.r); Object.assign(q.r, k, { shotsDone: true }); if (k.serve && k.serve.t0 - 1.0 < q.r.t0) q.r.t0 = Math.max(0, q.r.t0 - 1.5, k.serve.t0 - 1.0); }); // v1.40 타수·서브(한 번만)
+    const pool = opt.minShots > 0 ? all.filter(q => (q.r.shots || 0) >= opt.minShots) : all;
+    if (!pool.length) { mhStatus('찾은 랠리 ' + all.length + '개 중 ' + opt.minShots + '타 이상인 랠리가 없어요 — 타수 제한을 낮춰 보세요 (가장 긴 랠리 ' + Math.max(0, ...all.map(q => q.r.shots || 0)) + '타)', null); return; }
+    let sel = opt.n > 0 ? pool.slice().sort((a, b) => (b.r.shots || 0) - (a.r.shots || 0) || b.r.dur - a.r.dur).slice(0, opt.n) : pool.slice();
     sel.sort((a, b) => a.F.fi - b.F.fi || a.r.t0 - b.r.t0);
     const out = await mhRender(sel, opt);
     if (!out) { mhStatus('멈췄어요 — [하이라이트 만들기]를 다시 누르면 분석 결과로 바로 만들어요', null); return; }
     mhOut = out;
     const ov = $('mh-out'); if (ov) { try { if (ov.src) URL.revokeObjectURL(ov.src); } catch (e) {} ov.src = URL.createObjectURL(out.blob); }
     if (res) res.style.display = 'block';
-    const lst = $('mh-list'); if (lst) lst.textContent = '찾은 랠리 ' + all.length + '개 중 ' + sel.length + '개 · ' + sel.map(q => (mhFiles.length > 1 ? (q.F.fi + 1) + '번 ' : '') + mhFmtT(q.r.t0) + ' (' + Math.round(q.r.dur) + '초)').join(', ') + (mhAn.files.some(F => F.H) ? '' : ' · 코트 자동 인식이 안 돼 옆 코트 공도 섞일 수 있어요');
+    const lst = $('mh-list'); if (lst) lst.textContent = '찾은 랠리 ' + all.length + '개 중 ' + (opt.minShots > 0 ? opt.minShots + '타 이상 ' + pool.length + '개 중 ' : '') + sel.length + '개 · 서브 ' + sel.filter(q => q.r.serve).length + '번 찾음 · ' + sel.map(q => (mhFiles.length > 1 ? (q.F.fi + 1) + '번 ' : '') + mhFmtT(q.r.t0) + ' (' + (q.r.shots != null ? q.r.shots + '타 ' : '') + Math.round(q.r.dur) + '초)').join(', ') + (mhAn.files.some(F => F.H) ? '' : ' · 코트 자동 인식이 안 돼 옆 코트 공도 섞일 수 있어요');
     mhStatus('완성 — ' + Math.round(out.blob.size / 1048576) + 'MB · [저장 · 공유]로 사진첩이나 카톡에 보내세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : '') + (out.diag ? ' · ' + out.diag : ''), null);
   } catch (e) {
     console.warn('mh', e); mhStatus('실패: ' + ((e && e.message) || e), null);
