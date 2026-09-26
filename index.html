@@ -1156,8 +1156,8 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (기본 소형 v2 · 첫 실행 0.8MB)</button>
-        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v10.onnx">소형 v10 — 빠름 (0.8MB, 9/9~9/22 야간 코트까지 학습, 기본)</option><option value="ball_tiny_xl_v7.onnx">소형 v7 — 이전 (야간 코트 없음)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v10.onnx|wasm">소형 v10 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
-        <div class="muted" style="font-size:11px;margin-top:3px">소형 v10 = WASB를 선생님으로 우리 코트 영상(9/9~9/22, 야간 다른 코트 포함) 학습(0.8MB, 검증 영상 11개 재현율 90%·정밀도 92%·바운스 105/123, v7보다 처음 보는 야간 코트 재현율 +7~18%p, 2026-09-23). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v14.onnx">소형 v14 — 빠름 (0.8MB, 9/9~9/25 학습·멈춘 물체 덜 잡음, 기본)</option><option value="ball_tiny_xl_v10.onnx">소형 v10 — 이전 (9/24·9/25 코트 없음)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v14.onnx|wasm">소형 v14 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
+        <div class="muted" style="font-size:11px;margin-top:3px">소형 v14 = WASB를 선생님으로 우리 코트 영상(9/9~9/25, 야간·파란 하드코트 포함) 학습, 네트에 걸린 공·쓰레받기 같은 멈춘 물체는 학습에서 뺌(0.8MB, 검증 영상 13개 재현율 90%·정밀도 92%·바운스 113/133, v10보다 새 코트 바운스 +2, 2026-09-26). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
@@ -2125,7 +2125,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.44';
+const APP_VERSION = 'v1.45';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8492,8 +8492,8 @@ async function aiAnalyze() {
     aiBusy = false; $('ai-run-btn').disabled = false;
   }
 }
-let aiModelFile = 'ball_tiny_xl_v10.onnx'; // v1.24 기본 = 소형 v10 (검증 영상 11개 @0.4 clean 라벨: 재현율 90.0%·정밀도 91.8%·바운스 105/123; v7 87.5/91.4/105 — 9/22 야간 다른 코트 재현율 70→88·82→89, 9/22 아이폰 낮 정밀도 87→95)
-try { const st = localStorage.getItem('tm-ball-model'); if (st && (!/^ball_tiny_xl_v[1-9]\.onnx/.test(st) || localStorage.getItem('tm-ball-model-user'))) aiModelFile = st; } catch (e) {} // 이전 기본값(v1~v9)은 직접 고른 게 아니면 v10으로
+let aiModelFile = 'ball_tiny_xl_v14.onnx'; // v1.45 기본 = 소형 v14 (static2 검증 13개 90.4/92.3/113 vs v10 90.0/91.7/112) · 이전: v1.24 기본 = 소형 v10 (검증 영상 11개 @0.4 clean 라벨: 재현율 90.0%·정밀도 91.8%·바운스 105/123; v7 87.5/91.4/105 — 9/22 야간 다른 코트 재현율 70→88·82→89, 9/22 아이폰 낮 정밀도 87→95)
+try { const st = localStorage.getItem('tm-ball-model'); if (st && (!/^ball_tiny_xl_v(?:[1-9]|1[0-3])\.onnx/.test(st) || localStorage.getItem('tm-ball-model-user'))) aiModelFile = st; } catch (e) {} // v1.45: 이전 기본값(v1~v13)은 직접 고른 게 아니면 v14로 · v10으로
 function aiModelSet(v) { aiModelFile = /^[a-z0-9_]+\.onnx(\|wasm)?$/i.test(v) ? v : 'wasb_tennis.onnx'; try { localStorage.setItem('tm-ball-model', aiModelFile); localStorage.setItem('tm-ball-model-user', '1'); } catch (e) {} const sel = $('ai-model'); if (sel && sel.value !== aiModelFile) sel.value = aiModelFile; }
 function aiModelThr() { return /tiny_xl_v(?:[2-9]|\d{2})/.test(aiModelFile) ? 0.4 : 0.5; } // v2 이후 소형 모델은 임계 0.4가 최적(v4: 0.5 바운스 63/71, 0.4는 67/71, 0.3은 정밀도 85%로 하락)
 document.addEventListener('DOMContentLoaded', () => { const sel = $('ai-model'); if (sel) sel.value = aiModelFile; });
@@ -11617,7 +11617,7 @@ function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스
 let clModel = !!navigator.gpu; try { const s0 = localStorage.getItem('tm-cl-model'); if (s0 !== null) clModel = s0 === '1'; } catch (e) {}
 let clModelLive = false, clMBusy = false, clMK = 0, clMN = 0, clMPool = null, clMT = [0, 0, 0], clMSlow = 0;
 function clModelSet(on) { clModel = !!on; try { localStorage.setItem('tm-cl-model', clModel ? '1' : '0'); } catch (e) {} if (clOn) toast('다음에 라이브 판정을 켤 때부터 적용돼요'); }
-function clModelFile() { const mf = (typeof aiModelFile === 'string' ? aiModelFile : '').split('|')[0]; return /tiny_xl/.test(mf) ? mf : 'ball_tiny_xl_v10.onnx'; } // WASB 원본(5MB)은 라이브엔 느려 소형만
+function clModelFile() { const mf = (typeof aiModelFile === 'string' ? aiModelFile : '').split('|')[0]; return /tiny_xl/.test(mf) ? mf : 'ball_tiny_xl_v14.onnx'; } // WASB 원본(5MB)은 라이브엔 느려 소형만
 async function clModelStart() {
   try {
     clStatus('학습 모델 준비 중… (소형 v4)');
