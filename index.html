@@ -1333,7 +1333,9 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <div id="cc-hl-live" style="display:none;margin-top:6px"></div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">폰 보관 상한</span><select id="cc-keep" onchange="ccKeepSet(this.value)" style="flex:1"><option value="120">2시간 (120개, 약 2GB)</option><option value="240" selected>4시간 (240개, 약 4GB, 기본)</option><option value="480">8시간 (480개, 약 8.5GB)</option><option value="960">16시간 (960개, 약 17GB — 폰 용량 확인)</option></select></div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">녹화 화질</span><select id="cc-res" onchange="ccResSet(this.value)" style="flex:1"><option value="1080">1080p 선명 (1분 약 45MB)</option><option value="720">720p 가벼움 (1분 약 37MB)</option></select></div>
-            <div class="muted" style="font-size:11px;margin-top:3px">하이라이트·쇼츠를 선명하게 뽑으려면 1080p. 1080p에서 폰이 1초에 27장을 못 찍으면 시작 10초쯤 뒤 자동으로 720p로 바꿔요(공 인식은 선명도보다 장수가 중요). 저장 공간이 65%를 넘으면 남은 시간을 말로 알려 주고, 80%에 가까워지면 찍은 영상을 지키려고 녹화를 멈춰요 — 경기 뒤엔 꼭 PC로 옮기세요.</div>
+            <div class="row" style="gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><span class="muted" style="font-size:12px">녹화 형식</span><select id="cc-codec" onchange="ccCodecSet(this.value)" style="flex:1;min-width:150px"><option value="auto">자동 (장면이 빠지면 H.264로)</option><option value="h264">H.264 (MP4)</option><option value="vp8">VP8 (WebM)</option></select><button type="button" class="btn small outline" style="flex:0 0 auto" onclick="ccFpsTrial()">초당 장수 시험 (1분)</button><span id="cc-codec-now" class="muted" style="font-size:11px;flex-basis:100%"></span></div>
+            <pre id="cc-fpstest" hidden class="muted" style="font-size:11px;white-space:pre-wrap;margin:6px 0 0"></pre>
+            <div class="muted" style="font-size:11px;margin-top:3px">하이라이트·쇼츠를 선명하게 뽑으려면 1080p. 녹화된 영상이 1초에 27장이 안 되면 먼저 녹화 형식을 H.264로 바꿔 보고, 그래도 모자라면 720p로 바꾸며 말로 알려 줘요(공 인식은 선명도보다 장수가 중요). [초당 장수 시험]은 1분 동안 형식·라이브 판정별 장수를 재서 보여 줘요. 저장 공간이 65%를 넘으면 남은 시간을 말로 알려 주고, 80%에 가까워지면 찍은 영상을 지키려고 녹화를 멈춰요 — 경기 뒤엔 꼭 PC로 옮기세요.</div>
             <div class="muted" style="font-size:11px;margin-top:3px">상한을 넘기면 옛 영상부터 자동으로 지워져요(설정 › 저장·삭제 이력에 prune으로 남음). 경기 뒤엔 [PC로 영상 보내기 대기]로 먼저 옮기세요. 폰 저장 공간이 모자라면 저장 실패가 상태 줄에 떠요.</div>
             <div class="row" style="gap:6px;margin-top:8px;align-items:center"><span class="muted" style="font-size:12px">내보내기 묶음</span><select id="cc-batch" onchange="ccBatchSet(this.value)" style="flex:1"><option value="5">5개씩 (안전)</option><option value="10" selected>10개씩 (기본)</option><option value="20">20개씩</option><option value="0">전부 한 번에 (실패할 수 있음)</option></select></div>
             <div class="muted" style="font-size:11.5px;margin-top:4px">한 번에 옮기려면: [캠 영상 파일로 다운로드] → 파일 앱 › 다운로드 폴더 › 선택 › 전체 선택 › 공유 › "비디오 저장" — 사진 앨범으로 한 번에 들어가요. 그다음 USB로 PC에서 <b>아이폰_영상_가져오기</b> 실행.</div>
@@ -2125,7 +2127,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.47';
+const APP_VERSION = 'v1.48';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10080,23 +10082,184 @@ async function ccFpsMeasure(sec) { // 카메라가 실제로 보내는 초당 �
   const v = $('cc-cam'); if (!v || typeof v.requestVideoFrameCallback !== 'function') return 0;
   return await new Promise(res => { let a = null; const t0 = performance.now(); const cb = (now, md) => { if (!a) a = md; if (now - t0 >= sec * 1000) return res(md.presentedFrames > a.presentedFrames ? (md.presentedFrames - a.presentedFrames) / ((md.mediaTime - a.mediaTime) || (now - t0) / 1000) : 0); v.requestVideoFrameCallback(cb); }; v.requestVideoFrameCallback(cb); setTimeout(() => res(0), sec * 1000 + 3000); });
 }
+function ccGo720(fps, why) { // v1.48b: 1080p 장수 부족 → 720p. 저장·클립 업로드·재획득 중이면 2초마다 미룸. 아이폰은 탭 없이 카메라를 못 여므로 다음 시작부터
+  try { localStorage.setItem('tm-cc-fpslow', '1'); } catch (e) {}
+  const r = $('cc-res'); if (r) r.value = '720';
+  if (/iP(hone|ad|od)/.test(navigator.userAgent)) { ccLog('fps-low', why + ' → 다음 시작부터 720p(아이폰)'); ccStatus('📷 1080p에서 1초에 ' + Math.round(fps) + '장밖에 안 돼요 — 클럽캠을 다시 켜면 720p로 찍어요'); return; }
+  ccLog('fps-low', why + ' → 720p'); ccStatus('📷 1080p에서 1초에 ' + Math.round(fps) + '장밖에 안 찍혀서 720p로 바꿨어요 — 공이 장면 사이에서 사라지지 않게');
+  clAutoSay('1초에 ' + Math.round(fps) + '장밖에 안 찍혀서 720p로 바꿀게요');
+  let tries = 0; const go = () => { if (!ccStream || ccTrialOn) return; if ((ccBusy || ccReacq || ccSealP) && tries++ < 60) { setTimeout(go, 2000); return; } ccReacquire('fps'); }; go();
+}
 function ccFpsSchedule() { // 트랙마다 한 번, 녹화 시작 8초 뒤
   const tr = ccStream && ccStream.getVideoTracks()[0]; if (!tr || tr.id === ccFpsTrack) return; ccFpsTrack = tr.id; const my = tr.id;
   setTimeout(async () => {
     const t2 = ccStream && ccStream.getVideoTracks()[0]; if (!t2 || t2.id !== my || ccReacq) return;
     const st = t2.getSettings ? t2.getSettings() : {}, fps = await ccFpsMeasure(4); ccFpsLast = fps; if (!fps) return;
     ccLog('fps', Math.round(fps * 10) / 10 + '장/초 · ' + (st.width || '?') + '×' + (st.height || '?'));
-    if ((st.height || 0) >= 1000 && fps < 27 && ccResPref() === '1080') {
-      try { localStorage.setItem('tm-cc-fpslow', '1'); } catch (e) {}
-      ccLog('fps-low', Math.round(fps) + '장/초 → 720p'); ccStatus('📷 1080p에서 1초에 ' + Math.round(fps) + '장밖에 안 찍혀서 720p로 바꿨어요 — 공이 장면 사이에서 사라지지 않게');
-      clAutoSay('1초에 ' + Math.round(fps) + '장밖에 안 찍혀서 720p로 바꿀게요');
-      const r = $('cc-res'); if (r) r.value = '720';
-      ccReacquire('fps');
-    }
+    if ((st.height || 0) >= 1000 && fps < 27 && ccResPref() === '1080' && !ccTrialOn) ccGo720(fps, '카메라 ' + Math.round(fps) + '장/초'); // v1.48b 바쁘면 미룸·아이폰은 다음 시작부터
   }, 8000);
 }
 
 function ccResSet(v) { try { localStorage.setItem('tm-cc-res', v === '720' ? '720' : '1080'); if (v !== '720') localStorage.removeItem('tm-cc-fpslow'); } catch (e) {} /* v1.46: 1080p를 다시 고르면 자동 낮춤 표시를 지우고 다시 재 봄 */ toast('다음 클럽캠 시작부터 ' + (v === '720' ? '720p' : '1080p') + '로 녹화해요' + (ccStream ? ' — 지금 바로 바꾸려면 클럽캠을 껐다 켜세요' : '')); }
+function ccCodecPref() { try { const v = localStorage.getItem('tm-cc-codec'); if (v === 'h264' || v === 'vp8') return v; } catch (e) {} return 'auto'; }
+function ccH264Ok() { try { return typeof MediaRecorder !== 'undefined' && (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') || MediaRecorder.isTypeSupported('video/mp4')); } catch (e) { return false; } }
+function ccRecPick() { // v1.48: 설정(자동/H.264/VP8) — 자동은 지금처럼(recPick), 장면이 빠진 적 있는 폰(tm-cc-codec-auto=h264)은 H.264 먼저
+  const p = ccCodecPref(); let want = p;
+  if (p === 'auto') { let a = ''; try { a = localStorage.getItem('tm-cc-codec-auto') || ''; } catch (e) {} want = a === 'h264' ? 'h264' : ''; }
+  if (!want || typeof MediaRecorder === 'undefined') return recPick(false);
+  const H = ['video/mp4;codecs=avc1', 'video/mp4'], V = ['video/webm;codecs=vp8', 'video/webm'];
+  const m = (want === 'h264' ? H.concat(V) : V.concat(H)).find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) || '';
+  if (!m) return recPick(false);
+  const type = m.startsWith('video/mp4') ? 'video/mp4' : 'video/webm';
+  return { mime: m, type, ext: type === 'video/mp4' ? 'mp4' : 'webm' };
+}
+function ccCodecSet(v) {
+  try { localStorage.setItem('tm-cc-codec', v === 'h264' || v === 'vp8' ? v : 'auto'); localStorage.removeItem('tm-cc-codec-auto'); } catch (e) {} ccCodecTried = false; ccVp8Fps = 0; // v1.48b 자동을 다시 고르면 학습값 지움
+  toast(v === 'h264' ? 'H.264(MP4)로 녹화해요' : v === 'vp8' ? 'VP8(WebM)으로 녹화해요' : '자동 — 지금처럼 찍다가 장면이 빠지면 H.264로 바꿔 봐요');
+  ccRecFpsKey = ''; if (ccStream) ccFlushSoon();
+}
+function ccFlushSoon() { if (!ccStream || ccTrialOn) return; if (ccBusy || ccReacq || ccSealP) { setTimeout(ccFlushSoon, 2000); return; } ccFlush(); } // v1.48b 재획득 중엔 미룸
+async function vidFrameStats(blob) { // v1.48: 녹화 파일의 영상 트랙 프레임 수·시각 → 실제 초당 장수 { kind, frames, dur, fps, maxGap(ms), drops }
+  if (!blob || !blob.size) return null;
+  const W = 1 << 20; let ws = -1, buf = null;
+  const bytes = async (p, k) => { if (p < 0 || k < 0 || p + k > blob.size) return null; if (!buf || p < ws || p + k > ws + buf.length) { ws = p; buf = new Uint8Array(await blob.slice(p, Math.min(blob.size, p + Math.max(W, k))).arrayBuffer()); } return buf.subarray(p - ws, p - ws + k); };
+  const uint = b => { let v = 0; for (let i = 0; i < b.length; i++) v = v * 256 + b[i]; return v; };
+  const h = await bytes(0, 12); if (!h) return null;
+  let times = [], kind = '';
+  if (h[0] === 0x1A && h[1] === 0x45 && h[2] === 0xDF && h[3] === 0xA3) { // WebM
+    kind = 'webm';
+    const vint = async (p, raw) => { const b = await bytes(p, 1); if (!b) return null; const f0 = b[0]; let len = 1; while (len <= 8 && !(f0 & (0x80 >> (len - 1)))) len++; if (len > 8) return null; const a = await bytes(p, len); if (!a) return null; let v = raw ? f0 : (f0 & (0xFF >> len)); let ones = !raw && v === (0xFF >> len); for (let i = 1; i < len; i++) { v = v * 256 + a[i]; if (a[i] !== 0xFF) ones = false; } return { v, len, unknown: ones }; };
+    const CONT = new Set([0x18538067, 0x1F43B675, 0x1654AE6B, 0xAE, 0xA0, 0x1549A966]); // Segment·Cluster·Tracks·TrackEntry·BlockGroup·Info
+    let p = 0, vTrack = 0, tNum = 0, tType = 0, cTC = 0, scale = 1e6, guard = 0;
+    while (p < blob.size && guard++ < 3000000) {
+      const id = await vint(p, true); if (!id) break; const sz = await vint(p + id.len, false); if (!sz) break;
+      const dp = p + id.len + sz.len, ID = id.v;
+      if (CONT.has(ID)) { if (ID === 0xAE) { tNum = 0; tType = 0; } p = dp; continue; }
+      if (sz.unknown) break;
+      if (ID === 0xD7 || ID === 0x83) { const b = await bytes(dp, sz.v); if (!b) break; if (ID === 0xD7) tNum = uint(b); else tType = uint(b); if (tType === 1 && tNum && !vTrack) vTrack = tNum; }
+      else if (ID === 0x2AD7B1) { const b = await bytes(dp, sz.v); if (b) scale = uint(b) || 1e6; }
+      else if (ID === 0xE7) { const b = await bytes(dp, sz.v); if (b) cTC = uint(b); }
+      else if (ID === 0xA3 || ID === 0xA1) { const tn = await vint(dp, false); const b = tn && await bytes(dp + tn.len, 2); if (b && (!vTrack || tn.v === vTrack)) times.push((cTC + (((b[0] << 8) | b[1]) << 16 >> 16)) * scale / 1e6); }
+      p = dp + sz.v;
+    }
+  } else { // MP4 (조각 moof/trun 또는 보통 stts)
+    kind = 'mp4';
+    const top = []; let p = 0;
+    while (p + 8 <= blob.size) { const b = await bytes(p, Math.min(16, blob.size - p)); if (!b || b.length < 8) break; const dv = new DataView(b.buffer, b.byteOffset, b.length); let sz = dv.getUint32(0), hd = 8; const t = String.fromCharCode(b[4], b[5], b[6], b[7]); if (sz === 1 && b.length >= 16) { sz = dv.getUint32(8) * 4294967296 + dv.getUint32(12); hd = 16; } else if (sz === 0) sz = blob.size - p; if (sz < 8) break; top.push({ t, p, sz, hd }); p += sz; }
+    const mv = top.find(b => b.t === 'moov'); if (!mv) return null;
+    const M = new DataView(await blob.slice(mv.p, mv.p + mv.sz).arrayBuffer());
+    const kids = (d, a, b) => { const o = []; let q = a; while (q + 8 <= b) { let sz = d.getUint32(q); const t = String.fromCharCode(d.getUint8(q + 4), d.getUint8(q + 5), d.getUint8(q + 6), d.getUint8(q + 7)); if (sz === 0) sz = b - q; if (sz < 8 || q + sz > b) break; o.push({ t, o: q, sz }); q += sz; } return o; };
+    const find = (d, a, b, t) => kids(d, a, b).find(k => k.t === t);
+    let vid = 0, ts = 0, sttsTimes = null; const trex = {};
+    const mx = find(M, 8, mv.sz, 'mvex'); if (mx) kids(M, mx.o + 8, mx.o + mx.sz).filter(k => k.t === 'trex').forEach(k => { trex[M.getUint32(k.o + 12)] = M.getUint32(k.o + 20); });
+    kids(M, 8, mv.sz).filter(k => k.t === 'trak').forEach(tk => {
+      const tkhd = find(M, tk.o + 8, tk.o + tk.sz, 'tkhd'), mdia = find(M, tk.o + 8, tk.o + tk.sz, 'mdia'); if (!tkhd || !mdia) return;
+      const hdlr = find(M, mdia.o + 8, mdia.o + mdia.sz, 'hdlr'), mdhd = find(M, mdia.o + 8, mdia.o + mdia.sz, 'mdhd'); if (!hdlr || !mdhd) return;
+      const htype = String.fromCharCode(M.getUint8(hdlr.o + 16), M.getUint8(hdlr.o + 17), M.getUint8(hdlr.o + 18), M.getUint8(hdlr.o + 19)); if (htype !== 'vide' || vid) return;
+      vid = M.getUint32(tkhd.o + 8 + (M.getUint8(tkhd.o + 8) === 1 ? 20 : 12)); ts = M.getUint32(mdhd.o + 8 + (M.getUint8(mdhd.o + 8) === 1 ? 20 : 12));
+      const minf = find(M, mdia.o + 8, mdia.o + mdia.sz, 'minf'), stbl = minf && find(M, minf.o + 8, minf.o + minf.sz, 'stbl'), stts = stbl && find(M, stbl.o + 8, stbl.o + stbl.sz, 'stts');
+      if (stts) { const cnt = M.getUint32(stts.o + 12); let t = 0; const a = []; for (let i = 0; i < cnt; i++) { const c = M.getUint32(stts.o + 16 + i * 8), d = M.getUint32(stts.o + 20 + i * 8); for (let j = 0; j < c && a.length < 2000000; j++) { a.push(t); t += d; } } if (a.length) sttsTimes = a; }
+    });
+    if (!vid || !ts) return null;
+    if (sttsTimes && !top.some(b => b.t === 'moof')) times = sttsTimes.map(t => t * 1000 / ts);
+    else {
+      let tAcc = null;
+      for (const mf of top.filter(b => b.t === 'moof')) {
+        const D = new DataView(await blob.slice(mf.p, mf.p + mf.sz).arrayBuffer());
+        for (const tf of kids(D, 8, mf.sz).filter(k => k.t === 'traf')) {
+          const th = find(D, tf.o + 8, tf.o + tf.sz, 'tfhd'); if (!th) continue; const fl = D.getUint32(th.o + 8) & 0xffffff; if (D.getUint32(th.o + 12) !== vid) continue;
+          let q = th.o + 16; if (fl & 1) q += 8; if (fl & 2) q += 4; const dDur = fl & 8 ? D.getUint32(q) : (trex[vid] || 0);
+          const tfdt = find(D, tf.o + 8, tf.o + tf.sz, 'tfdt'); let t = tfdt ? (D.getUint8(tfdt.o + 8) === 1 ? D.getUint32(tfdt.o + 12) * 4294967296 + D.getUint32(tfdt.o + 16) : D.getUint32(tfdt.o + 12)) : (tAcc || 0);
+          for (const tr of kids(D, tf.o + 8, tf.o + tf.sz).filter(k => k.t === 'trun')) {
+            const tfl = D.getUint32(tr.o + 8) & 0xffffff, cnt = D.getUint32(tr.o + 12); let r = tr.o + 16; if (tfl & 1) r += 4; if (tfl & 4) r += 4;
+            for (let i = 0; i < cnt; i++) { let dur = dDur; if (tfl & 0x100) { dur = D.getUint32(r); r += 4; } if (tfl & 0x200) r += 4; if (tfl & 0x400) r += 4; if (tfl & 0x800) r += 4; times.push(t * 1000 / ts); t += dur; }
+          }
+          tAcc = t;
+        }
+      }
+    }
+  }
+  if (times.length < 3) return { kind, frames: times.length, dur: 0, fps: 0, maxGap: 0, drops: 0 };
+  times.sort((a, b) => a - b);
+  const gaps = []; for (let i = 1; i < times.length; i++) gaps.push(times[i] - times[i - 1]);
+  const sg = gaps.slice().sort((a, b) => a - b), med = sg[sg.length >> 1] || 0, dur = (times[times.length - 1] - times[0]) / 1000;
+  const pz = Math.max(1000, med * 10), pg = gaps.filter(g => g > pz), pause = pg.reduce((a, g) => a + g, 0) / 1000, run = dur - pause; // v1.48b: 1초 넘는 간격 = 멈춤(화면 가림·카메라 잠깐 멈춤) — 장면을 버린 것과 구분
+  return { kind, frames: times.length, dur, run, pause, med, fps: run > 0 ? (times.length - 1 - pg.length) / run : 0, fpsAll: dur > 0 ? (times.length - 1) / dur : 0, maxGap: sg[sg.length - 1] || 0, drops: med ? gaps.filter(g => g > med * 1.5 && g <= pz).length : 0 };
+}
+let ccCodecTried = false, ccRecFpsN = 0, ccRecFpsKey = '', ccRecFpsLast = null, ccTrialOn = false, ccVp8Fps = 0;
+async function ccRecFpsCheck(blob) { // v1.48: 저장된 조각의 실제 녹화 장수 → 모자라면 H.264 → 720p
+  try {
+    if (ccTrialOn || !ccStream) return;
+    const tr = ccStream.getVideoTracks()[0], st = tr && tr.getSettings ? tr.getSettings() : {};
+    const codec = /mp4/.test(blob.type || '') ? 'h264' : 'vp8', key = codec + '|' + (st.height || 0);
+    if (key !== ccRecFpsKey) { ccRecFpsKey = key; ccRecFpsN = 0; }
+    if (ccRecFpsN >= 3) return;
+    const x = await vidFrameStats(blob); if (ccTrialOn || !ccStream) return; // v1.48b: 기다리는 동안 상태가 바뀌었을 수 있음
+    if (!x) { ccLog('seg-bad', '녹화 파일을 읽지 못함 ' + Math.round(blob.size / 1048576) + 'MB'); return; }
+    if (x.run < 20) return;
+    ccRecFpsN++; ccRecFpsLast = Object.assign({ codec, w: st.width, h: st.height, model: clOn }, x);
+    ccLog('recfps', x.fps.toFixed(1) + '장/초 · ' + (codec === 'h264' ? 'H.264' : 'VP8') + ' · ' + (st.width || '?') + '×' + (st.height || '?') + ' · 판정 ' + (clOn ? '켬' : '끔') + ' · 빠진 곳 ' + x.drops + (x.pause ? ' · 멈춤 ' + x.pause.toFixed(1) + '초' : '') + ' · 최대 간격 ' + Math.round(x.maxGap) + 'ms');
+    if (codec === 'h264' && ccCodecPref() === 'auto' && ccVp8Fps && x.fps < 27 && x.fps < ccVp8Fps + 2) { try { localStorage.removeItem('tm-cc-codec-auto'); } catch (e) {} ccLog('codec-revert', 'H.264 ' + x.fps.toFixed(1) + ' ≤ VP8 ' + ccVp8Fps.toFixed(1) + ' + 2 → VP8로'); ccVp8Fps = 0; } // v1.48b 나아지지 않으면 되돌림
+    if (x.fps >= 27) return;
+    if (!(x.med <= 37 && x.drops / Math.max(1, x.frames) >= 0.05)) { ccLog('recfps-note', '카메라 자체가 느림(중앙 간격 ' + Math.round(x.med) + 'ms) — 형식·해상도는 그대로'); return; } // v1.48b 녹화기가 장면을 버린 증거가 있을 때만
+    if (codec === 'vp8' && ccCodecPref() === 'auto' && !ccCodecTried && ccH264Ok()) {
+      ccCodecTried = true; ccVp8Fps = x.fps; try { localStorage.setItem('tm-cc-codec-auto', 'h264'); } catch (e) {}
+      ccLog('codec-switch', 'VP8 ' + Math.round(x.fps) + '장/초 → H.264');
+      ccStatus('📷 녹화가 1초에 ' + Math.round(x.fps) + '장밖에 안 돼서 녹화 형식을 H.264로 바꿨어요');
+      clAutoSay('녹화가 1초에 ' + Math.round(x.fps) + '장밖에 안 돼서 녹화 방식을 바꿔 볼게요');
+      ccFlushSoon(); return;
+    }
+    if ((st.height || 0) >= 1000 && ccResPref() === '1080') ccGo720(x.fps, '녹화 ' + Math.round(x.fps) + '장/초(' + (codec === 'h264' ? 'H.264' : 'VP8') + ')');
+  } catch (e) { try { ccLog('recfps-fail', String((e && e.message) || e).slice(0, 60)); } catch (x) {} }
+}
+async function ccFpsTrial() { // v1.48: 1분 시험 — 형식(VP8/H.264) × 라이브 판정(끔/켬)별 실제 녹화 장수
+  if (!ccStream) { toast('먼저 클럽캠을 켜 주세요'); return; }
+  if (ccTrialOn) return;
+  if (ccBusy || ccReacq) { toast('저장 중이에요 — 잠시 뒤 다시 눌러 주세요'); return; }
+  const out = $('cc-fpstest'), show = t => { if (out) { out.hidden = false; out.textContent = t; } };
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  ccTrialOn = true; ccBusy = true; const wasOn = clOn, lines = [], s0 = ccStream; let saved = 0;
+  ccStatus('📷 초당 장수 시험 중 (1분) — 시험 녹화도 평소처럼 저장해요');
+  try {
+    show('시험 준비 중 — 지금까지 찍힌 영상을 먼저 저장해요');
+    try { await ccSealSeg(); } catch (e) {}
+    const tr = ccStream.getVideoTracks()[0], st = tr.getSettings ? tr.getSettings() : {};
+    const vp8 = (() => { try { return MediaRecorder.isTypeSupported('video/webm;codecs=vp8'); } catch (e) { return false; } })(), h264 = ccH264Ok();
+    const hw = async ct => { try { if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.encodingInfo) return '알 수 없음'; const r = await navigator.mediaCapabilities.encodingInfo({ type: 'record', video: { contentType: ct, width: st.width || 1920, height: st.height || 1080, framerate: 30, bitrate: ccBitrate() } }); return !r.supported ? '안 됨' : r.powerEfficient ? '하드웨어' : '소프트웨어'; } catch (e) { return '알 수 없음'; } };
+    lines.push('카메라 ' + (st.width || '?') + '×' + (st.height || '?') + ' · 인코딩: VP8 ' + (vp8 ? await hw('video/webm;codecs=vp8') : '안 됨') + ', H.264 ' + (h264 ? await hw('video/mp4;codecs=avc1.42E01E') : '안 됨'));
+    const conds = []; [false, true].forEach(m => { if (vp8) conds.push({ c: 'vp8', m }); if (h264) conds.push({ c: 'h264', m }); });
+    for (let i = 0; i < conds.length && ccStream === s0; i++) { // v1.48b 카메라가 다시 열리면 중단
+      const k = conds[i];
+      if (k.m && !clOn) { clToggle(); await sleep(4000); } else if (!k.m && clOn) { clStop(true); await sleep(1000); }
+      k.model = clOn;
+      show(lines.concat(['시험 ' + (i + 1) + '/' + conds.length + ' — ' + (k.c === 'h264' ? 'H.264' : 'VP8') + ' · 라이브 판정 ' + (k.model ? '켬' : '끔') + ' · 12초 녹화 중…']).join('\n'));
+      const mime = k.c === 'h264' ? (MediaRecorder.isTypeSupported('video/mp4;codecs=avc1') ? 'video/mp4;codecs=avc1' : 'video/mp4') : 'video/webm;codecs=vp8';
+      const parts = []; let rec;
+      try { rec = new MediaRecorder(ccStream, { mimeType: mime, videoBitsPerSecond: ccBitrate(), videoKeyFrameIntervalDuration: 1000 }); } catch (e) { k.err = (e && e.name) || 'rec'; continue; }
+      rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+      rec.start(1000); await sleep(12000);
+      await new Promise(r => { rec.onstop = r; try { rec.stop(); } catch (e) { r(); } setTimeout(r, 3000); });
+      const tb = new Blob(parts, { type: mime.startsWith('video/mp4') ? 'video/mp4' : 'video/webm' });
+      if (parts.length > 1 && ccDb) { try { if (await ccSpaceOk(tb.size)) { await ccPutSeg(Date.now(), tb); saved++; ccSegN++; ccSegBytes += tb.size; ccRenderSegInfo(); } } catch (e) { ccLog('save-fail', '시험 녹화 ' + ((e && e.message) || e)); } } // v1.48b 시험 녹화도 촬영분
+      k.s = await vidFrameStats(tb);
+      const row = (k.c === 'h264' ? 'H.264' : 'VP8 ') + ' · 판정 ' + (k.model ? '켬' : '끔') + ' : ' + (k.s ? k.s.fps.toFixed(1) + '장/초 (빠진 곳 ' + k.s.drops + ', 최대 간격 ' + Math.round(k.s.maxGap) + 'ms)' : '측정 실패');
+      lines.push(row); ccLog('fpstest', row + ' · ' + (st.width || '?') + '×' + (st.height || '?'));
+    }
+    const v0 = conds.find(k => k.c === 'vp8' && !k.model && k.s), h0 = conds.find(k => k.c === 'h264' && !k.model && k.s);
+    if (ccCodecPref() === 'auto' && v0 && h0 && h0.s.fps < v0.s.fps + 3) { let had = ''; try { had = localStorage.getItem('tm-cc-codec-auto') || ''; localStorage.removeItem('tm-cc-codec-auto'); } catch (e) {} if (had) { lines.push('→ H.264가 VP8보다 낫지 않아 다시 VP8로 녹화해요'); ccLog('codec-revert', '시험 결과 VP8 ' + v0.s.fps.toFixed(1) + ' ≥ H.264 ' + h0.s.fps.toFixed(1)); } } // v1.48b
+    if (ccCodecPref() === 'auto' && v0 && h0 && h0.s.fps >= v0.s.fps + 3) { try { localStorage.setItem('tm-cc-codec-auto', 'h264'); } catch (e) {} lines.push('→ 이 폰은 H.264가 더 잘 찍혀서 다음 조각부터 H.264로 녹화해요'); ccLog('codec-switch', '시험 결과 H.264 ' + h0.s.fps.toFixed(1) + ' > VP8 ' + v0.s.fps.toFixed(1)); }
+    if (ccStream !== s0) lines.push('중간에 카메라가 다시 열려서 시험을 멈췄어요.');
+    lines.push('시험 녹화 ' + saved + '개도 평소 영상처럼 저장했어요. 이 화면을 캡처해 보내 주세요.');
+    show(lines.join('\n'));
+    clAutoSay('초당 장수 시험이 끝났어요. 결과를 캡처해 주세요');
+  } catch (e) { show(lines.concat(['시험 중 오류: ' + ((e && e.message) || e)]).join('\n')); }
+  finally {
+    if (wasOn && !clOn) clToggle(); else if (!wasOn && clOn) clStop(true);
+    ccTrialOn = false; ccBusy = false; ccRecFpsKey = '';
+    if (ccStream) ccStartRec(); // v1.48b: 재획득이 이미 녹화기를 켰으면 ccStartRec가 그대로 둠
+    if (ccStream) ccStatus('🔴 녹화+중계 중 — 초당 장수 시험 끝');
+  }
+}
 function ccBitrate() { return ccResPref() === '1080' ? 6000000 : 5000000; } // v1.36: 1080p 8→6Mbps(1분 약 45MB) // v1.32: 예전 2.5Mbps는 60fps 테니스엔 과압축
 function ccCamConstraints() {
   const id = ccLensPref() || (typeof ccLensSessionId === 'string' ? ccLensSessionId : ''); // v1.17 사용자 선택 > v1.20 이 세션에서 자동으로 고른 렌즈 > 자동
@@ -10743,15 +10906,20 @@ let ccRecAt = 0; // v1.25: 이 녹화 구간의 시작 벽시계(ms) — 클립 
 let ccLastChunkAt = 0, ccVisibleAt = 0, ccStallN = 0; // v1.29 녹화 지킴이
 function ccStartRec() {
   if (ccSpaceStopped) { ccChunks = []; return; } // v1.36: 공간이 차서 멈춘 상태 — 옮긴 뒤 클럽캠을 다시 켜야 풀림
+  if (ccRec && ccRec.state !== 'inactive') { // v1.48b: 녹화기 두 개 방지 — 같은 스트림이면 그대로 두고(그 조각을 지킴), 옛 스트림 것이면 멈추고 조각 받기를 끊음
+    if (ccRec.stream === ccStream) { ccLog('rec-keep', '이미 녹화 중'); return; }
+    const old = ccRec; old.ondataavailable = null; try { old.stop(); } catch (e) {} ccLog('rec-dup', '옛 스트림 녹화기 정리');
+  }
   ccChunks = []; ccRecAt = Date.now(); ccRecT0 = 0; ccLastChunkAt = Date.now();
-  ccFmt = recPick(false);
+  ccFmt = ccRecPick(); // v1.48 녹화 형식 설정
   const mime = ccFmt.mime;
-  ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: ccBitrate(), videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.32 화질 설정에 따른 비트레이트 // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
+  const rec = ccRec = new MediaRecorder(ccStream, mime ? { mimeType: mime, videoBitsPerSecond: ccBitrate(), videoKeyFrameIntervalDuration: 1000 } : undefined); // v1.32 화질 설정에 따른 비트레이트 // v1.26: 1초마다 키프레임(조각을 빼고 이어 붙여도 바로 복원 — 폴드3 기본은 3.4초)
   if (ccRec.mimeType) ccFmt.type = ccRec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm', ccFmt.ext = ccFmt.type === 'video/mp4' ? 'mp4' : 'webm';
-  ccRec.ondataavailable = e => { if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); ccLastChunkAt = at; } };
-  ccRec.onerror = e => { try { ccLog('rec-error', String((e && e.error && e.error.name) || 'error')); } catch (x) {} }; // v1.29: 지킴이가 다시 시작
+  ccRec.ondataavailable = e => { if (rec !== ccRec) return; /* v1.48b 다른 녹화기 조각은 버림 */ if (e.data && e.data.size) { const at = Date.now(); if (!ccChunks.length) ccRecT0 = at - ccRecAt > 1500 ? at - 1000 : ccRecAt; ccChunks.push({ blob: e.data, at }); ccLastChunkAt = at; } };
+  ccRec.onerror = e => { if (rec !== ccRec) return; try { ccLog('rec-error', String((e && e.error && e.error.name) || 'error')); } catch (x) {} }; // v1.29: 지킴이가 다시 시작
   ccRec.start(1000); // 1초 단위 청크
   try { ccFpsSchedule(); } catch (e) {} // v1.46 초당 장수 점검
+  try { const el = $('cc-codec-now'); if (el) el.textContent = '지금 ' + (ccFmt.type === 'video/mp4' ? 'H.264' : 'VP8'); } catch (e) {}
 }
 async function ccStopRec() {
   if (!ccRec || ccRec.state === 'inactive') return;
@@ -10777,6 +10945,7 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
         await ccPutSeg(Date.now(), blob);
       }
       ccSaveFailN = 0;
+      { const bb = blob; setTimeout(async () => { try { const h = new Uint8Array(await bb.slice(0, 8).arrayBuffer()); const ok = (h[0] === 0x1A && h[1] === 0x45 && h[2] === 0xDF && h[3] === 0xA3) || (h[4] === 0x66 && h[5] === 0x74 && h[6] === 0x79 && h[7] === 0x70); if (!ok) { ccLog('seg-bad', '저장한 영상 머리가 이상함 ' + Array.from(h.slice(0, 8)).join(',')); ccStatus('⚠️ 방금 저장한 영상 파일이 이상해요 — 클럽캠을 껐다 켜 주세요'); try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance('녹화 파일이 이상해요. 클럽캠을 껐다 켜 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (x) {} return; } } catch (e) {} ccRecFpsCheck(bb); }, 50); } // v1.48 실제 녹화 장수 · v1.48b 파일 머리 검사
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
       if (ccSegN % 5 === 1) ccLog('save', ccSegN + '개째 ' + Math.round(blob.size / 1048576) + 'MB/구간, 누적 ' + Math.round(ccSegBytes / 1048576) + 'MB');
       await ccPrune();
@@ -10808,12 +10977,13 @@ async function ccSpaceOk(addBytes) { // v1.36: 저장 전 공간 검사 — 한�
   return true;
 }
 async function ccFlush() { // 1분마다: 자체 재생 가능한 세그먼트로 끊어 저장
-  if (ccBusy || !ccStream) return; ccBusy = true;
+  if (ccBusy || !ccStream || ccReacq) return; ccBusy = true; // v1.48b 재획득 중엔 건너뜀(옛 스트림 녹화기 방지)
   try { await ccSealSeg(); } catch (e) {}
   ccBusy = false;
   if (ccStream) ccStartRec();
 }
 async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨). v1.14: p.challenge면 마지막 바운스 앞뒤만
+  if (ccTrialOn && ccChan) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: '캠이 초당 장수 시험 중이에요 (1분)' } }); return; } // v1.48b
   if (ccBusy || !ccStream || !ccChan) return;
   const ch = !!(p && p.challenge);
   const b = ch && clLast && clLast.bounceAt && Date.now() - clLast.bounceAt < CC_CH_MAXAGE * 1000 ? clLast : null;
@@ -10876,7 +11046,7 @@ function ccDiag() { // 검은 화면 원격 진단용 — 사용자가 읽어서
 // ── v1.15 촬영 지킴이: ① 세로(옆으로 누운) 영상 경고·자동 복구 ② 손대지 않으면 자동 절전(발열) ──
 let ccOrientWarnAt = 0, ccOrientFixN = 0, ccLastTouch = Date.now(), ccEcoAuto = true;
 try { ccEcoAuto = localStorage.getItem('tm-cc-eco-auto') !== '0'; } catch (e) {}
-document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-vert'); if (e) e.checked = ccHlVert(); } catch (e) {} try { const r = $('cc-res'); if (r) r.value = ccResPref(); } catch (e) {} }); // v1.25 · v1.32 화질
+document.addEventListener('DOMContentLoaded', () => { try { const e = $('cc-hl-vert'); if (e) e.checked = ccHlVert(); } catch (e) {} try { const r = $('cc-res'); if (r) r.value = ccResPref(); } catch (e) {} try { const c = $('cc-codec'); if (c) c.value = ccCodecPref(); } catch (e) {} }); // v1.25 · v1.32 화질 · v1.48 형식
 function ccEcoAutoSet(on) { ccEcoAuto = !!on; try { localStorage.setItem('tm-cc-eco-auto', ccEcoAuto ? '1' : '0'); } catch (e) {} }
 document.addEventListener('pointerdown', () => { ccLastTouch = Date.now(); }, true);
 const CC_ECO_AUTO_MS = 180000;
@@ -10989,6 +11159,7 @@ function ccHlAll() { return new Promise((res, rej) => { const rq = ccDb.transact
 function ccHlClear() { return new Promise((res, rej) => { const tx = ccDb.transaction('hl', 'readwrite'); tx.objectStore('hl').clear(); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
 function ccHlRender() { const el = $('cc-hl-n'); if (el) el.textContent = ccHlN; }
 async function ccKeepClip(p) { // 본폰 점수판이 포인트를 넣으면: 직전 10초 청크를 라벨과 함께 보관 (업로드 없음)
+  if (ccTrialOn) { ccLog('keepclip-skip', '초당 장수 시험 중'); return; } // v1.48b
   if (ccBusy || !ccStream || !ccDb || !p || typeof p !== 'object') return; ccBusy = true;
   try {
     const recAt = ccRecT0 || ccRecAt, vEl = $('cc-cam'), vw = vEl ? vEl.videoWidth : 0, vh = vEl ? vEl.videoHeight : 0; // v1.25
