@@ -2127,7 +2127,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.50';
+const APP_VERSION = 'v1.51';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10607,6 +10607,25 @@ function ccPinLens() { // v1.49d: 다시 열 때 같은 렌즈로 — facingMode
   try { const t = ccStream && ccStream.getVideoTracks()[0], id = t && t.getSettings ? (t.getSettings().deviceId || '') : ''; if (id && !ccLensPref() && !ccLensSessionId) { ccLensSessionId = id; ccLog('lens-pin', id.slice(0, 8)); } } catch (e) {}
 }
 let ccHardReopenTried = false;
+let ccRetryT = null;
+let ccRetryVis = null, ccReloadT = null;
+function ccRetryCancel() { if (ccRetryT && ccRetryT !== -1) clearTimeout(ccRetryT); ccRetryT = null; if (ccRetryVis) { document.removeEventListener('visibilitychange', ccRetryVis); ccRetryVis = null; } } // v1.51e
+function ccAutoRetry() { // v1.51 안드로이드 카메라 다시 열기 실패 → 스스로 다시: 옛 트랙을 먼저 놓고(같은 앱이 카메라를 둘 열면 거절됨) 2·5·10초 뒤, 두 번째부터는 폰이 렌즈를 고르게, 화면이 꺼져 있으면 켜질 때. 4번째 실패부터는 멈추고 다시 열기 → 새로고침
+  if (ccRetryT || !ccChan || ccReloadT) return;
+  const k = ccReacqFail; if (k >= 4) { ccMaybeAutoReload('다시 열기 ' + k + '번 실패'); return; }
+  const sess = ccChan, my = ccStream;
+  if (k >= 2 || document.hidden) ccDownAlert(true, '캠 카메라가 꺼져 있어요' + (document.hidden ? ' (화면 꺼짐·전화·다른 앱?)' : '') + ' — 자동으로 다시 켜는 중', { kind: 'cam', quiet: true }); // v1.51e 본폰에만(캠 폰은 말하지 않음)
+  const go = () => {
+    ccRetryT = null;
+    if (!ccChan || ccChan !== sess || ccStream !== my || !ccReacqFail || ccReacq) return; // 캠을 껐다 켰거나, 다른 경로로 이미 복구됐거나, 다시 열기가 진행 중
+    if (document.hidden) { ccRetryVis = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', ccRetryVis); ccRetryVis = null; ccRetryT = setTimeout(go, 800); } }; document.addEventListener('visibilitychange', ccRetryVis); ccRetryT = -1; ccDownAlert(true, '캠 카메라가 꺼져 있어요 (화면 꺼짐·전화·다른 앱?) — 화면이 켜지면 자동으로 다시 켜요', { kind: 'cam', quiet: true }); return; }
+    ccRetryLensFree = k >= 2 && !ccLensPref(); if (ccRetryLensFree) ccLensSessionId = ''; else ccPinLens(); // 같은 렌즈가 계속 안 열리면 이번엔 폰이 고르게(열리면 그 렌즈를 고정)
+    if (ccStream) ccStream.getTracks().forEach(t => { t.onended = null; t.onmute = null; try { t.stop(); } catch (e) {} });
+    ccLog('reacq-retry', k + '번째 실패 뒤 다시(카메라를 먼저 놓고)'); ccReacquire('retry');
+  };
+  ccRetryT = setTimeout(go, [2000, 5000, 10000][Math.min(k, 3) - 1] || 10000);
+}
+let ccRetryLensFree = false;
 function ccMaybeAutoReload(reason) {
   if (!/iP(hone|ad|od)/.test(navigator.userAgent) && ccStream && !ccHardReopenTried) { // v1.49d: 새로고침은 전체 화면·가로 고정을 반드시 풀어 버림 → 안드로이드는 먼저 옛 트랙을 멈추고 같은 렌즈로 다시 열어 봄(탭 없이 됨)
     ccHardReopenTried = true; ccLog('reopen-hard', reason); ccPinLens();
@@ -10614,10 +10633,11 @@ function ccMaybeAutoReload(reason) {
     ccReacqFail = 0; setTimeout(() => { ccReacquire('reopen'); }, 500); return;
   }
   let n = 0; try { n = parseInt(sessionStorage.getItem('tm-cc-reloads') || '0', 10) || 0; } catch (e) {}
-  if (n >= 2) { ccStatus('카메라가 계속 안 나와요 (' + reason + ') — 앱을 완전히 닫고 다시 열거나, 사파리 앱에서 주소를 열어 시도해 주세요'); return; }
+  if (n >= 2) { ccStatus('카메라가 계속 안 나와요 (' + reason + ') — 앱을 완전히 닫고 다시 열거나, 사파리 앱에서 주소를 열어 시도해 주세요'); try { ccDownAlert(true, '카메라가 계속 안 켜져요 (' + reason + ')', { say: '카메라가 계속 안 켜져요. 폰을 확인해 주세요', kind: 'cam' }); } catch (e) {} return; } // v1.51 스스로 다 해 본 뒤에만 사람을 부름
+  if (ccReloadT) return; // v1.51e 이미 예약됨
   try { sessionStorage.setItem('tm-cc-reloads', String(n + 1)); } catch (e) {}
   ccStatus('🔄 카메라가 안 살아나서 3초 뒤 새로고침해요 (' + reason + ') — 자동으로 다시 켜집니다');
-  setTimeout(ccHardReload, 3000);
+  ccRetryCancel(); ccReloadT = setTimeout(() => { ccReloadT = null; ccHardReload(); }, 3000);
 }
 function ccTrackDead() {
   if (!ccStream) return false;
@@ -10636,18 +10656,26 @@ function ccShowTap(on, msg) { // 자동 복구가 iOS에 막혔을 때: 손으�
   const b = $('cc-tap'); if (!b) return;
   b.style.display = on ? 'flex' : 'none';
   if (msg) b.textContent = msg;
-  ccDownAlert(on, msg); // v1.16: 진동은 거치 각도를 바꿀 수 있어 뺌 — 소리 + 본폰 통지로
+  ccDownAlert(on, msg, on ? { tap: true } : { kinds: ['tap', 'cam', 'other'] }); // v1.51e 끌 때는 카메라 알림만 · v1.16: 진동은 거치 각도를 바꿀 수 있어 뺌 — 소리 + 본폰 통지로 · v1.51 이 버튼은 탭이 정말 필요할 때(아이폰)만
 }
 let ccDownT = null, ccDownN = 0, ccDownSince = 0;
-function ccDownAlert(on, msg) { // 카메라가 끊겨 사람이 탭해야 할 때: 캠 폰이 말로 알리고(20초마다 최대 6번) 뷰어에 camdown, 풀리면 camup
+let ccDownKind = '', ccDownSay = '', ccDownKindWas = '', ccDownQuiet = false;
+function ccDownAlert(on, msg, o) { // 사람이 필요할 때: 캠 폰이 말로 알리고(20초마다 최대 6번) 뷰어에 camdown, 풀리면 camup · v1.51 말은 이유대로(o.say), '눌러 주세요'는 탭이 정말 필요할 때만(o.tap)
+  o = o || {};
   if (on) {
-    if (!ccDownSince) { ccDownSince = Date.now(); ccDownN = 0; ccLog('cam-down', msg || ''); }
-    const say = () => { if (!ccDownSince || ccDownN >= 6) return; ccDownN++; try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance('카메라가 끊겼어요. 캠 화면을 눌러 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (e) {} }; // 콜 소리 설정과 무관하게 알림(촬영 유실이 더 큼)
+    ccDownSay = o.say || (o.tap ? '카메라가 끊겼어요. 캠 화면을 눌러 주세요' : String(msg || '촬영에 문제가 생겼어요. 폰을 확인해 주세요')); ccDownKind = o.kind || (o.tap ? 'tap' : 'other');
+    if (o.quiet && ccDownSince && ccDownKind !== 'cam') return; // v1.51e 다른(더 중요한) 알림을 덮지 않음
+    if (!ccDownSince) { ccDownSince = Date.now(); ccDownN = 0; ccDownQuiet = !!o.quiet; ccLog('cam-down', msg || ''); }
+    else if (!o.quiet && ccDownQuiet) { ccDownQuiet = false; ccDownN = 0; if (ccDownT) { clearInterval(ccDownT); ccDownT = null; } ccLog('cam-down', msg || ''); } // v1.51f 조용한 알림 → 말하는 알림
+    if (o.quiet && ccDownQuiet) ccDownN = 6; // v1.51e 캠 폰은 말하지 않음(본폰에만)
+    const say = () => { if (!ccDownSince || ccDownN >= 6) return; ccDownN++; try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance(ccDownSay || '촬영에 문제가 생겼어요. 폰을 확인해 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (e) {} }; // 콜 소리 설정과 무관하게 알림(촬영 유실이 더 큼)
     if (!ccDownT) { say(); ccDownT = setInterval(say, 20000); }
-    if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(msg || '').replace(/[<>]/g, '').slice(0, 60) } }); } catch (e) {} }
+    if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(msg || '').replace(/[<>]/g, '').slice(0, 60), tap: !!o.tap } }); } catch (e) {} }
   } else {
+    if (o.kinds && ccDownKind && o.kinds.indexOf(ccDownKind) < 0) return; // v1.51e 종류별로만 해제(카메라가 살아나도 '저장 공간 가득'은 그대로)
+    ccDownKindWas = ccDownKind; ccDownKind = '';
     if (ccDownT) { clearInterval(ccDownT); ccDownT = null; }
-    if (ccDownSince) { const sec = Math.round((Date.now() - ccDownSince) / 1000); ccDownSince = 0; ccLog('cam-up', sec + '초 끊김'); if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camup', payload: { at: Date.now(), sec } }); } catch (e) {} } }
+    if (ccDownSince) { const sec = Math.round((Date.now() - ccDownSince) / 1000); ccDownSince = 0; ccLog('cam-up', sec + '초 끊김'); if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camup', payload: { at: Date.now(), sec, kind: ccDownKindWas } }); } catch (e) {} } }
   }
 }
 async function ccReacquire(why) {
@@ -10667,16 +10695,22 @@ async function ccReacquire(why) {
     ccBindVideo(fresh);
     ccPreviewStart(true);
     ccStartRec();
-    ccStatus('🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : ''));
-    ccReacqFail = 0; ccLastChunkAt = Date.now(); ccStallN = 0;
+    ccStatus(ccSpaceStopped ? '카메라를 다시 열었어요 — 저장 공간이 가득 차서 녹화는 아직 멈춘 상태예요 (영상을 옮기고 클럽캠을 껐다 켜세요)' : '🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : '')); // v1.51e
+    ccReacqFail = 0; ccLastChunkAt = Date.now(); ccStallN = 0; ccHardReopenTried = false; // v1.51c 다음 고장 때도 '멈추고 다시 열기'부터
+    ccRetryCancel(); if (ccReloadT) { clearTimeout(ccReloadT); ccReloadT = null; ccLog('reload-cancel', '카메라가 살아나 새로고침 취소'); try { sessionStorage.setItem('tm-cc-reloads', String(Math.max(0, (parseInt(sessionStorage.getItem('tm-cc-reloads') || '1', 10) || 1) - 1))); } catch (e) {} } // v1.51e
+    try { const nid = fresh.getVideoTracks()[0].getSettings().deviceId || '', oid = old && old.getVideoTracks()[0] ? (old.getVideoTracks()[0].getSettings().deviceId || '') : ''; if (ccRetryLensFree && nid && !ccLensPref()) { ccLensSessionId = nid; if (oid && nid !== oid) { ccLog('lens-changed', '다시 열 때 다른 렌즈로 열림 → 자동 보정 다시'); try { clAutoSchedule(); } catch (e) {} } } ccRetryLensFree = false; } catch (e) {} // v1.51e
     try { const s2 = fresh.getVideoTracks()[0].getSettings(); ccLog('reacq', why + ' · ' + s2.width + 'x' + s2.height + ' ' + (s2.resizeMode || '') + ' · ' + String(s2.deviceId || '').slice(0, 8) + ' · ' + ccOrientStr()); } catch (e) {} // v1.49d
-    if (why !== 'lens' && why !== 'orient' && why !== 'fps') clAutoSay('촬영을 다시 시작했어요'); // v1.29 · v1.46 fps
+    if (why !== 'lens' && why !== 'orient' && why !== 'fps' && !ccSpaceStopped) clAutoSay('촬영을 다시 시작했어요'); // v1.29 · v1.46 fps · v1.51e 공간 멈춤이면 말하지 않음
   } catch (e) {
     try { ccLog('reacq-fail', why + ' · ' + ((e && e.name) || '') + ' ' + String((e && e.message) || '').slice(0, 50)); } catch (x) {} // v1.49d
     const notAllowed = !!(e && (e.name === 'NotAllowedError' || /not allowed/i.test(e.message || '')));
-    if (notAllowed) { // iOS: 제스처 없이는 못 엶 → 사용자 탭 유도 (실패 횟수에 안 셈)
+    if (notAllowed && /iP(hone|ad|od)/.test(navigator.userAgent)) { // iOS: 제스처 없이는 못 엶 → 사용자 탭 유도 (실패 횟수에 안 셈) · v1.51b 안드로이드는 아래에서 스스로
       ccStatus('📷 아이폰은 손으로 탭해야 카메라를 다시 열 수 있어요 — 화면의 큰 버튼을 탭하세요');
       ccShowTap(true, '📷 탭해서 카메라 다시 켜기');
+    } else if (!/iP(hone|ad|od)/.test(navigator.userAgent)) { // v1.51 안드로이드: 탭 없이 다시 열 수 있음 → 사람을 부르지 않고 스스로
+      ccReacqFail++;
+      ccStatus('카메라를 다시 여는 중이에요 — ' + ccReacqFail + '번째 실패, 자동으로 다시 시도해요 (' + ((e && e.name) || '') + ')');
+      ccAutoRetry();
     } else {
       ccReacqFail++;
       ccStatus('카메라 재시작 실패: ' + ((e && e.message) || e));
@@ -10686,8 +10720,9 @@ async function ccReacquire(why) {
   } finally { ccReacq = false; }
 }
 document.addEventListener('DOMContentLoaded', () => { const a = $('cc-aspect'); if (a) a.value = ccAspect(); }); // 화각 선택 복원 (v0.55)
-function ccAutoRestart() { // v1.29: 로그인이 복원되면 탭 없이 클럽캠 다시 시작(안드로이드) — 막히면(아이폰) 빨간 버튼 + 소리
-  let tries = 0;
+let ccAutoRestarting = false;
+function ccAutoRestart(round) { // v1.29: 로그인이 복원되면 탭 없이 클럽캠 다시 시작(안드로이드) — 막히면(아이폰) 빨간 버튼 + 소리 · v1.51 안드로이드는 실패해도 3번 더 스스로
+  round = round || 0; let tries = 0;
   const tick = setInterval(async () => {
     tries++;
     if (ccChan) { clearInterval(tick); return; }
@@ -10695,11 +10730,13 @@ function ccAutoRestart() { // v1.29: 로그인이 복원되면 탭 없이 클럽
     clearInterval(tick);
     try { goSection('judge', 'cc-code-in'); } catch (e) {}
     try { ccLog('auto-restart', '페이지가 새로 열려 클럽캠 자동 재시작'); } catch (e) {}
-    try { await ccToggle(); } catch (e) {}
+    ccAutoRestarting = true; try { await ccToggle(); } catch (e) {} ccAutoRestarting = false;
     if (ccChan && ccStream) { clAutoSay('촬영을 다시 시작했어요'); return; }
+    if (!/iP(hone|ad|od)/.test(navigator.userAgent) && round >= 3 && round < 33) { let running = false; try { running = sessionStorage.getItem('tm-cc-running') === '1'; } catch (e) {} if (running) setTimeout(() => { if (!ccChan && !document.hidden) ccAutoRestart(round + 1); else if (!ccChan) ccAutoRestart(round); }, 60000); } // v1.51e 알린 뒤에도 1분마다 계속(30분)
+    if (!/iP(hone|ad|od)/.test(navigator.userAgent) && round < 3) { ccLog('auto-restart-retry', (round + 1) + '번째 — ' + [5, 10, 20][round] + '초 뒤 다시'); ccStatus('카메라를 다시 켜는 중이에요 — 잠시 뒤 자동으로 다시 시도'); setTimeout(() => { if (!ccChan) ccAutoRestart(round + 1); }, [5000, 10000, 20000][round]); return; }
     const b = $('cc-start-btn'); if (b) { b.style.background = '#c0392b'; b.textContent = '여기를 탭해서 클럽캠 다시 시작'; }
     toast('촬영이 끊겼어요 — 클럽캠 시작 버튼을 탭해 주세요');
-    try { ccDownAlert(true, '촬영이 끊겼어요. 화면을 탭해서 다시 시작해 주세요'); } catch (e) {}
+    try { const ios = /iP(hone|ad|od)/.test(navigator.userAgent); ccDownAlert(true, ios ? '촬영이 끊겼어요. 화면을 탭해서 다시 시작해 주세요' : '클럽캠을 스스로 다시 켜지 못했어요', ios ? { tap: true } : { say: '클럽캠을 스스로 다시 켜지 못했어요. 폰을 확인해 주세요', kind: 'cam' }); } catch (e) {}
   }, 500);
 }
 document.addEventListener('DOMContentLoaded', () => { // 🔄 새로고침 뒤 클럽캠 자동 재시작 (v0.57)
@@ -10767,7 +10804,7 @@ function ccShowLog() { // 설정 › 저장 이력 보기
   const el = $('cc-log'); if (!el) return;
   if (!el.hidden) { el.hidden = true; return; }
   let arr = []; try { arr = JSON.parse(localStorage.getItem('tm-cclog') || '[]'); } catch (e) {}
-  const name = { boot: '앱 시작', start: '캠 시작', stop: '캠 종료', save: '구간 저장', 'save-fail': '저장 실패', prune: '자동 정리(오래된 구간 삭제)', 'clear-all': '전부 지우기(버튼)', 'clear-export': '내보내기 후 지우기', persist: '영구 보관 요청', 'send-wait': 'PC 전송 대기(카메라 없이)', 'clear-pc': 'PC로 보낸 뒤 지우기', fps: '카메라 장수', 'fps-low': '720p로 낮춤', 'fps-dark': '카메라가 느림(어두움)', 'fps-res': '720p 기억', 'fps-same': '720p도 같음', 'fps-migrate': '720p 표시 지움', recfps: '녹화 장수', 'recfps-note': '녹화 장수 메모', 'codec-switch': '녹화 형식 H.264로', 'codec-revert': '녹화 형식 되돌림', 'seg-bad': '영상 파일 이상', 'res-live': '해상도 바꿈', 'res-live-fail': '해상도 바꾸기 실패', 'cal-rescale': '보정 크기 맞춤', fs: '전체 화면', 'orient-lock': '가로 고정', 'orient-lock-fail': '가로 고정 실패', 'orient-lost': '가로 고정 풀림', 'orient-back': '가로 다시 고정', 'orient-change': '화면 방향 바뀜', 'orient-warn': '영상이 세로', 'zoom-on': '줌 걸림', fpstest: '초당 장수 시험', 'lens-pin': '렌즈 고정(이번 세션)', 'reopen-hard': '카메라 멈추고 다시 열기', reacq: '카메라 다시 열기', 'reacq-fail': '카메라 다시 열기 실패', 'orient-mismatch': '화면은 가로인데 영상이 세로', 'codec-hw': '인코더 종류', 'lens-wait': '렌즈 바꾸기 미룸', 'rec-resize': '영상 크기 바뀜 → 새 조각', 'rec-error': '녹화기 오류' };
+  const name = { boot: '앱 시작', start: '캠 시작', stop: '캠 종료', save: '구간 저장', 'save-fail': '저장 실패', prune: '자동 정리(오래된 구간 삭제)', 'clear-all': '전부 지우기(버튼)', 'clear-export': '내보내기 후 지우기', persist: '영구 보관 요청', 'send-wait': 'PC 전송 대기(카메라 없이)', 'clear-pc': 'PC로 보낸 뒤 지우기', fps: '카메라 장수', 'fps-low': '720p로 낮춤', 'fps-dark': '카메라가 느림(어두움)', 'fps-res': '720p 기억', 'fps-same': '720p도 같음', 'fps-migrate': '720p 표시 지움', recfps: '녹화 장수', 'recfps-note': '녹화 장수 메모', 'codec-switch': '녹화 형식 H.264로', 'codec-revert': '녹화 형식 되돌림', 'seg-bad': '영상 파일 이상', 'res-live': '해상도 바꿈', 'res-live-fail': '해상도 바꾸기 실패', 'cal-rescale': '보정 크기 맞춤', fs: '전체 화면', 'orient-lock': '가로 고정', 'orient-lock-fail': '가로 고정 실패', 'orient-lost': '가로 고정 풀림', 'orient-back': '가로 다시 고정', 'orient-change': '화면 방향 바뀜', 'orient-warn': '영상이 세로', 'zoom-on': '줌 걸림', fpstest: '초당 장수 시험', 'lens-pin': '렌즈 고정(이번 세션)', 'reopen-hard': '카메라 멈추고 다시 열기', reacq: '카메라 다시 열기', 'reacq-fail': '카메라 다시 열기 실패', 'orient-mismatch': '화면은 가로인데 영상이 세로', 'codec-hw': '인코더 종류', 'lens-wait': '렌즈 바꾸기 미룸', 'rec-resize': '영상 크기 바뀜 → 새 조각', 'rec-error': '녹화기 오류', 'reacq-retry': '카메라 다시 열기(자동)', 'auto-restart-retry': '자동 재시작 다시', 'cam-down': '알림(사람 필요)', 'cam-up': '알림 해제', 'reopen': '카메라 멈추고 다시 열기', 'lens-changed': '다른 렌즈로 열림', 'reload-cancel': '새로고침 취소', 'auto-restart-fail': '자동 재시작 실패' };
   const pad = x => String(x).padStart(2, '0');
   el.textContent = (ccQuota ? '저장 공간 ' + ccQuota.used + ' / ' + ccQuota.quota + 'MB\n' : '') + (arr.length ? arr.slice().reverse().map(x => { const d = new Date(x.t); return pad(d.getMonth() + 1) + '/' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ' ' + (name[x.k] || x.k) + (x.d ? ' — ' + x.d : ''); }).join('\n') : '이력이 없어요 (v0.76부터 기록)');
   el.hidden = false;
@@ -10995,7 +11032,7 @@ async function ccToggle() {
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
     ccStream = await camReq;
-  } catch (e) { if (ccLensPref() || ccLensSessionId) { try { localStorage.removeItem('tm-cc-lens'); } catch (e2) {} ccLensSessionId = ''; toast('고른 렌즈를 열 수 없어 자동으로 되돌렸어요 — 클럽캠 시작을 다시 눌러 주세요'); return; } toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
+  } catch (e) { if (ccAutoRestarting && !/iP(hone|ad|od)/.test(navigator.userAgent)) { ccLog('auto-restart-fail', ((e && e.name) || '') + ' ' + String((e && e.message) || '').slice(0, 40)); ccLensSessionId = ''; return; } /* v1.51e 자동 재시작 중 한 번 실패로 사용자가 고른 렌즈를 지우지 않음 */ if (ccLensPref() || ccLensSessionId) { try { localStorage.removeItem('tm-cc-lens'); } catch (e2) {} ccLensSessionId = ''; toast('고른 렌즈를 열 수 없어 자동으로 되돌렸어요 — 클럽캠 시작을 다시 눌러 주세요'); return; } toast('카메라를 열 수 없어요: ' + (e.message || e) + ' — 설정 › Safari › 카메라 "허용" 확인'); return; }
   ccBindTracks();
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
   if (ccDb) { try { ccHlN = (await ccHlAll()).length; ccHlRender(); } catch (e) {} }
@@ -11104,12 +11141,12 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
         try { ccDb.close(); } catch (x) {} ccDb = await ccOpenDb();
         await ccPutSeg(Date.now(), blob);
       }
-      ccSaveFailN = 0;
+      ccSaveFailN = 0; if (ccDownKind === 'save') ccDownAlert(false); // v1.51 저장이 다시 되면 저장 알림 해제
       { const bb = blob, mm = segMeta; setTimeout(async () => { try { const h = new Uint8Array(await bb.slice(0, 8).arrayBuffer()); const ok = (h[0] === 0x1A && h[1] === 0x45 && h[2] === 0xDF && h[3] === 0xA3) || (h[4] === 0x66 && h[5] === 0x74 && h[6] === 0x79 && h[7] === 0x70); if (!ok) { ccLog('seg-bad', '저장한 영상 머리가 이상함 ' + Array.from(h.slice(0, 8)).join(',')); ccStatus('⚠️ 방금 저장한 영상 파일이 이상해요 — 클럽캠을 껐다 켜 주세요'); try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance('녹화 파일이 이상해요. 클럽캠을 껐다 켜 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (x) {} return; } } catch (e) {} ccRecFpsCheck(bb, mm); }, 50); } // v1.48 실제 녹화 장수 · v1.48b 파일 머리 검사
       ccSegN++; ccSegBytes += blob.size; ccRenderSegInfo();
       if (ccSegN % 5 === 1) ccLog('save', ccSegN + '개째 ' + Math.round(blob.size / 1048576) + 'MB/구간, 누적 ' + Math.round(ccSegBytes / 1048576) + 'MB');
       await ccPrune();
-    } catch (e) { ccStatus('⚠️ 영상 저장 실패 — 이 구간은 저장되지 않았어요 (' + ((e && e.message) || e) + ')'); ccLog('save-fail', String((e && e.message) || e)); if (++ccSaveFailN >= 1) { try { ccDownAlert(true, '영상 저장이 안 되고 있어요. 확인해 주세요'); } catch (x) {} } } // v1.36: 조용히 실패하지 않게
+    } catch (e) { ccStatus('⚠️ 영상 저장 실패 — 이 구간은 저장되지 않았어요 (' + ((e && e.message) || e) + ')'); ccLog('save-fail', String((e && e.message) || e)); if (++ccSaveFailN >= 1) { try { ccDownAlert(true, '영상 저장이 안 되고 있어요', { say: '영상 저장이 안 되고 있어요. 폰 저장 공간을 확인해 주세요', kind: 'save' }); } catch (x) {} } } // v1.36: 조용히 실패하지 않게
   }
   return chunks;
   } finally { ccSealP = null; sealDone(); }
@@ -11124,7 +11161,7 @@ async function ccSpaceOk(addBytes) { // v1.36: 저장 전 공간 검사 — 한�
       if (!ccSpaceStopped) {
         ccSpaceStopped = true; ccLog('space-stop', Math.round(after / 1048576) + '/' + Math.round(e.quota / 1048576) + 'MB — 영상을 지키려고 녹화 멈춤');
         ccStatus('⛔ 저장 공간이 가득 차 가서 녹화를 멈췄어요 (' + Math.round(e.usage / 1048576) + '/' + Math.round(e.quota / 1048576) + 'MB). 찍힌 영상은 안전해요 — PC로 옮긴 뒤 클럽캠을 껐다 켜세요');
-        try { ccDownAlert(true, '저장 공간이 가득 차서 녹화를 멈췄어요. 영상을 옮겨 주세요'); } catch (x) {}
+        try { ccDownAlert(true, '저장 공간이 가득 차서 녹화를 멈췄어요', { say: '저장 공간이 가득 차서 녹화를 멈췄어요. 영상을 옮겨 주세요', kind: 'space' }); } catch (x) {}
       }
       return false;
     }
@@ -11277,7 +11314,7 @@ function ccOrientGuard() { // ccGuardTick(1.5초)마다
 }
 function ccRecWatch() { // v1.29: 화면이 보이는데 녹화가 멈춰 있으면 → 녹화 다시 시작 → 그래도 안 되면 카메라 다시 열기
   if (!ccStream || !ccChan || ccSendMode || document.visibilityState !== 'visible') { ccStallN = 0; return; }
-  if (ccBusy || ccReacq) return; // v1.30b: 저장·재획득 중엔 세지 않고 기다림(0으로 되돌리면 2단계로 못 넘어감)
+  if (ccBusy || ccReacq || ccRetryT || ccReloadT) return; // v1.51e 자동 다시 시도·새로고침 예약 중엔 따로 열지 않음 · v1.30b: 저장·재획득 중엔 세지 않고 기다림(0으로 되돌리면 2단계로 못 넘어감)
   if (Date.now() - ccVisibleAt < 3000 || ccSpaceStopped) return; // 화면이 막 돌아왔으면 카메라가 깨어날 시간을 줌 · v1.36 공간 멈춤은 일부러 멈춘 것
   const ok = ccRec && ccRec.state === 'recording' && Date.now() - ccLastChunkAt < 8000;
   if (ok) { ccStallN = 0; return; }
@@ -11341,6 +11378,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  ccRetryCancel(); if (ccReloadT && !silent) { clearTimeout(ccReloadT); ccReloadT = null; } ccReacqFail = 0; ccHardReopenTried = false; ccRetryLensFree = false; // v1.51c·e
   if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-fpsprobe'); sessionStorage.removeItem('tm-cc-darksaid'); } catch (e) {} ccLandscapeUnlock(); } ccSpaceStopped = false; ccSaveFailN = 0; // v1.36 끄면 공간 멈춤 해제(다시 켤 때 검사) // v1.29: 사용자가 끈 것 — 자동 재시작 안 함 · v1.30 가로 고정 풀기
   { const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none'; if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; } if (ccEcoSince) ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분(캠 종료)'); ccEcoSince = 0; } // v1.06
   ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
@@ -12344,8 +12382,9 @@ function cvFrame(p) {
 }
 let cvDownSaid = 0;
 function cvCamDown(p, slot) { // v1.16: 캠이 끊겨 사람이 눌러 줘야 함 — 본폰에 표시 + 말로(30초에 한 번)
-  const st = $('cc-view-status'); if (st) st.textContent = '⚠️ ' + (slot === 'B' ? 'B 캠' : '캠') + ' 카메라가 끊겼어요 — 캠 폰 화면을 눌러 다시 켜 주세요' + (p && p.msg ? ' (' + p.msg + ')' : '');
-  if (Date.now() - cvDownSaid > 30000) { cvDownSaid = Date.now(); try { aiSay((slot === 'B' ? '비 ' : '') + '캠이 끊겼어요'); } catch (e) {} toast('캠 카메라가 끊겼어요 — 캠 폰 화면을 눌러 주세요'); }
+  const tap = !p || p.tap === undefined || !!p.tap; // v1.51c 예전 캠(tap 표시 없음)은 탭이 필요한 알림만 보냈음
+  const st = $('cc-view-status'); if (st) st.textContent = '⚠️ ' + (slot === 'B' ? 'B 캠' : '캠') + ' — ' + (tap ? '카메라가 끊겼어요 · 캠 폰 화면을 눌러 주세요' + (p && p.msg ? ' (' + p.msg + ')' : '') : ((p && p.msg) || '문제가 생겼어요')); // v1.51 이유대로, 탭이 필요할 때만
+  if (Date.now() - cvDownSaid > 30000) { cvDownSaid = Date.now(); try { aiSay((slot === 'B' ? '비 ' : '') + (tap ? '캠이 끊겼어요' : '캠에 문제가 생겼어요')); } catch (e) {} toast(tap ? '캠 카메라가 끊겼어요 — 캠 폰 화면을 눌러 주세요' : ((p && p.msg) || '캠에 문제가 생겼어요')); }
 }
 let cvOrientSaid = 0;
 function cvOrientLost(p, slot) { // v1.49c: 캠 폰 가로 고정이 풀림 — 본폰에 표시 + 말로(1분에 한 번)
@@ -12353,7 +12392,7 @@ function cvOrientLost(p, slot) { // v1.49c: 캠 폰 가로 고정이 풀림 — 
   if (Date.now() - cvOrientSaid > 60000) { cvOrientSaid = Date.now(); try { aiSay((slot === 'B' ? '비 ' : '') + '캠 화면 가로 고정이 풀렸어요'); } catch (e) {} }
 }
 function cvCamUp(p, slot) {
-  const st = $('cc-view-status'); if (st) st.textContent = (slot === 'B' ? 'B 캠' : '캠') + ' 카메라가 다시 켜졌어요' + (p && p.sec ? ' (' + p.sec + '초 끊김)' : '');
+  const k = p && p.kind, st = $('cc-view-status'); if (st) st.textContent = (slot === 'B' ? 'B 캠' : '캠') + (k === 'save' ? ' 영상 저장이 다시 돼요 (저장 못 한 구간이 있을 수 있어요)' : k === 'space' ? ' 저장 공간 알림이 풀렸어요' : ' 카메라가 다시 켜졌어요' + (p && p.sec ? ' (' + p.sec + '초 끊김)' : '')); // v1.51e 종류대로
   cvDownSaid = 0;
 }
 function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
