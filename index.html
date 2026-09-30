@@ -2157,7 +2157,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.53';
+const APP_VERSION = 'v1.54';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8224,9 +8224,9 @@ function aiResultCard(info) {
   res.appendChild(d);
   const cc = $('ai-card-court'); if (info.cx != null) aiMiniCourt(cc, info.cx, info.cy, info.vd); else cc.style.display = 'none';
   aiCropDraw(info);
-  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지 — 캠 실시간 의견 ' + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? info.vd.call + ' ' + info.vd.distCm + 'cm' : '보정 없음'); d.appendChild(cap); }
+  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견 ' + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? info.vd.call + ' ' + info.vd.distCm + 'cm' : '보정 없음'); d.appendChild(cap); }
 }
-async function aiChallengeRun(p) { // v1.14: 챌린지 클립이 열리면 바운스 시각(끝에서 fromEnd)으로 이동해 정밀 추적 자동 실행
+async function aiChallengeRun(p, who) { // v1.14: 챌린지 클립이 열리면 바운스 시각(끝에서 fromEnd)으로 이동해 정밀 추적 자동 실행. v1.54 who = 어느 캠 영상인지
   const v = $('vj-video'); if (!v || !p) return;
   const st = $('cc-view-status');
   await new Promise(res => { if (v.readyState >= 1) return res(); v.addEventListener('loadedmetadata', res, { once: true }); setTimeout(res, 4000); });
@@ -8238,10 +8238,12 @@ async function aiChallengeRun(p) { // v1.14: 챌린지 클립이 열리면 바�
   if (!isFinite(dur) || dur <= 0) dur = 4;
   const t = Math.min(Math.max(0.3, dur - (p.fromEnd || 0) / 1000), Math.max(0.3, dur - 0.3));
   v.currentTime = t; await new Promise(res => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 2500); });
-  if (st) st.textContent = '챌린지: ' + t.toFixed(1) + '초 지점 자동 판독 중…' + (p.call ? ' (캠 실시간 의견 ' + p.call + (p.distCm != null ? ' ' + p.distCm + 'cm' : '') + ')' : '');
-  aiChallengeInfo = { call: p.call, distCm: p.distCm, close: !!p.close, guess: !!p.guess };
+  if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ': ' + t.toFixed(1) + '초 지점 자동 판독 중…' + (p.call ? ' (캠 실시간 의견 ' + p.call + (p.distCm != null ? ' ' + p.distCm + 'cm' : '') + ')' : '');
+  if (aiBusy) { if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ' 판독을 못 했어요 — 다른 판독이 돌고 있어요. 끝난 뒤 정밀 추적을 눌러 주세요'; return; } // v1.54
+  aiChallengeInfo = { call: p.call, distCm: p.distCm, close: !!p.close, guess: !!p.guess, who: who || '' };
   try { await aiAnalyzeDeep(); } catch (e) {}
-  if (st) st.textContent = '챌린지 결과가 아래 판독 센터에 있어요 (확대 장면 + 미니 코트)';
+  aiChallengeInfo = null; // v1.54c 결과 카드가 못 쓰고 남은 설명이 다음 수동 판독에 붙지 않게
+  if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ' 결과가 아래 판독 센터에 있어요 (확대 장면 + 미니 코트)';
   const card = $('ai-card'); if (card) { try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
 }
 function aiSay(text) { // 판정 음성 (v0.80) — 기기가 지원할 때만, 점수판 콜과 같은 ko-KR
@@ -9634,7 +9636,7 @@ function aiTrailStop() {
   if (aiTraj.length) { aiSyncCanvas(); aiDraw(); } // 정지 시 전체 경로 표시
 }
 function aiClear() {
-  aiTrailStop();
+  aiTrailStop(); aiChallengeInfo = null; // v1.54c
   aiTraj = []; aiCorners = []; aiH = null; aiPicking = false;
   const c = $('ai-canvas');
   if (c) { c.classList.remove('picking'); const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); }
@@ -11781,26 +11783,16 @@ function cvFrameB(p) {
   const img = $('cc-live2'); if (img) img.src = p.d;
 }
 async function cvStopB(silent) {
+  cvGenB++; // v1.54c
   cvSyncStop(); // v1.27
+  if (!silent) cvChErr('B'); // v1.54: 사용자가 B만 끊을 때 — B 챌린지 클립을 기다리던 중이면 다시 판단 (cvStop·cvWatchB 다시 연결은 제외)
   if (cvChanB) { try { await cvChanB.unsubscribe(); } catch (e) {} cvChanB = null; }
   if (cvTimerB) { clearInterval(cvTimerB); cvTimerB = null; }
   cvCodeB = null;
   const w = $('cc-live-b-wrap'); if (w) w.style.display = 'none';
   if (!silent) toast('B 캠 연결을 끊었어요');
 }
-async function cvClipB(p) { // B 캠 클립 → 판독 센터 + (A 클립도 있으면) 듀얼 뷰어
-  if (!p) return;
-  const st = $('cc-view-status');
-  if (p.err) { if (st) st.textContent = 'B 캠 쪽 실패: ' + p.err; return; }
-  if (st) st.textContent = '⬇️ B 캠 클립 내려받는 중…';
-  try {
-    const { data, error } = await TMAuth.client.storage.from('clips').download(p.path);
-    if (error) throw error;
-    vjLoadBlob(data, '✂️ 반대편 캠(B) 클립 도착 — 슬로우·🤖 AI로 판독하세요');
-    if (st) st.textContent = '⚖️ B 캠 클립이 아래 판독 센터에 열렸어요';
-    cvClipPair('B', data, p.at);
-  } catch (e) { if (st) st.textContent = 'B 클립 다운로드 실패: ' + (e.message || e); }
-}
+async function cvClipB(p) { return cvClipIn('B', p); } // B 캠 클립 → 판독 센터 + (A 클립도 있으면) 듀얼 뷰어. v1.54 챌린지면 자동 판독
 function cvClipPair(slot, blob, at) { // 20초 안에 A·B 클립이 다 오면 듀얼 뷰어(A=A캠, B=B캠)에 나란히
   cvClipPend[slot] = { blob, t: Date.now() };
   const o = cvClipPend[slot === 'A' ? 'B' : 'A'];
@@ -12487,11 +12479,126 @@ function cvCamUp(p, slot) {
 function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
   const m = { type: 'broadcast', event: 'cut', payload: { at: Date.now(), challenge: true } };
-  const pick = cvChan && cvChanB ? cvChallengeSlot() : null; // v1.27: 두 캠이면 마지막 바운스를 본 캠에만
-  if (cvChan && pick !== 'B') cvChan.send(m);
-  if (cvChanB && pick !== 'A') { try { cvChanB.send(m); } catch (e) {} }
+  const dual = !!(cvChan && cvChanB);
+  const pick = dual ? cvChallengeSlot() : null; // v1.27: 두 캠이면 마지막 바운스를 본 캠에만
+  const slots = [];
+  if (cvChan && pick !== 'B') { try { cvChan.send(m); slots.push('A'); } catch (e) {} }
+  if (cvChanB && pick !== 'A') { try { cvChanB.send(m); slots.push('B'); } catch (e) {} }
+  cvChStart(slots, dual && !pick ? cvChPrefer() : null); // v1.54
   const st = $('cc-view-status');
-  if (st) st.textContent = '챌린지 요청 보냄 — 캠이 바운스 앞뒤 4초를 올리면 자동으로 판독해요 (10초쯤)';
+  if (st) st.textContent = slots.length > 1 ? '챌린지 요청을 두 캠에 보냄 — 마지막 바운스를 본 캠 영상부터 자동으로 판독해요 (10초쯤)'
+    : '챌린지 요청 보냄' + (dual ? ' (' + cvChName(slots[0]) + ')' : '') + ' — 캠이 바운스 앞뒤 4초를 올리면 자동으로 판독해요 (10초쯤)';
+}
+let cvChReq = null, cvChRunning = 0, cvChChain = Promise.resolve(), cvLater = null, cvLaterClip = null; // v1.54 챌린지 요청 기록 · 판독 중(기다리는 것 포함) 개수 · 한 번에 하나씩 · 버튼에 둔 챌린지 클립 · 버튼에 둔 일반 클립
+const CV_CH_WAIT = 12, CV_CH_KEEP = 120, CV_CH_BUSYMAX = 180, CV_CH_HOLD = 25; // v1.54: 고른 캠 클립을 기다리는 최대 초 · 요청 기록 유효 초 · 다른 판독이 끝나길 기다리는 최대 초 · 챌린지를 기다리며 일반 클립을 붙잡는 최대 초
+let cvGen = 0, cvGenB = 0; // v1.54c 연결 세대 — 끊거나 다시 연결하면 바뀜(그 전에 내려받던 영상·기다리던 판독은 버림)
+function cvChName(slot) { return cvChan && cvChanB ? (slot === 'B' ? 'B 캠' : 'A 캠') : '캠'; }
+function cvChPrefer() { // v1.54: 두 캠에 다 보낼 때(마지막 바운스를 먼 쪽 캠만 봤음) 그 바운스를 본 캠 — 90초 넘은 기록이면 null
+  const c = cvCalls[0];
+  return c && Date.now() - c.rx <= 90000 && (c.slot === 'A' || c.slot === 'B') ? c.slot : null;
+}
+function cvChStart(slots, pref) {
+  if (cvChReq && cvChReq.timer) clearTimeout(cvChReq.timer);
+  cvChReq = { t: Date.now(), slots, pref, got: {}, err: {}, run: null, timer: null };
+  cvLaterClear('ch'); // 지난 포인트의 챌린지 버튼은 치움
+}
+function cvChBest(r) { // 도착한 챌린지 클립 중 자동 판독할 것: 고른 캠(없으면 null) → 실제 바운스 기록이 있는 클립 → 먼저 온 것
+  if (r.pref) return r.got[r.pref] ? r.pref : null; // 먼 쪽 캠만 본 바운스 — 다른 캠 클립은 다른 바운스일 수 있음
+  const have = ['A', 'B'].filter(k => r.got[k]).sort((a, b) => r.got[a].rx - r.got[b].rx);
+  return have.find(k => !r.got[k].p.guess) || have[0] || null;
+}
+function cvChGiveUp(r) { // 고른 캠 영상이 안 옴 → 다른 캠 영상은 버튼으로만 (고른 캠 영상이 늦게 오면 그때 판독)
+  if (!r || r.run) return;
+  r.run = 'none'; if (r.timer) { clearTimeout(r.timer); r.timer = null; }
+  const k = ['A', 'B'].find(x => r.got[x]); if (!k) return;
+  cvLaterSet('ch', k, r.got[k].blob, r.got[k].p, r, cvChName(r.pref) + ' 영상이 안 왔어요 — ' + cvChName(k) + ' 영상은 다른 바운스일 수 있어 아래 버튼으로 열 수 있어요');
+}
+function cvChDecide(r) {
+  if (!r || r !== cvChReq || r.run) return;
+  const pending = r.slots.filter(k => !r.got[k] && !r.err[k]); // 아직 안 온 캠
+  let pick = null;
+  if (r.pref || !pending.length) pick = cvChBest(r);
+  else pick = ['A', 'B'].filter(k => r.got[k] && !r.got[k].p.guess).sort((a, b) => r.got[a].rx - r.got[b].rx)[0] || null;
+  if (pick) { cvChRun(pick, r.got[pick].blob, r.got[pick].p, r); return; }
+  if (!pending.length) { cvChGiveUp(r); return; }
+  const have = ['A', 'B'].filter(k => r.got[k]);
+  if (!have.length) return;
+  const st = $('cc-view-status');
+  if (st) st.textContent = cvChName(have[0]) + ' 영상 도착 — ' + pending.map(cvChName).join('·') + ' 영상을 기다리는 중 (최대 ' + CV_CH_WAIT + '초)';
+  if (!r.timer) r.timer = setTimeout(() => { r.timer = null; if (r !== cvChReq || r.run) return; const k = cvChBest(r); if (k) cvChRun(k, r.got[k].blob, r.got[k].p, r); else cvChGiveUp(r); }, CV_CH_WAIT * 1000);
+}
+function cvChErr(slot) { // 요청한 캠이 실패하면 다시 판단
+  const r = cvChReq;
+  if (!r || r.run || Date.now() - r.t > CV_CH_KEEP * 1000 || !r.slots.includes(slot)) return;
+  r.err[slot] = true; cvChDecide(r);
+}
+function cvChGot(slot, blob, p) {
+  let r = cvChReq;
+  if (r && r.run && (r.got[slot] || Date.now() - r.t > CV_CH_KEEP * 1000)) r = null; // v1.54d 이미 받은 캠에서 또 옴(다른 뷰어가 누른 새 챌린지) · 오래된 요청 → 새 요청으로
+  if (r && r.run) { // 이미 판독했거나 포기한 요청 — 결과를 덮지 않고 버튼으로. 포기한 뒤 고른 캠 영상이 늦게 오면 판독
+    if (r.run === 'none' && (!r.pref || r.pref === slot) && !r.got[slot]) { r.got[slot] = { blob, p, rx: Date.now() }; cvChRun(slot, blob, p, r); return; }
+    cvLaterSet('ch', slot, blob, p, r, cvChRunning ? null : cvChName(slot) + ' 챌린지 영상도 왔어요 — 아래 버튼으로 그 영상도 판독할 수 있어요');
+    return;
+  }
+  if (r && Date.now() - r.t <= CV_CH_KEEP * 1000) {
+    if (!r.slots.includes(slot)) { cvLaterSet('ch', slot, blob, p, r, cvChName(slot) + ' 챌린지 영상도 왔어요 (이번에 부르지 않은 캠) — 아래 버튼으로 판독할 수 있어요'); return; } // 지난 요청의 늦은 영상·다른 뷰어가 부른 영상
+    r.got[slot] = { blob, p, rx: Date.now() }; cvChDecide(r); return;
+  }
+  if (cvChReq && cvChReq.timer) clearTimeout(cvChReq.timer);
+  // 요청 기록이 없으면(뷰어를 새로 열었거나, 오래된 요청, 다른 뷰어가 누른 챌린지) 예전처럼 판독 — 요청 하나로 만들어 다른 캠 영상은 버튼으로
+  cvChReq = { t: Date.now(), slots: [slot], pref: null, got: { [slot]: { blob, p, rx: Date.now() } }, err: {}, run: null, timer: null };
+  cvChRun(slot, blob, p, cvChReq);
+}
+function cvChRun(slot, blob, p, r) { // 챌린지 클립 하나를 판독 센터에 열고 자동 판독 — 한 번에 하나씩(앞 판독이 끝난 뒤)
+  if (r) {
+    r.run = slot; if (r.timer) { clearTimeout(r.timer); r.timer = null; }
+    const o = slot === 'A' ? 'B' : 'A'; if (r.got[o]) cvLaterSet('ch', o, r.got[o].blob, r.got[o].p, r);
+  }
+  cvChRunning++;
+  const genOf = () => slot === 'B' ? cvGenB : cvGen, gen = genOf(); // v1.54d 이 영상을 보낸 캠의 연결 세대만
+  const genGone = () => { if (gen === genOf()) return false; if (slot === 'B' ? cvChanB : cvChan) cvLaterSet('ch', slot, blob, p, null); return true; }; // 캠을 다시 연결했으면 버튼으로
+  const job = async () => {
+    try {
+      if (genGone()) return; // v1.54c 그 사이 연결을 끊거나 바꿈
+      for (let w = 0; aiBusy && w < CV_CH_BUSYMAX * 2; w++) { // 직접 돌리던 정밀 추적·전체 스캔이 끝날 때까지
+        if (w === 2) { const st = $('cc-view-status'); if (st) st.textContent = '지금 돌고 있는 판독이 끝나면 ' + cvChName(slot) + ' 챌린지 영상을 판독해요'; }
+        await new Promise(res => setTimeout(res, 500));
+      }
+      if (genGone()) return;
+      if (aiBusy) { cvLaterSet('ch', slot, blob, p, r, '다른 판독이 아직 끝나지 않아 ' + cvChName(slot) + ' 챌린지 영상은 아래 버튼으로 뒀어요'); return; }
+      vjLoadBlob(blob, cvChName(slot) + ' 챌린지 영상 도착 — 자동으로 판독해요');
+      await aiChallengeRun(p, cvChName(slot));
+      if (r && cvLater && cvLater.req === r) { const st = $('cc-view-status'); if (st) st.textContent += ' · ' + cvChName(cvLater.slot) + ' 영상은 아래 버튼으로'; }
+    } finally { cvChRunning = Math.max(0, cvChRunning - 1); }
+  };
+  cvChChain = cvChChain.then(job).catch(() => {});
+  return cvChChain;
+}
+function cvLaterSet(kind, slot, blob, p, req, msg) { // v1.54: 판독 센터를 바꾸지 않고 둔 클립 — 버튼으로 열기. kind 'ch' = 챌린지 클립(그 영상으로 판독), 'clip' = 일반 클립
+  const L = { slot, blob, p, req: req || null };
+  if (kind === 'ch') cvLater = L; else cvLaterClip = L;
+  const st = $('cc-view-status'); if (!st) return;
+  const id = 'cv-later-' + kind;
+  let b = $(id);
+  if (!b) {
+    b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'tag-btn'; b.style.cssText = 'margin:6px 6px 0 0';
+    b.onclick = () => cvLaterOpen(kind);
+    const prev = kind === 'clip' ? $('cv-later-ch') : null;
+    (prev || st).insertAdjacentElement('afterend', b);
+  }
+  b.textContent = cvChName(slot) + (kind === 'ch' ? ' 영상으로 판독' : ' 클립 열기');
+  b.style.display = '';
+  if (msg) st.textContent = msg;
+}
+function cvLaterClear(kind) {
+  (kind ? [kind] : ['ch', 'clip']).forEach(k => { if (k === 'ch') cvLater = null; else cvLaterClip = null; const b = $('cv-later-' + k); if (b) b.style.display = 'none'; });
+}
+function cvLaterOpen(kind) {
+  const L = kind === 'ch' ? cvLater : cvLaterClip; if (!L) return;
+  if (cvChRunning || aiBusy) { toast('판독이 끝난 뒤 눌러 주세요'); return; }
+  cvLaterClear(kind);
+  if (kind === 'ch') { cvChRun(L.slot, L.blob, L.p, L.req && L.req === cvChReq ? L.req : null); return; }
+  vjLoadBlob(L.blob, cvChName(L.slot) + ' 클립을 열었어요');
 }
 function cvCut() {
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
@@ -12501,23 +12608,36 @@ function cvCut() {
   const st = $('cc-view-status');
   if (st) st.textContent = '✂️ 요청 보냄 — 캠이 클립을 올리면 자동으로 열려요 (몇 초 걸려요)';
 }
-async function cvClip(p) {
+async function cvClip(p) { return cvClipIn('A', p); }
+async function cvClipIn(slot, p) { // v1.54: A·B 캠 클립 공통 — 챌린지 클립은 cvChGot(한 개만 자동 판독), 판독 중엔 판독 센터 화면을 바꾸지 않음
   if (!p) return;
-  const st = $('cc-view-status');
-  if (p.err) { if (st) st.textContent = '캠 쪽 실패: ' + p.err; return; }
-  if (st) st.textContent = '⬇️ 클립 내려받는 중…';
+  const st = $('cc-view-status'), B = slot === 'B';
+  if (p.err) { if (st) st.textContent = (B ? 'B 캠' : '캠') + ' 쪽 실패: ' + p.err; cvChErr(slot); return; }
+  if (st) st.textContent = B ? '⬇️ B 캠 클립 내려받는 중…' : '⬇️ 클립 내려받는 중…';
+  const gen = B ? cvGenB : cvGen; // v1.54c
+  let data;
   try {
-    const { data, error } = await TMAuth.client.storage.from('clips').download(p.path);
-    if (error) throw error;
-    vjLoadBlob(data, '✂️ 클럽캠 클립 도착 — 슬로우·🤖 AI로 판독하세요');
-    cvClipPair('A', data, p.at);
-    if (p.challenge) aiChallengeRun(p); // v1.14
-    if (st) st.textContent = '⚖️ 클립이 아래 판독 센터에 열렸어요';
+    const r = await TMAuth.client.storage.from('clips').download(p.path);
+    if (r.error) throw r.error;
+    data = r.data;
   } catch (e) {
-    if (st) st.textContent = '클립 다운로드 실패: ' + (e.message || e);
+    if (st) st.textContent = (B ? 'B ' : '') + '클립 다운로드 실패: ' + (e.message || e);
+    if (p.challenge) cvChErr(slot);
+    return;
   }
+  if (gen !== (B ? cvGenB : cvGen) || !(B ? cvChanB : cvChan)) return; // v1.54c 내려받는 사이 연결을 끊거나 바꿈
+  cvClipPair(slot, data, p.at);
+  if (p.challenge) { cvChGot(slot, data, p); return; } // v1.14 → v1.54
+  const r0 = cvChReq; // v1.54c: 챌린지를 기다리던 캠에서 일반 클립이 옴 = 캠이 바빠(자동 클립 업로드 등) 챌린지를 건너뜀 → 그 캠 답은 안 옴으로
+  if (r0 && !r0.run && r0.slots.includes(slot) && !r0.got[slot] && !r0.err[slot] && Date.now() - r0.t <= CV_CH_KEEP * 1000) { r0.err[slot] = true; cvChDecide(r0); }
+  const chWait = cvChReq && !cvChReq.run && Date.now() - cvChReq.t <= CV_CH_HOLD * 1000; // 챌린지 영상을 기다리는 중
+  if (cvChRunning || aiBusy || chWait) { cvLaterSet('clip', slot, data, p, null, cvChName(slot) + ' 클립이 왔어요 — ' + (chWait ? '챌린지 영상을 기다리는 중이라' : '판독 중이라') + ' 판독 센터는 그대로 뒀어요 (아래 버튼으로 열기)'); return; }
+  vjLoadBlob(data, B ? '✂️ 반대편 캠(B) 클립 도착 — 슬로우·🤖 AI로 판독하세요' : '✂️ 클럽캠 클립 도착 — 슬로우·🤖 AI로 판독하세요');
+  if (st) st.textContent = B ? '⚖️ B 캠 클립이 아래 판독 센터에 열렸어요' : '⚖️ 클립이 아래 판독 센터에 열렸어요';
 }
 async function cvStop(silent) {
+  cvGen++; cvGenB++; // v1.54c
+  if (cvChReq && cvChReq.timer) clearTimeout(cvChReq.timer); cvChReq = null; cvLaterClear(); // v1.54: B를 끊기 전에 — 끊는 사람에게 판독을 시작하지 않게
   if (cvChanB) await cvStopB(true);
   cvClipPend = {};
   cvPullArm = null;
