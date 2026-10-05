@@ -1282,6 +1282,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div class="muted" style="font-size:11.5px;margin-top:2px">두 대면 양쪽 베이스라인 뒤에 달고 둘 다 코트 보정. 각 캠은 자기 쪽 코트만 콜하고, 같은 바운스는 가까운 캠 판정으로 합쳐요.</div>
         <div id="cc-cam-wrap" style="display:none">
           <div class="vj-mark set" id="cc-cam-info" style="margin-top:8px">캠 코드 —</div>
+          <button type="button" class="btn small outline" id="cc-relogin" hidden onclick="ccRelogin()" style="margin-top:6px">이 폰에서 다시 로그인</button>
           <div style="position:relative;margin-top:8px" id="cc-stage">
             <video id="cc-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
             <canvas id="cc-preview" style="display:none;position:absolute;inset:0;width:100%;height:100%;background:#000"></canvas>
@@ -2006,11 +2007,13 @@ const TMAuth = (() => {
   }
 
   /** 초기화 — 세션 보관은 supabase-js 기본값(localStorage). Phase 2 기술 원칙(실서비스 허용)에 따름 */
-  async function init(config) {
+  let readyRes = null; const ready = new Promise(r => { readyRes = r; }); // v1.57: 첫 초기화 시도가 끝났음(성공·실패)
+  async function init(config, attempt) { try { return await initOnce(config, attempt); } finally { if (readyRes) { readyRes(); readyRes = null; } } }
+  async function initOnce(config, attempt) {
     if (!config || !config.supabaseUrl || !config.supabaseAnonKey) {
       throw new Error('TM_CONFIG(supabaseUrl, supabaseAnonKey)가 필요해요. B0 완료 후 발급된 값을 넣어 주세요.');
     }
-    const { createClient } = await import(SUPABASE_ESM);
+    const { createClient } = await import(SUPABASE_ESM + (attempt ? '?r=' + attempt : '')); // v1.57d: 다시 시도는 새 주소(실패한 불러오기를 브라우저가 기억함)
     client = createClient(config.supabaseUrl, config.supabaseAnonKey, {
       auth: { flowType: 'implicit', detectSessionInUrl: true, autoRefreshToken: true, persistSession: true } // v1.22: implicit — 재설정·가입 확인 링크를 다른 브라우저(메일 앱)에서 열어도 됨
     });
@@ -2140,8 +2143,20 @@ const TMAuth = (() => {
     return () => listeners.delete(cb);
   }
 
+  function storedUid() { // v1.57: 인터넷이 없어 세션을 못 살려도(토큰 만료) 이 폰에 남아 있는 로그인 계정 — 로그아웃하면 supabase가 지움. 녹화만 하는 클럽캠용(서버 권한은 없음)
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i); if (!/^sb-.+-auth-token$/.test(k || '')) continue;
+        const v = JSON.parse(localStorage.getItem(k) || 'null'), ss = v && (v.currentSession || v);
+        if (ss && ss.refresh_token && ss.user && ss.user.id) return String(ss.user.id);
+      }
+    } catch (e) {}
+    return '';
+  }
+
   return {
-    init,
+    init, storedUid,
+    get ready() { return ready; },
     signUpEmail, signInEmail, resetPassword, updatePassword,
     signInKakao, signInGoogle,
     signOut, deleteAccount,
@@ -2157,7 +2172,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.56';
+const APP_VERSION = 'v1.57';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2907,8 +2922,10 @@ async function authDo(action) {
       await TMAuth.resetPassword($('au-email').value);
       toast('📮 재설정 메일을 보냈어요. 받은 편지함을 확인해 주세요');
     } else if (action === 'kakao') {
+      await ccBeforeLeave(); // v1.57e: 화면을 떠나기 전에 녹화 저장
       await TMAuth.signInKakao(); // provider 페이지로 리다이렉트
     } else if (action === 'google') {
+      await ccBeforeLeave(); // v1.57e
       await TMAuth.signInGoogle();
     }
   } catch (e) {
@@ -2922,15 +2939,23 @@ function onAuthChange(session, profile) {
   mrRenderGate(); // v0.40: 로그인 상태에 따라 매치 룸 열기/닫기
   svRenderGate(); // v0.43: 서버 경기 카드
   if (!session && mrChan) mrLeave(true); // 로그아웃 시 방 정리
-  if (!session) { if (ccChan) ccStop(true); if (cvChan) cvStop(true); } // 클럽캠 정리
+  if (!session) { // 클럽캠 정리 · v1.57: 이 폰에서 로그아웃·탈퇴면 끔, 다른 곳에서 로그인이 풀렸으면 녹화는 계속(중계만 내림), 저장된 로그인이 남아 있으면(인터넷이 없어 확인만 못 함) 그대로
+    let lo = 0; try { lo = parseInt(localStorage.getItem('tm-local-signout') || '0', 10) || 0; } catch (e) {}
+    const localOut = ccUserSignOut || (lo && Date.now() - lo < 15000 && !ccAuthOk()); // v1.57d: 같은 폰의 다른 탭에서 로그아웃해도 이 폰 로그아웃
+    if (localOut) { ccAutoOff = true; try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-running-uid'); sessionStorage.removeItem('tm-cc-autostart'); } catch (e) {} try { ccDownAlert(false); } catch (e) {} } // 대기 중인 자동 재시작·알림도 멈춤
+    if (ccChan) { if (localOut) { if (!onAuthChange._stopping) { onAuthChange._stopping = true; Promise.resolve(ccStop()).finally(() => { onAuthChange._stopping = false; }); } } else if (ccSendMode) { if (!ccAuthOk()) ccStop(true); } else if (!ccAuthOk()) ccLoginLost(); }
+    if (cvChan) cvStop(true);
+  }
   if (!session) return;
+  if (ccChan && !ccSendMode && ccSessUid && session.user && session.user.id && session.user.id !== ccSessUid) { ccLog('auth-other', '다른 계정 로그인 → 캠 끔'); ccStop(); toast('다른 계정으로 로그인해서 클럽캠을 껐어요 — 다시 켜면 이 계정의 촬영 동의를 확인해요'); } // v1.57: 캠은 켠 계정 것
+  else if (ccOffline() && ccJoinWakeFn) ccJoinWakeFn(); // v1.57: 로그인이 살아났으면 중계 연결을 바로 다시
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 '정철'로 남는 버그 픽스)
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
   svLoadClubs();     // 🏘️ 서버 클럽 목록으로 교체 (비동기)
   svLoadKdkHistory(); // 📜 서버 개인전 기록 (비동기)
   adminTouch(); // v1.19: 접속 기록 + 관리자 줄 표시 (비동기)
   closeModal('auth');
-  if (!onboarded && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로
+  if (!onboarded && !(ccChan && ccStream) && (profile || navigator.onLine !== false) && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로 · v1.57e 녹화 중·인터넷이 없어 프로필을 못 받았으면 안 띄움
 }
 async function svLoadClubs() { // 실전 모드: 서버 클럽으로 교체 (전 멤버 공유)
   if (typeof svLogged !== 'function' || !svLogged()) return;
@@ -3074,27 +3099,47 @@ function renderAccountBox() { // v0.38: 프로필 모달의 서버 계정 박스
 }
 async function authLogout() {
   if (!serverMode()) return;
+  ccUserSignOut = true; try { localStorage.setItem('tm-local-signout', String(Date.now())); } catch (e) {} // v1.57: 이 폰에서 로그아웃 — 클럽캠도 끔(같은 폰의 다른 탭도 알게)
   try { await TMAuth.signOut(); closeModal('profile'); toast('👋 로그아웃했어요'); openAuth('login'); }
   catch (e) { toast('⚠️ ' + (e && e.message || e)); }
+  finally { ccUserSignOut = false; }
 }
 async function authDeleteAccount() {
   if (!serverMode()) return;
   if (!confirm('정말 탈퇴할까요? 서버 프로필이 익명화되며 복구할 수 없어요.')) return;
+  ccUserSignOut = true; try { localStorage.setItem('tm-local-signout', String(Date.now())); } catch (e) {} // v1.57
   try { await TMAuth.deleteAccount(); closeModal('profile'); toast('탈퇴가 완료되었어요. 그동안 함께해서 즐거웠어요 🎾'); openAuth('login'); }
   catch (e) { toast('⚠️ ' + (e && e.message || e)); }
+  finally { ccUserSignOut = false; }
 }
-async function initServerAuth() {
-  try { await TMAuth.init(window.TM_CONFIG); }
+async function initServerAuth(retry) { // v1.57d: 한 번에 하나만(30초 타이머·online이 겹쳐도), 이미 붙었으면 안 함
+  if (initServerAuth._busy || (retry && TMAuth.client)) return;
+  initServerAuth._busy = true;
+  try { await initServerAuthRun(retry); } finally { initServerAuth._busy = false; }
+}
+async function initServerAuthRun(retry) {
+  if (retry) initServerAuth._n = (initServerAuth._n || 0) + 1;
+  try { await TMAuth.init(window.TM_CONFIG, retry ? initServerAuth._n : 0); }
   catch (e) {
+    if (TMAuth.storedUid && TMAuth.storedUid()) { // v1.57: 이 폰에 로그인했던 계정 — 인터넷이 없어 못 붙은 것. 30초마다·인터넷이 돌아오면 다시(녹화만 하던 클럽캠이 붙게)
+      console.warn('[v1.57] 서버 연결 실패 — 다시 시도', e);
+      if (!retry) toast('인터넷이 안 돼 서버에 연결하지 못했어요 — 연결되면 다시 시도해요');
+      else if (initServerAuth._n >= 4 && navigator.onLine !== false && !initServerAuth._told) { initServerAuth._told = true; try { ccLog('init-stuck', initServerAuth._n + '번 실패'); } catch (x) {} toast(ccChan && ccStream ? '서버 연결이 계속 안 돼요 — 녹화를 끈 뒤 앱을 새로고침해 주세요' : '서버 연결이 계속 안 돼요 — 앱을 새로고침해 주세요'); } // v1.57e: 라이브러리 일부가 실패로 기억되면 새로고침해야 풀림(녹화 중인 캠은 스스로 새로고침하지 않음)
+      clearTimeout(initServerAuth._t); initServerAuth._t = setTimeout(() => initServerAuth(true), 30000);
+      if (!initServerAuth._on) { initServerAuth._on = true; window.addEventListener('online', () => { if (!TMAuth.client) { clearTimeout(initServerAuth._t); initServerAuth(true); } }); }
+      try { ccRenderGate(); } catch (x) {}
+      return;
+    }
     console.warn('[v0.38] 서버 연결 실패 — 데모 모드로 계속해요', e);
     toast('⚠️ 서버 연결에 실패했어요 — 데모 모드로 계속해요');
     openOnboard();
     return;
   }
+  clearTimeout(initServerAuth._t);
   TMAuth.onChange(onAuthChange);
   // 둘러보기를 누른 방문자에게는 이번 방문 동안 로그인 창을 다시 들이밀지 않는다
-  if (!TMAuth.isLoggedIn && !sessionStorage.getItem('tmSkipAuth')) openAuth('login');
-  else if (needsServerOnboard(TMAuth.profile)) openOnboard();
+  if (!TMAuth.isLoggedIn && !sessionStorage.getItem('tmSkipAuth') && !(ccChan && ccStream) && !(TMAuth.storedUid && TMAuth.storedUid())) openAuth('login'); /* v1.57: 녹화 중이거나 이 폰에 로그인했던 계정(인터넷이 없어 확인만 못 함)이면 띄우지 않음 */
+  else if ((TMAuth.isLoggedIn || sessionStorage.getItem('tmSkipAuth')) && !(ccChan && ccStream) && needsServerOnboard(TMAuth.profile)) openOnboard(); // v1.57d: 로그인했거나 둘러보기일 때만(인터넷이 없어 로그인 확인만 못 한 캠 폰엔 안 띄움)
 }
 
 // ===== 소모임(그룹) 운영 도구 (v0.30) =====
@@ -10267,7 +10312,7 @@ async function ccResizeLive(w, h, why) { // v1.49c: 안드로이드 — 카메�
   ccFpsTrack = ''; // 같은 트랙 id — 720p에서 다시 재도록
   try { ccZoomSetup(); } catch (e) {} // 카메라가 다시 시작돼 줌이 풀림
   ccStartRec(); ccLastChunkAt = Date.now(); ccStallN = 0;
-  ccStatus('녹화+중계 계속 — ' + (st.width || '?') + '×' + (st.height || '?') + '로 바꿨어요 (카메라를 다시 열지 않음)');
+  ccStatus((ccOffline() ? '녹화' : '녹화+중계') + ' 계속 — ' + (st.width || '?') + '×' + (st.height || '?') + '로 바꿨어요 (카메라를 다시 열지 않음)'); /* v1.57b */
   return true;
 }
 async function ccFpsMeasure(sec) { const m = await ccCamRate(sec); return m ? m.cam : 0; } // v1.46 이름 유지
@@ -10480,7 +10525,7 @@ async function ccFpsTrial() { // v1.48: 1분 시험 — 형식(VP8/H.264) × 라
     if (wasOn && !clOn) clToggle(); else if (!wasOn && clOn) clStop(true);
     ccTrialOn = false; ccBusy = false; ccRecFpsKey = '';
     if (ccStream) ccStartRec(); // v1.48b: 재획득이 이미 녹화기를 켰으면 ccStartRec가 그대로 둠
-    if (ccStream) ccStatus('🔴 녹화+중계 중 — 초당 장수 시험 끝');
+    if (ccStream) ccStatus('🔴 ' + (ccOffline() ? '녹화 중(중계 연결 안 됨)' : '녹화+중계 중') + ' — 초당 장수 시험 끝'); /* v1.57b */
   }
 }
 function ccTrialVerdict(conds) { // v1.50: 시험 판단 — 어두움은 가벼운 조건(라이브 판정 끔)의 카메라로만. 무거운 조건에서만 카메라가 느리면 '폰이 바쁨'
@@ -10599,7 +10644,7 @@ let cvChan = null, cvCode = null, cvLastFrame = 0, cvTimer = null, cvHelloN = 0;
 let cvChanB = null, cvCodeB = null, cvLastFrameB = 0, cvTimerB = null, cvHelloNB = 0, cvClipPend = {}; // v0.65 두 번째 캠(반대편)
 
 function ccRenderGate() {
-  const on = serverMode() && TMAuth.isLoggedIn;
+  const on = ccAuthOk() || !!(ccChan && ccStream && !ccSendMode); // v1.57: 인터넷이 없어 로그인을 못 살려도 이 폰에 저장된 계정이면 캠 화면(녹화) · v1.57d 로그인이 풀려도 녹화가 도는 동안은 숨기지 않음
   const g = $('cc-gate'), m = $('cc-main');
   if (g) g.style.display = on ? 'none' : 'block';
   if (m) m.style.display = on ? 'block' : 'none';
@@ -10614,7 +10659,8 @@ function ccRenderGate() {
 }
 const CONSENT_VER = '2026-09-28'; // v1.52 동의 문구 판(문구를 바꾸면 날짜를 올려 다시 받음)
 function consentGet() { try { return JSON.parse(localStorage.getItem('tm-consent') || 'null'); } catch (e) { return null; } }
-function ccUid() { try { return (TMAuth.session && TMAuth.session.user && TMAuth.session.user.id) || ''; } catch (e) { return ''; } }
+function ccUid() { try { return (TMAuth.session && TMAuth.session.user && TMAuth.session.user.id) || (TMAuth.storedUid ? TMAuth.storedUid() : '') || ''; } catch (e) { return ''; } } // v1.57: 인터넷이 없어 세션을 못 살려도 저장된 계정
+function ccAuthOk() { try { return !!(serverMode() && (TMAuth.isLoggedIn || (TMAuth.storedUid && TMAuth.storedUid()))); } catch (e) { return false; } } // v1.57: 클럽캠 녹화는 저장된 로그인 계정이면 됨(서버 일은 로그인이 살아나면)
 function ccConsentOk() { const c = consentGet(); return !!(c && c.film && c.ver === CONSENT_VER && c.uid && c.uid === ccUid()); } // v1.52c 이 계정의 동의만
 function consentOpen(from) {
   const c = consentGet(), cur = c && c.ver === CONSENT_VER && c.uid && c.uid === ccUid() ? c : null;
@@ -10636,13 +10682,15 @@ async function consentSave() {
   if (st) st.textContent = '저장했어요 — 촬영 ' + (c.film ? '동의' : '동의 안 함') + ' · 학습 ' + (c.train ? '동의' : '동의 안 함');
   toast('촬영·학습 동의를 저장했어요'); setTimeout(() => closeModal('consent'), 900);
 }
-function ccResumeOk() { // v1.52c 이 탭에서 촬영 중이던 세션을 이어 가는 중(새로고침 뒤 자동 재시작·빨간 '다시 시작' 버튼) — 3시간 안에 조각이 저장됐으면 날짜가 바뀌어도 막지 않음
-  try { return sessionStorage.getItem('tm-cc-running') === '1' && Date.now() - (parseInt(sessionStorage.getItem('tm-cc-alive') || '0', 10) || 0) < 3 * 3600000; } catch (e) { return false; }
+function ccRunUid() { try { return sessionStorage.getItem('tm-cc-running-uid') || ''; } catch (e) { return ''; } } // v1.57d 이 탭의 캠 세션을 켠 계정
+function ccSameRunUid() { const ru = ccRunUid(), me = ccUid(); return !(ru && me && ru !== me); }
+function ccResumeOk() { // v1.57: 켠 계정과 지금 계정이 다르면 이어 가기 아님(동의 확인을 건너뛰지 않음) · v1.52c 이 탭에서 촬영 중이던 세션을 이어 가는 중(새로고침 뒤 자동 재시작·빨간 '다시 시작' 버튼) — 3시간 안에 조각이 저장됐으면 날짜가 바뀌어도 막지 않음
+  try { const ru = sessionStorage.getItem('tm-cc-running-uid') || '', me = ccUid(); if (ru && me && ru !== me) return false; return sessionStorage.getItem('tm-cc-running') === '1' && Date.now() - (parseInt(sessionStorage.getItem('tm-cc-alive') || '0', 10) || 0) < 3 * 3600000; } catch (e) { return false; }
 }
 function ccCamGateOk() { // 클럽캠 시작 전 확인: 본인 촬영 동의 + 오늘 '모든 선수 동의'
-  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return false; }
+  if (!ccAuthOk()) { toast('먼저 로그인해 주세요'); return false; } // v1.57
   const cOk = ccConsentOk(), sOk = ccSessionOk('allok');
-  if (ccAutoRestarting || ccResumeOk()) { if (!cOk || !sOk) ccLog('consent-missing', '이어 가는 세션이라 막지 않음 · ' + (cOk ? '' : '본인 동의 없음 ') + (sOk ? '' : '오늘 확인 없음')); return true; }
+  if ((ccAutoRestarting && ccSameRunUid()) || ccResumeOk()) { /* v1.57d: 자동 재시작도 켠 계정과 같을 때만 동의 확인을 건너뜀 */ if (!cOk || !sOk) ccLog('consent-missing', '이어 가는 세션이라 막지 않음 · ' + (cOk ? '' : '본인 동의 없음 ') + (sOk ? '' : '오늘 확인 없음')); return true; }
   if (!cOk) { consentOpen('cam'); return false; }
   ccSessionSync();
   if (!sOk) { toast('시작 전에 \'모든 선수가 촬영에 동의했어요\'를 확인해 주세요 (날짜가 바뀌면 다시 확인해요)'); const l = $('cc-allok-l'); if (l) { l.classList.add('need'); setTimeout(() => l.classList.remove('need'), 4000); } return false; }
@@ -10655,7 +10703,7 @@ let ccSessRecP = null;
 function ccSessionRecord() { // 캠을 켠 날, 확인한 종류마다 한 번: 캠을 켠 사람이 '모든 선수 동의'를 확인했다는 기록(녹화는 기다리지 않음) · v1.52c 종류별 표시·겹침 방지
   if (ccSessRecP) return ccSessRecP;
   ccSessRecP = (async () => {
-    if (!(serverMode() && TMAuth.isLoggedIn && svClient()) || !ccChan || ccSendMode) return;
+    if (!(serverMode() && TMAuth.isLoggedIn && svClient()) || !ccChan || ccOffline() || ccSendMode) return; // v1.57: 중계가 붙으면 ccJoinLoop가 다시 부름
     const day = todayStr(), rows = [], mark = k => { try { return localStorage.getItem('tm-cc-sessrec-' + k) === day; } catch (e) { return false; } };
     if (ccSessionOk('allok') && !mark('film')) rows.push({ kind: 'session_film', agreed: true, text_version: CONSENT_VER, note: 'cam ' + (ccCode || '') });
     if (ccSessionOk('alltrain') && !mark('train')) rows.push({ kind: 'session_train', agreed: true, text_version: CONSENT_VER, note: 'cam ' + (ccCode || '') });
@@ -10824,11 +10872,11 @@ function ccRetryCancel() { if (ccRetryT && ccRetryT !== -1) clearTimeout(ccRetry
 function ccAutoRetry() { // v1.51 안드로이드 카메라 다시 열기 실패 → 스스로 다시: 옛 트랙을 먼저 놓고(같은 앱이 카메라를 둘 열면 거절됨) 2·5·10초 뒤, 두 번째부터는 폰이 렌즈를 고르게, 화면이 꺼져 있으면 켜질 때. 4번째 실패부터는 멈추고 다시 열기 → 새로고침
   if (ccRetryT || !ccChan || ccReloadT) return;
   const k = ccReacqFail; if (k >= 4) { ccMaybeAutoReload('다시 열기 ' + k + '번 실패'); return; }
-  const sess = ccChan, my = ccStream;
+  const sess = ccSessGen, my = ccStream; // v1.57: 세션은 세대 번호로(중계 채널은 녹화 중에 자리표 → 진짜로 바뀜)
   if (k >= 2 || document.hidden) ccDownAlert(true, '캠 카메라가 꺼져 있어요' + (document.hidden ? ' (화면 꺼짐·전화·다른 앱?)' : '') + ' — 자동으로 다시 켜는 중', { kind: 'cam', quiet: true }); // v1.51e 본폰에만(캠 폰은 말하지 않음)
   const go = () => {
     ccRetryT = null;
-    if (!ccChan || ccChan !== sess || ccStream !== my || !ccReacqFail || ccReacq) return; // 캠을 껐다 켰거나, 다른 경로로 이미 복구됐거나, 다시 열기가 진행 중
+    if (!ccChan || ccSessGen !== sess || ccStream !== my || !ccReacqFail || ccReacq) return; // 캠을 껐다 켰거나, 다른 경로로 이미 복구됐거나, 다시 열기가 진행 중
     if (document.hidden) { ccRetryVis = () => { if (!document.hidden) { document.removeEventListener('visibilitychange', ccRetryVis); ccRetryVis = null; ccRetryT = setTimeout(go, 800); } }; document.addEventListener('visibilitychange', ccRetryVis); ccRetryT = -1; ccDownAlert(true, '캠 카메라가 꺼져 있어요 (화면 꺼짐·전화·다른 앱?) — 화면이 켜지면 자동으로 다시 켜요', { kind: 'cam', quiet: true }); return; }
     ccRetryLensFree = k >= 2 && !ccLensPref(); if (ccRetryLensFree) ccLensSessionId = ''; else ccPinLens(); // 같은 렌즈가 계속 안 열리면 이번엔 폰이 고르게(열리면 그 렌즈를 고정)
     if (ccStream) ccStream.getTracks().forEach(t => { t.onended = null; t.onmute = null; try { t.stop(); } catch (e) {} });
@@ -10870,7 +10918,7 @@ function ccShowTap(on, msg) { // 자동 복구가 iOS에 막혔을 때: 손으�
   ccDownAlert(on, msg, on ? { tap: true } : { kinds: ['tap', 'cam', 'other'] }); // v1.51e 끌 때는 카메라 알림만 · v1.16: 진동은 거치 각도를 바꿀 수 있어 뺌 — 소리 + 본폰 통지로 · v1.51 이 버튼은 탭이 정말 필요할 때(아이폰)만
 }
 let ccDownT = null, ccDownN = 0, ccDownSince = 0;
-let ccDownKind = '', ccDownSay = '', ccDownKindWas = '', ccDownQuiet = false;
+let ccDownKind = '', ccDownSay = '', ccDownKindWas = '', ccDownQuiet = false, ccDownMsg = ''; // v1.57c ccDownMsg = 본폰에 보낸 표시 문구(늦게 다시 보낼 때)
 function ccDownAlert(on, msg, o) { // 사람이 필요할 때: 캠 폰이 말로 알리고(20초마다 최대 6번) 뷰어에 camdown, 풀리면 camup · v1.51 말은 이유대로(o.say), '눌러 주세요'는 탭이 정말 필요할 때만(o.tap)
   o = o || {};
   if (on) {
@@ -10881,7 +10929,7 @@ function ccDownAlert(on, msg, o) { // 사람이 필요할 때: 캠 폰이 말로
     if (o.quiet && ccDownQuiet) ccDownN = 6; // v1.51e 캠 폰은 말하지 않음(본폰에만)
     const say = () => { if (!ccDownSince || ccDownN >= 6) return; ccDownN++; try { if (window.speechSynthesis && window.SpeechSynthesisUtterance) { const u = new SpeechSynthesisUtterance(ccDownSay || '촬영에 문제가 생겼어요. 폰을 확인해 주세요'); u.lang = 'ko-KR'; u.volume = 1; speechSynthesis.speak(u); } } catch (e) {} }; // 콜 소리 설정과 무관하게 알림(촬영 유실이 더 큼)
     if (!ccDownT) { say(); ccDownT = setInterval(say, 20000); }
-    if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(msg || '').replace(/[<>]/g, '').slice(0, 60), tap: !!o.tap } }); } catch (e) {} }
+    ccDownMsg = String(msg || ''); if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(msg || '').replace(/[<>]/g, '').slice(0, 60), tap: !!o.tap } }); } catch (e) {} }
   } else {
     if (o.kinds && ccDownKind && o.kinds.indexOf(ccDownKind) < 0) return; // v1.51e 종류별로만 해제(카메라가 살아나도 '저장 공간 가득'은 그대로)
     ccDownKindWas = ccDownKind; ccDownKind = '';
@@ -10906,7 +10954,7 @@ async function ccReacquire(why) {
     ccBindVideo(fresh);
     ccPreviewStart(true);
     ccStartRec();
-    ccStatus(ccSpaceStopped ? '카메라를 다시 열었어요 — 저장 공간이 가득 차서 녹화는 아직 멈춘 상태예요 (영상을 옮기고 클럽캠을 껐다 켜세요)' : '🔴 녹화+중계 재개 — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : '')); // v1.51e
+    ccStatus(ccSpaceStopped ? '카메라를 다시 열었어요 — 저장 공간이 가득 차서 녹화는 아직 멈춘 상태예요 (영상을 옮기고 클럽캠을 껐다 켜세요)' : '🔴 ' + (ccOffline() ? '녹화 재개(중계 연결 안 됨)' : '녹화+중계 재개') + ' — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : '')); // v1.51e · v1.57b
     ccReacqFail = 0; ccLastChunkAt = Date.now(); ccStallN = 0; ccHardReopenTried = false; // v1.51c 다음 고장 때도 '멈추고 다시 열기'부터
     ccRetryCancel(); if (ccReloadT) { clearTimeout(ccReloadT); ccReloadT = null; ccLog('reload-cancel', '카메라가 살아나 새로고침 취소'); try { sessionStorage.setItem('tm-cc-reloads', String(Math.max(0, (parseInt(sessionStorage.getItem('tm-cc-reloads') || '1', 10) || 1) - 1))); } catch (e) {} } // v1.51e
     try { const nid = fresh.getVideoTracks()[0].getSettings().deviceId || '', oid = old && old.getVideoTracks()[0] ? (old.getVideoTracks()[0].getSettings().deviceId || '') : ''; if (ccRetryLensFree && nid && !ccLensPref()) { ccLensSessionId = nid; if (oid && nid !== oid) { ccLog('lens-changed', '다시 열 때 다른 렌즈로 열림 → 자동 보정 다시'); try { clAutoSchedule(); } catch (e) {} } } ccRetryLensFree = false; } catch (e) {} // v1.51e
@@ -10937,7 +10985,9 @@ function ccAutoRestart(round) { // v1.29: 로그인이 복원되면 탭 없이 �
   const tick = setInterval(async () => {
     tries++;
     if (ccChan) { clearInterval(tick); return; }
-    if (!(serverMode() && TMAuth.isLoggedIn)) { if (tries > 40) clearInterval(tick); return; }
+    if (ccAutoOff) { clearInterval(tick); ccLog('auto-restart-off', '이 폰에서 로그아웃 — 자동 재시작 안 함'); return; } // v1.57d
+    { const ru = ccRunUid(), me = ccUid(); if (ru && me && ru !== me) { clearInterval(tick); try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-running-uid'); } catch (e) {} ccLog('auto-restart-other', '켠 계정과 다른 계정 — 자동 재시작 안 함'); return; } } // v1.57d
+    if (!ccAuthOk()) { if (tries > 40) { clearInterval(tick); ccLog('auto-restart-nologin', '로그인 정보 없음'); ccDownAlert(true, '로그인 정보가 없어 클럽캠을 다시 켜지 못했어요', { say: '로그인 정보가 없어 촬영을 다시 시작하지 못했어요. 폰을 확인해 주세요', kind: 'login' }); } return; } // v1.57: 말없이 포기하지 않음
     clearInterval(tick);
     try { goSection('judge', 'cc-code-in'); } catch (e) {}
     try { ccLog('auto-restart', '페이지가 새로 열려 클럽캠 자동 재시작'); } catch (e) {}
@@ -11215,12 +11265,13 @@ function rtJoin(chan, ms) { // v1.56: 채널 입장 — 성공/실패를 한 번
   });
 }
 let ccClaimErr = '';
-async function ccClaimCode() { // v1.56: 캠 코드를 서버(014a cam_codes)에 이 계정 것으로 등록 — 014c 뒤엔 등록한 계정과 관리자만 이 캠 채널·클립에 접근
+async function ccClaimCode(quiet) { // v1.57 quiet = 실패를 이력에 안 남김(오프라인 반복) · v1.56: 캠 코드를 서버(014a cam_codes)에 이 계정 것으로 등록 — 014c 뒤엔 등록한 계정과 관리자만 이 캠 채널·클립에 접근
   let code = ccMyCode(); ccClaimErr = '';
+  if (!TMAuth.client) { ccClaimErr = '서버 연결 전'; return code; } // v1.57c: 날것 오류 문구 대신
   for (let i = 0; i < 5; i++) {
     let r = '';
     try { const { data, error } = await rpcWithin('cam_code_claim', { p_code: code }, 5000); if (error) throw error; r = String(data || ''); }
-    catch (e) { ccClaimErr = String((e && e.message) || e).slice(0, 60); try { ccLog('code-claim-fail', ccClaimErr); } catch (x) {} return code; } // 서버가 모르면·5초 넘으면 그대로(이미 등록된 코드면 그대로 켜짐)
+    catch (e) { ccClaimErr = String((e && e.message) || e).slice(0, 60); if (!quiet) { try { ccLog('code-claim-fail', ccClaimErr); } catch (x) {} } return code; } // 서버가 모르면·5초 넘으면 그대로(이미 등록된 코드면 그대로 켜짐)
     if (r !== 'taken') { if (r !== 'ok') { ccClaimErr = r; try { ccLog('code-claim', r); } catch (x) {} } return code; }
     const old = code; code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {}
     try { const el = $('cc-mycode'); if (el) el.textContent = '이 폰의 캠 코드 ' + code; } catch (e) {}
@@ -11265,6 +11316,106 @@ async function ccSendOnlyRun() { // PC로 영상 보내기 대기 (v0.98): 카�
   ccStatus('PC 전송 대기 중 — 카메라·녹화는 꺼져 있고 영상 ' + ccSegN + '개(' + Math.round(ccSegBytes / 1048576) + 'MB)는 그대로예요. PC 크롬 뷰어에 코드 ' + code + ' 넣고 보기 → [캠 영상 전부 PC로 받기]. 화면은 켜둔 채 두세요');
   ccLog('send-wait', ccSegN + '개');
 }
+const CC_NOCHAN = { offline: true, send: () => Promise.resolve('offline'), unsubscribe: () => Promise.resolve('ok') }; // v1.57: 중계 채널 없이 녹화만 — ccChan 자리를 지켜 "캠이 켜져 있음" 판단은 그대로
+let ccSessGen = 0, ccJoinChan = null, ccJoinWait = [15, 30, 60], ccJoinWakeFn = null; // v1.57: 캠 세션 세대(켜고 끌 때마다 +1), 입장 시도 중인 채널, 다시 시도 간격(초)
+function ccOffline() { return !!(ccChan && ccChan.offline); }
+function ccMakeChan(code) { // v1.57: 캠 채널 만들기 + 처리기(예전 ccToggle 안에 있던 것 그대로)
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 014c 뒤엔 캠 주인 계정·관리자만
+  chan.on('broadcast', { event: 'cut' }, p => ccCutReq(p && p.payload)); // v1.56 빈도 제한
+  chan.on('broadcast', { event: 'hello' }, () => ccFrame());
+  chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 본폰 점수판의 콜을 여기서도 외침 (v0.63)
+  chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
+  chan.on('broadcast', { event: 'mark' }, p => ccKeepClip(p.payload)); // 포인트 하이라이트 클립 보관 (v0.72)
+  chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload)); // PC로 영상 전송 신호 (v0.96)
+  chan.on('broadcast', { event: 'ping' }, p => { const q = (p && p.payload) || {}; try { chan.send({ type: 'broadcast', event: 'pong', payload: { id: String(q.id || '').slice(0, 20), t0: Number(q.t0) || 0, tc: Date.now() } }); } catch (e) {} }); // v1.27 두 캠 시간 맞춤
+  chan.on('broadcast', { event: 'dual' }, p => clDualSet(p && p.payload)); // v1.27 두 캠 짝
+  return chan;
+}
+function ccNetUi(gen) { // v1.57: 중계 상태를 캠 화면에
+  if (gen !== ccSessGen || !ccChan) return;
+  try { ccRenderGate(); } catch (e) {} // v1.57e: 로그인이 풀려도 녹화가 도는 동안은 캠 화면
+  const off = ccOffline(), noLogin = off && !ccAuthOk(), info = $('cc-cam-info');
+  { const rl = $('cc-relogin'); if (rl) rl.hidden = !noLogin; } // v1.57d
+  if (info) info.textContent = off ? '캠 코드 ' + ccCode + (noLogin ? ' — 로그인이 풀려 중계는 멈춤(녹화는 계속)' : ' — 중계 연결 중(녹화는 계속)') : '📡 캠 코드 ' + ccCode + ' — 내 폰에서 이 코드로 👀 보기';
+  const msg = noLogin ? '🔴 녹화 중 — 로그인이 풀려 실시간 보기·판정 전송은 멈춰 있어요(이 폰에서 다시 로그인하면 연결돼요). 영상은 이 폰에 그대로 쌓여요'
+    : off ? '🔴 녹화 중 — 인터넷·중계 연결이 안 돼 실시간 보기·판정 전송은 멈춰 있어요(저절로 다시 연결해요). 영상은 이 폰에 그대로 쌓여요'
+    : '🔴 녹화+중계 중 — 영상은 이 폰에 ' + CC_SEG + '초 단위로 쌓여요 (서버 업로드 없음). 화면은 켜둔 채 두세요';
+  const cur = (($('cc-cam-status') || {}).textContent || '');
+  if (!ccSpaceStopped && (!cur || cur === ccNetUi._last || /^(🔴 )?녹화(\+중계)? (중|재개|계속)/.test(cur))) { ccStatus(msg); ccNetUi._last = msg; } // v1.57b: '저장 공간 가득' 같은 다른 상태는 덮지 않음
+}
+let ccSessUid = '', ccUserSignOut = false, ccJoinRunGen = 0, ccAutoOff = false; // v1.57d ccAutoOff = 이 폰에서 로그아웃해 자동 재시작 안 함
+function ccRelogin() { // v1.57d: 로그인이 풀린 캠 — 녹화는 그대로 두고 로그인 창 · v1.57e 안내는 짧게·기기별
+  toast(/iP(hone|ad|od)/.test(navigator.userAgent) ? '이메일 로그인을 권해요 — 카카오·구글은 녹화가 멈춰 돌아와서 다시 켜야 해요' : '이메일 로그인을 권해요 — 카카오·구글은 녹화가 잠깐 멈춰요');
+  openAuth('login');
+}
+async function ccBeforeLeave() { // v1.57e: 카카오·구글 로그인처럼 화면을 떠나기 전에 지금까지 녹화를 저장(떠나면 마지막 조각이 사라질 수 있음). 안 떠나면 3초 뒤 다시 녹화
+  if (!ccStream || ccSendMode) return;
+  try { ccLog('leave-save', '로그인 화면으로 가기 전 저장'); } catch (e) {}
+  try { await ccSealSeg(); } catch (e) {}
+  setTimeout(() => { if (ccStream && (!ccRec || ccRec.state !== 'recording')) ccStartRec(); }, 3000);
+} // v1.57c: 이 캠 세션을 켠 계정, 이 폰에서 로그아웃하는 중, 입장 반복이 돌고 있는 세션
+function ccJoinWhy(err) { // v1.57c: 중계가 안 붙은 이유를 한국어로
+  const m = String((err && err.message) || err || '');
+  if (!ccAuthOk()) return '로그인이 풀림';
+  if (!TMAuth.client) return '서버 연결 전';
+  if (!TMAuth.isLoggedIn) return '로그인 확인 전(인터넷 없음)';
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return '인터넷 없음';
+  if (/CHANNEL_ERROR/.test(m)) return '중계 입장 거부';
+  if (/TIMED_OUT/.test(m)) return '응답 없음';
+  return m.slice(0, 40);
+}
+function ccLoginLost() { // v1.57c: 이 폰의 로그인이 사라졌는데(다른 기기에서 로그아웃·계정 정리·갱신 실패) 이 폰에서 끈 건 아님 — 녹화는 계속, 중계·서버 일만 멈춤
+  if (!ccChan || ccSendMode) return;
+  const gen = ccSessGen;
+  if (!ccOffline()) { const c = ccChan; ccChan = CC_NOCHAN; rtDropChan(c); }
+  try { ccLog('auth-lost', '로그인 풀림 — 녹화는 계속'); } catch (e) {}
+  ccNetUi(gen);
+  if (!ccLoginLost._said || Date.now() - ccLoginLost._said > 600000) { ccLoginLost._said = Date.now(); clAutoSay('로그인이 풀렸어요. 녹화는 계속해요'); }
+  if (ccJoinRunGen !== gen) ccJoinLoop(gen, Promise.resolve(ccCode)); // 이 폰에서 다시 로그인하면 붙게
+}
+async function ccJoinLoop(gen, claimP) { // v1.57: 중계 채널 입장은 녹화와 따로 — 실패하면 녹화는 그대로 두고 15·30·60초마다 다시(로그인이 살아나면 바로)
+  ccJoinRunGen = gen;
+  try { await ccJoinLoopRun(gen, claimP); } finally { if (ccJoinRunGen === gen) ccJoinRunGen = 0; }
+}
+async function ccJoinLoopRun(gen, claimP) {
+  try { if (TMAuth.ready) await Promise.race([TMAuth.ready, new Promise(r => setTimeout(r, 10000))]); } catch (e) {} // v1.57c: 새로고침 직후 로그인 준비가 끝나기 전에 "인터넷이 안 돼요"라고 하지 않게
+  let code = await claimP, k = 0;
+  let lastWhy = '';
+  while (gen === ccSessGen && ccStream) {
+    if (ccChan && !ccChan.offline) return; // v1.57d: 다른 반복이 이미 붙였음
+    let err = null, chan = null;
+    if (!(TMAuth.client && TMAuth.isLoggedIn)) err = new Error('not-logged-in'); // 저장된 계정으로 녹화만 하는 중 — 로그인이 살아나길 기다림
+    else {
+      if (ccClaimErr) code = await ccClaimCode(!(k <= 3 || k % 10 === 0)); // v1.57c: 등록이 안 됐으면(서버 연결 전·인터넷 없음 등) 로그인이 살아난 지금 다시
+      if (gen !== ccSessGen || !ccStream) return;
+      if (ccCode !== code) { ccCode = code; ccNetUi(gen); }
+      chan = ccMakeChan(code); ccJoinChan = chan;
+      try { await rtJoin(chan); } catch (e) { err = e; }
+      if (ccJoinChan === chan) ccJoinChan = null;
+      if (gen !== ccSessGen || !ccStream) { rtDropChan(chan); return; } // 그사이 껐거나 다시 켬
+    }
+    if (!err) {
+      ccChan = chan; ccCode = code; ccNetUi(gen);
+      try { ccSessionRecord(); } catch (x) {} // v1.57b: 그날의 '모든 선수 동의' 기록 — 첫 시도에 붙어도(하루 한 번은 함수가 지킴)
+      if (ccDownSince) { try { chan.send({ type: 'broadcast', event: 'camdown', payload: { at: Date.now(), msg: String(ccDownMsg || '').replace(/[<>]/g, '').slice(0, 60), tap: ccDownKind === 'tap' } }); } catch (x) {} } // 중계가 없는 동안 난 알림을 본폰에(표시 문구로)
+      if (k > 0) { try { ccLog('join-late', k + '번 실패 뒤 중계 연결'); } catch (x) {} clAutoSay('중계가 연결됐어요'); }
+      return;
+    }
+    if (chan) rtDropChan(chan); k++;
+    const why = ccJoinWhy(err);
+    if (k > 1 && why !== lastWhy) ccNetUi(gen); // v1.57d: 다시 로그인했는데 또 실패해도 '로그인이 풀려'에 머물지 않게
+    lastWhy = why;
+    if (k <= 3 || k % 10 === 0) { try { ccLog('join-fail', k + '번째 ' + why + (ccClaimErr ? ' / 코드 등록 ' + ccClaimErr : '')); } catch (x) {} }
+    if (k === 1) {
+      ccNetUi(gen);
+      if (!ccAuthOk()) { if (!ccLoginLost._said || Date.now() - ccLoginLost._said > 600000) { ccLoginLost._said = Date.now(); clAutoSay('로그인이 풀렸어요. 녹화는 계속해요'); } }
+      else { clAutoSay('인터넷 연결이 안 돼요. 녹화는 계속하고, 중계는 연결되면 켜져요'); toast('중계 연결 안 됨(' + why + ') — 녹화는 계속해요'); }
+    }
+    let wf = null; // v1.57c: 깨우기 함수는 자기 것만 지움
+    await new Promise(r => { wf = () => r(); ccJoinWakeFn = wf; setTimeout(wf, (ccJoinWait[Math.min(k - 1, ccJoinWait.length - 1)] || 60) * 1000); }); // 로그인이 살아나면(onAuthChange) 일찍 깸
+    if (ccJoinWakeFn === wf) ccJoinWakeFn = null;
+  }
+}
 let ccStartP = null;
 function ccToggle() { // v1.56: 켜는 중에 또 부르면(두 번 탭·자동 재시작) 진행 중인 시작을 같이 기다림 — 카메라 두 번·채널 처리기 두 벌 방지. 카메라 요청은 그대로 탭 안에서 바로(ccToggleRun의 첫 await 전)
   if (ccStartP) return ccStartP;
@@ -11278,7 +11429,9 @@ function ccToggle() { // v1.56: 켜는 중에 또 부르면(두 번 탭·자동 
 async function ccToggleRun() {
   if ((!ccChan || ccSendMode) && !ccCamGateOk()) return; // v1.52c 촬영 동의 확인을 맨 앞에서(PC 보내기 대기를 끄기 전에) — 카메라 요청 전에 돌아가므로 아이폰 탭 규칙 영향 없음
   if (ccChan) { if (ccSendMode) await ccStop(true); else { ccStop(); return; } }
-  if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
+  if (!ccAuthOk()) { toast('먼저 로그인해 주세요'); return; } // v1.57: 저장된 로그인 계정이면 인터넷 없이도 녹화
+  if (!ccAutoRestarting) ccAutoOff = false; // v1.57d: 직접 켜면 자동 재시작도 다시 허용
+  const startUid = ccUid(); // v1.57e: 켤 때의 계정(카메라를 기다리는 사이 로그인이 풀려도 세션 주인은 이 계정)
   const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // iOS: 탭 직후(어떤 await보다 먼저) 요청해야 허용됨 (v0.58)
   ccTtsUnlock(); // v1.13: 같은 탭 안에서 음성 합성도 열어 둠(안 하면 본폰 콜이 채널로 와도 iOS가 말하지 않음)
   ccLandscapeLock(); // v1.30: 안드로이드 가로 고정(탭 안에서)
@@ -11294,25 +11447,10 @@ async function ccToggleRun() {
   await ccLoadSegInfo();
   ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
   try { if (!sessionStorage.getItem('tm-cc-dnd-hint')) { sessionStorage.setItem('tm-cc-dnd-hint', '1'); setTimeout(() => toast('전화·알림이 오면 촬영이 끊겨요 — 방해 금지 모드를 켜 두세요'), 2500); } } catch (e) {} // v1.16
-  const code = await claimP; // v1.56
-  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 014c 뒤엔 캠 주인 계정·관리자만
-  chan.on('broadcast', { event: 'cut' }, p => ccCutReq(p && p.payload)); // v1.56 빈도 제한
-  chan.on('broadcast', { event: 'hello' }, () => ccFrame());
-  chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
-  chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
-  chan.on('broadcast', { event: 'mark' }, p => ccKeepClip(p.payload)); // 포인트 하이라이트 클립 보관 (v0.72)
-  chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload)); // 📥 PC로 영상 전송 신호 (v0.96)
-  chan.on('broadcast', { event: 'ping' }, p => { const q = (p && p.payload) || {}; try { chan.send({ type: 'broadcast', event: 'pong', payload: { id: String(q.id || '').slice(0, 20), t0: Number(q.t0) || 0, tc: Date.now() } }); } catch (e) {} }); // v1.27 두 캠 시간 맞춤
-  chan.on('broadcast', { event: 'dual' }, p => clDualSet(p && p.payload)); // v1.27 두 캠 짝
-  try {
-    await rtJoin(chan); // v1.56
-  } catch (e) {
-    rtDropChan(chan); // v1.56: 남겨 두면 다음 시작이 같은 채널을 받아 영원히 기다림
-    ccStream.getTracks().forEach(t => t.stop()); ccStream = null;
-    try { ccLog('join-fail', String((e && e.message) || e).slice(0, 40) + (ccClaimErr ? ' / 코드 등록 ' + ccClaimErr : '')); } catch (x) {}
-    toast('중계 연결 실패: ' + (e.message || e) + (ccClaimErr ? ' — 캠 코드 등록도 못 했어요(' + ccClaimErr + '). 인터넷 연결을 확인해 주세요' : '')); return;
-  }
-  ccChan = chan; ccCode = code;
+  if (ccAutoOff) { try { ccStream.getTracks().forEach(t => t.stop()); } catch (e) {} ccStream = null; try { ccLog('start-cancel', '켜는 사이 이 폰에서 로그아웃'); } catch (e) {} return; } // v1.57e
+  const gen = ++ccSessGen; // v1.57: 이 캠 세션
+  { let ru = ''; try { ru = sessionStorage.getItem('tm-cc-running-uid') || ''; } catch (e) {} ccSessUid = startUid || ccUid() || ru || ''; try { if (ccSessUid) sessionStorage.setItem('tm-cc-running-uid', ccSessUid); } catch (e) {} } // v1.57c: 이 세션을 켠 계정
+  ccChan = CC_NOCHAN; ccCode = ccMyCode(); try { ccRenderGate(); } catch (e) {} // v1.57e 캠 화면 표시 다시 판단 · v1.57: 녹화를 먼저 — 중계 채널은 아래 ccJoinLoop가 따로(안 되면 녹화는 그대로 두고 다시)
   try { sessionStorage.setItem('tm-cc-running', '1'); sessionStorage.setItem('tm-cc-alive', String(Date.now())); } catch (e) {} try { ccDownAlert(false); } catch (e) {} // v1.29: 전화 중 크롬이 페이지를 꺼도 새로 열리면 자동 재시작
   $('cc-cam-wrap').style.display = 'block'; $('cc-view-wrap').style.display = 'none'; // 보이는 상태에서 붙여야 iOS가 로드함 (v0.59)
   const v = $('cc-cam'); ccBindVideo(ccStream);
@@ -11322,17 +11460,19 @@ async function ccToggleRun() {
   clUiReset(); // 🤖 라이브 판정: 저장된 보정이 이 카메라 해상도와 맞으면 복원
   v.addEventListener('loadedmetadata', () => clRestoreCal(), { once: true });
   clAutoSchedule(); // v1.21: 손대지 않아도 보정·렌즈·높이 점검이 스스로 돌게
-  try { ccSessionRecord(); } catch (e) {} // v1.52 그날의 촬영 확인 기록
+  /* v1.52 그날의 촬영 확인 기록(ccSessionRecord)은 v1.57부터 중계가 붙을 때 ccJoinLoop가 */
   ccStartRec();
   try { if (navigator.wakeLock) ccWakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  if (gen !== ccSessGen || !ccStream) { try { if (ccWakeLock) { ccWakeLock.release(); ccWakeLock = null; } } catch (e) {} return; } // v1.57: 깨우기 잠금을 기다리는 사이에 껐음
   ccTimers.push(setInterval(ccFrame, 1500));
   ccTimers.push(setInterval(ccFlush, CC_SEG * 1000));
   $('cc-cam-wrap').style.display = 'block';
   $('cc-view-wrap').style.display = 'none';
-  $('cc-cam-info').textContent = '📡 캠 코드 ' + code + ' — 내 폰에서 이 코드로 👀 보기';
   $('cc-start-btn').textContent = '⏹ 클럽캠 끄기';
-  ccStatus('🔴 녹화+중계 중 — 영상은 이 폰에 ' + CC_SEG + '초 단위로 쌓여요 (서버 업로드 없음). 화면은 켜둔 채 두세요');
-  toast('📡 클럽캠 시작! 캠 코드 ' + code);
+  ccStatus('🔴 녹화 중 — 중계 연결 중…');
+  { const info = $('cc-cam-info'); if (info) info.textContent = '캠 코드 ' + ccCode + ' — 중계 연결 중(녹화는 시작됨)'; }
+  toast('📡 클럽캠 시작! 캠 코드 ' + ccCode);
+  if (ccJoinRunGen !== gen) ccJoinLoop(gen, claimP); // v1.57d: 깨우기 잠금을 기다리는 사이 로그인이 풀려 반복이 이미 돌면 하나만 · v1.57: 기다리지 않음 — "켜는 중" 표시와 끄기 버튼이 중계 연결을 기다리지 않게
 }
 
 let ccRecT0 = 0; // v1.26: 영상 0초의 벽시계(ms) — 녹화기 시작이 늦으면(첫 조각이 1.5초 넘게 늦음) 첫 조각 − 1초
@@ -11446,7 +11586,7 @@ function ccCutReq(p) { // v1.56: 채널로 온 ✂️·챌린지 요청 빈도 �
 }
 async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨). v1.14: p.challenge면 마지막 바운스 앞뒤만
   if (ccTrialOn && ccChan) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: '캠이 초당 장수 시험 중이에요 (1분)' } }); return; } // v1.48b
-  if (ccBusy || !ccStream || !ccChan) return;
+  if (ccBusy || !ccStream || !ccChan || ccOffline()) return; // v1.57: 중계가 없으면 올릴 수 없음(자동 클립 포함 — 녹화 조각을 일찍 닫지 않게)
   const ch = !!(p && p.challenge);
   const b = ch && clLast && clLast.bounceAt && Date.now() - clLast.bounceAt < CC_CH_MAXAGE * 1000 ? clLast : null;
   if (b) { const wait = b.bounceAt + CC_CH_AFTER * 1000 + 400 - Date.now(); if (wait > 0) { setTimeout(() => ccOnCut(p), wait); return; } } // 반등 뒤 장면이 녹화될 때까지
@@ -11634,6 +11774,7 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   if (!ccFrame._ok) { ccFrame._ok = true; try { sessionStorage.setItem('tm-cc-reloads', '0'); } catch (e) {} }
   if (v.readyState < 2) { if (++ccRs0Ticks >= 2 && !ccPreviewOn && !ccEco) ccPreviewStart(); } else ccRs0Ticks = 0;
   if (ccEco) { ccEcoInfo(); if ((ccFrame._eco = (ccFrame._eco || 0) + 1) % 4) return; } // v1.06 절전: 썸네일 6초마다
+  if (ccOffline()) return; // v1.57: 중계가 없으면 썸네일은 안 만듦(위의 점검·지킴이는 계속)
   const cv = ccFrame._cv || (ccFrame._cv = document.createElement('canvas'));
   const W = 480, H = Math.max(2, Math.round(W * v.videoHeight / v.videoWidth));
   cv.width = W; cv.height = H;
@@ -11643,8 +11784,9 @@ function ccFrame() { // 라이브 썸네일 1장 broadcast (작은 JPEG)
   ccChan.send({ type: 'broadcast', event: 'frame', payload: { d, at: Date.now() } });
 }
 async function ccStop(silent) {
+  ccSessGen++; if (ccJoinChan) { rtDropChan(ccJoinChan); ccJoinChan = null; } if (ccJoinWakeFn) { const w = ccJoinWakeFn; ccJoinWakeFn = null; w(); } // v1.57: 이 세션의 중계 다시 연결도 멈춤(잠든 반복은 깨워서 끝냄)
   ccRetryCancel(); if (ccReloadT && !silent) { clearTimeout(ccReloadT); ccReloadT = null; } ccReacqFail = 0; ccHardReopenTried = false; ccRetryLensFree = false; // v1.51c·e
-  if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-fpsprobe'); sessionStorage.removeItem('tm-cc-darksaid'); } catch (e) {} ccLandscapeUnlock(); } ccSpaceStopped = false; ccSaveFailN = 0; // v1.36 끄면 공간 멈춤 해제(다시 켤 때 검사) // v1.29: 사용자가 끈 것 — 자동 재시작 안 함 · v1.30 가로 고정 풀기
+  if (!silent) { try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-running-uid'); sessionStorage.removeItem('tm-cc-fpsprobe'); sessionStorage.removeItem('tm-cc-darksaid'); } catch (e) {} ccLandscapeUnlock(); } ccSpaceStopped = false; ccSaveFailN = 0; // v1.36 끄면 공간 멈춤 해제(다시 켤 때 검사) // v1.29: 사용자가 끈 것 — 자동 재시작 안 함 · v1.30 가로 고정 풀기
   { const sh = $('cc-eco-shade'); if (sh) sh.style.display = 'none'; if (ccEcoPeekT) { clearTimeout(ccEcoPeekT); ccEcoPeekT = null; } if (ccEcoSince) ccLog('eco-off', Math.round((Date.now() - ccEcoSince) / 60000) + '분(캠 종료)'); ccEcoSince = 0; } // v1.06
   ccLog('stop', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB');
   ccPreviewStop();
@@ -11663,6 +11805,7 @@ async function ccStop(silent) {
   const w = $('cc-cam-wrap'); if (w) w.style.display = 'none';
   const b = $('cc-start-btn'); if (b) b.textContent = '📡 이 폰을 클럽캠으로 (공기계에서 누르세요)';
   if (!silent) toast('클럽캠을 껐어요 — 💾 전체 저장으로 오늘 영상을 내려받으세요');
+  { const rl = $('cc-relogin'); if (rl) rl.hidden = true; } try { ccRenderGate(); } catch (e) {} // v1.57d: 로그인이 없으면 이제 캠 화면을 닫음
 }
 // ── 하이라이트 (v0.72): 포인트마다 직전 10초를 'hl' 저장소에 보관 → 캔버스로 이어붙여 한 편 ──
 const CC_HL_SEC = 10, CC_HL_MAX = 60;
@@ -11747,7 +11890,7 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   let out = new Blob(parts, { type: fmt.type }); if (fmt.type === 'video/mp4') out = await mp4Defrag(out); // v1.38
   status('하이라이트 완성 ' + Math.round(out.size / 1048576) + 'MB — 저장 중');
   await ccExportFiles([new File([out], '하이라이트_' + todayStr() + '.' + fmt.ext, { type: fmt.type })], '하이라이트');
-  if (ccChan && out.size < 45 * 1048576) { // 본폰으로 전송 (판독 센터에 자동 오픈)
+  if (ccChan && !ccOffline() && out.size < 45 * 1048576) { // 본폰으로 전송 (판독 센터에 자동 오픈) · v1.57 중계가 없으면 안 함
     try {
       const path = 'cam/' + (ccCode || 'X') + '/hl-' + Date.now() + '.' + fmt.ext;
       const { error } = await svClient().storage.from('clips').upload(path, out, { contentType: fmt.type, upsert: true });
@@ -12024,7 +12167,7 @@ function clSampleDayKey() { const d = new Date(); return 'tm-clsample-' + d.getF
 function clSampleCount() { try { return parseInt(localStorage.getItem(clSampleDayKey()) || '0', 10) || 0; } catch (e) { return 0; } }
 function clSampleBump() { const n = clSampleCount() + 1; try { localStorage.setItem(clSampleDayKey(), String(n)); } catch (e) {} clSampleN = n; const el = $('cl-sample-n'); if (el) el.textContent = n; return n; }
 async function clSampleUpload(pts, bi, tw, th, v, vd, shot, mC) { // 바운스 앞뒤 프레임 6장 + 메타 → storage (학습 데이터, 라벨 초안 포함)
-  if (!clSampleOn || clSampleBusy || !ccChan || !svClient() || !clRing.length) return;
+  if (!clSampleOn || clSampleBusy || !ccChan || ccOffline() || !svClient() || !clRing.length) return; // v1.57: 중계가 없으면(인터넷 없음) 건너뜀
   if (!ccSessionOk('alltrain')) return; // v1.52 '모두 AI 학습 이용에도 동의했어요'를 확인한 날만
   if (clSampleCount() >= CL_SAMPLE_MAX_PER_DAY) return;
   clSampleBusy = true;
