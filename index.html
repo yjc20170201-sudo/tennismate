@@ -2157,7 +2157,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.55';
+const APP_VERSION = 'v1.56';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10709,6 +10709,7 @@ function ccTtsUnlock() { // v1.13: iOS 사파리는 사용자 탭 안에서 spea
 function ccSay(p) { // 본폰 점수판 콜을 공기계 스피커로 (v0.63)
   if (!ccVoiceOn || !p || typeof p.text !== 'string' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return;
   const text = p.text.replace(/[<>]/g, '').slice(0, 80); if (!text) return;
+  { const now = Date.now(), q = ccSay._ts || (ccSay._ts = []); while (q.length && now - q[0] > 10000) q.shift(); if (q.length >= 8) { ccSay._pend = p; if (!ccSay._tm) ccSay._tm = setTimeout(() => { const x = ccSay._pend; ccSay._pend = null; ccSay._tm = null; if (x) ccSay(x); }, Math.max(200, q[0] + 10050 - now)); return; } q.push(now); } // v1.56: 10초에 8번까지 — 넘친 것 중 마지막 것은 자리가 나면 말함
   try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ko-KR'; u.rate = 1.05; u.volume = 1; speechSynthesis.speak(u); ccTtsUnlocked = true; } catch (e) {}
 }
 document.addEventListener('DOMContentLoaded', () => { const c = $('cc-voice'); if (c) c.checked = ccVoiceOn; const ea = $('cc-eco-auto'); if (ea) ea.checked = ccEcoAuto; const ac = $('cl-autocall'); if (ac) ac.checked = clAutoCall; const sc = $('cl-sample'); if (sc) sc.checked = clSampleOn; const sn = $('cl-sample-n'); if (sn) sn.textContent = clSampleCount(); const cm = $('cl-model'); if (cm) cm.checked = clModel; });
@@ -11203,6 +11204,31 @@ function ccMyCode() { // 이 폰의 고정 캠 코드 (v0.54) — 카메라를 �
   if (!/^[A-Z0-9]{6}$/.test(code)) { code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {} }
   return code;
 }
+function rpcWithin(name, args, ms) { // v1.56: RPC에 시간 제한(supabase-js fetch에는 없음) — 넘으면 { error: timeout }
+  return Promise.race([TMAuth.client.rpc(name, args), new Promise(r => setTimeout(() => r({ data: null, error: { message: 'timeout' } }), ms))]);
+}
+function rtJoin(chan, ms) { // v1.56: 채널 입장 — 성공/실패를 한 번만, 라이브러리가 콜백을 안 부르면 ms(기본 15초) 뒤 실패
+  return new Promise((res, rej) => {
+    let done = false; const t = setTimeout(() => fin(new Error('TIMED_OUT')), ms || 15000);
+    function fin(err) { if (done) return; done = true; clearTimeout(t); if (err) rej(err); else res(); }
+    try { chan.subscribe(st => { if (st === 'SUBSCRIBED') fin(null); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') fin(new Error(st)); }); } catch (e) { fin(e); }
+  });
+}
+let ccClaimErr = '';
+async function ccClaimCode() { // v1.56: 캠 코드를 서버(014a cam_codes)에 이 계정 것으로 등록 — 014c 뒤엔 등록한 계정과 관리자만 이 캠 채널·클립에 접근
+  let code = ccMyCode(); ccClaimErr = '';
+  for (let i = 0; i < 5; i++) {
+    let r = '';
+    try { const { data, error } = await rpcWithin('cam_code_claim', { p_code: code }, 5000); if (error) throw error; r = String(data || ''); }
+    catch (e) { ccClaimErr = String((e && e.message) || e).slice(0, 60); try { ccLog('code-claim-fail', ccClaimErr); } catch (x) {} return code; } // 서버가 모르면·5초 넘으면 그대로(이미 등록된 코드면 그대로 켜짐)
+    if (r !== 'taken') { if (r !== 'ok') { ccClaimErr = r; try { ccLog('code-claim', r); } catch (x) {} } return code; }
+    const old = code; code = mrGenCode(); try { localStorage.setItem('tm-cccode', code); } catch (e) {}
+    try { const el = $('cc-mycode'); if (el) el.textContent = '이 폰의 캠 코드 ' + code; } catch (e) {}
+    try { ccLog('code-new', old + ' → ' + code + ' (다른 계정이 쓰는 코드)'); } catch (x) {}
+    toast('캠 코드가 ' + code + '(으)로 바뀌었어요 — 이전 코드는 다른 계정이 쓰고 있어요');
+  }
+  return code;
+}
 let ccSendMode = false, ccSendTimer = null;
 function ccSendFrame() { // 대기 모드: 카메라 대신 안내 그림을 썸네일로 보내 뷰어가 "캠이 켜졌다"고 알게 함 (PC 받기 자동 재시도 트리거)
   if (!ccChan || !ccSendMode) return;
@@ -11212,19 +11238,26 @@ function ccSendFrame() { // 대기 모드: 카메라 대신 안내 그림을 썸
   g.fillStyle = '#fff'; g.font = '16px sans-serif'; g.fillText('영상 ' + ccSegN + '개 · ' + Math.round(ccSegBytes / 1048576) + 'MB', 160, 115);
   try { ccChan.send({ type: 'broadcast', event: 'frame', payload: { d: c.toDataURL('image/jpeg', 0.6), at: Date.now(), wait: true } }); } catch (e) {}
 }
-async function ccSendOnly() { // PC로 영상 보내기 대기 (v0.98): 카메라·녹화 없이 채널만 열어 PC(뷰어)의 받기 요청(rtc)에 응답. 저장된 영상은 지우지 않음
+function ccSendOnly() { // v1.56: 켜는 중 겹쳐 부르기 방지(ccToggle과 같은 ccStartP)
+  if (ccStartP) return ccStartP;
+  const p = ccSendOnlyRun(); ccStartP = p;
+  const done = () => { if (ccStartP === p) ccStartP = null; };
+  p.then(done, done);
+  return p;
+}
+async function ccSendOnlyRun() { // PC로 영상 보내기 대기 (v0.98): 카메라·녹화 없이 채널만 열어 PC(뷰어)의 받기 요청(rtc)에 응답. 저장된 영상은 지우지 않음
   const wasSend = ccSendMode;
   if (ccChan) { await ccStop(true); if (wasSend) { toast('대기를 껐어요'); return; } }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   if (cvChan) await cvStop(true);
   await ccLoadSegInfo();
-  const code = ccMyCode();
+  const code = await ccClaimCode(); // v1.56
   const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } });
   chan.on('broadcast', { event: 'hello' }, () => ccSendFrame());
   chan.on('broadcast', { event: 'rtc' }, p => ccRtcHandle(p.payload));
   try {
-    await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
-  } catch (e) { toast('연결 실패: ' + (e.message || e)); return; }
+    await rtJoin(chan); // v1.56
+  } catch (e) { rtDropChan(chan); toast('연결 실패: ' + (e.message || e)); return; } // v1.56
   ccChan = chan; ccCode = code; ccSendMode = true;
   ccSendTimer = setInterval(ccSendFrame, 2500); ccSendFrame();
   try { if (navigator.wakeLock) ccWakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
@@ -11232,7 +11265,17 @@ async function ccSendOnly() { // PC로 영상 보내기 대기 (v0.98): 카메�
   ccStatus('PC 전송 대기 중 — 카메라·녹화는 꺼져 있고 영상 ' + ccSegN + '개(' + Math.round(ccSegBytes / 1048576) + 'MB)는 그대로예요. PC 크롬 뷰어에 코드 ' + code + ' 넣고 보기 → [캠 영상 전부 PC로 받기]. 화면은 켜둔 채 두세요');
   ccLog('send-wait', ccSegN + '개');
 }
-async function ccToggle() {
+let ccStartP = null;
+function ccToggle() { // v1.56: 켜는 중에 또 부르면(두 번 탭·자동 재시작) 진행 중인 시작을 같이 기다림 — 카메라 두 번·채널 처리기 두 벌 방지. 카메라 요청은 그대로 탭 안에서 바로(ccToggleRun의 첫 await 전)
+  if (ccStartP) return ccStartP;
+  const sb = $('cc-start-btn'), was = sb ? sb.textContent : '', stopping = !!ccChan && !ccSendMode;
+  const p = ccToggleRun(); ccStartP = p;
+  if (sb && !stopping) sb.textContent = '클럽캠 켜는 중…';
+  const done = () => { if (ccStartP === p) ccStartP = null; if (sb && sb.textContent === '클럽캠 켜는 중…') sb.textContent = was; };
+  p.then(done, done);
+  return p;
+}
+async function ccToggleRun() {
   if ((!ccChan || ccSendMode) && !ccCamGateOk()) return; // v1.52c 촬영 동의 확인을 맨 앞에서(PC 보내기 대기를 끄기 전에) — 카메라 요청 전에 돌아가므로 아이폰 탭 규칙 영향 없음
   if (ccChan) { if (ccSendMode) await ccStop(true); else { ccStop(); return; } }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
@@ -11240,6 +11283,7 @@ async function ccToggle() {
   ccTtsUnlock(); // v1.13: 같은 탭 안에서 음성 합성도 열어 둠(안 하면 본폰 콜이 채널로 와도 iOS가 말하지 않음)
   ccLandscapeLock(); // v1.30: 안드로이드 가로 고정(탭 안에서)
   camReq.catch(() => {});
+  const claimP = ccClaimCode(); // v1.56: 카메라가 열리는 동안 코드 등록(5초 제한)
   if (cvChan) await cvStop(true); // 한 폰에서 캠+뷰어 동시 방지
   try {
     ccStream = await camReq;
@@ -11250,9 +11294,9 @@ async function ccToggle() {
   await ccLoadSegInfo();
   ccLog('start', ccSegN + '개 ' + Math.round(ccSegBytes / 1048576) + 'MB 보관 중');
   try { if (!sessionStorage.getItem('tm-cc-dnd-hint')) { sessionStorage.setItem('tm-cc-dnd-hint', '1'); setTimeout(() => toast('전화·알림이 오면 촬영이 끊겨요 — 방해 금지 모드를 켜 두세요'), 2500); } } catch (e) {} // v1.16
-  const code = ccMyCode();
-  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
-  chan.on('broadcast', { event: 'cut' }, p => ccOnCut(p && p.payload));
+  const code = await claimP; // v1.56
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 014c 뒤엔 캠 주인 계정·관리자만
+  chan.on('broadcast', { event: 'cut' }, p => ccCutReq(p && p.payload)); // v1.56 빈도 제한
   chan.on('broadcast', { event: 'hello' }, () => ccFrame());
   chan.on('broadcast', { event: 'say' }, p => ccSay(p.payload)); // 🔊 본폰 점수판의 콜을 여기서도 외침 (v0.63)
   chan.on('broadcast', { event: 'score' }, p => ccScore(p.payload)); // 전체 화면에 점수 (v0.72)
@@ -11261,13 +11305,12 @@ async function ccToggle() {
   chan.on('broadcast', { event: 'ping' }, p => { const q = (p && p.payload) || {}; try { chan.send({ type: 'broadcast', event: 'pong', payload: { id: String(q.id || '').slice(0, 20), t0: Number(q.t0) || 0, tc: Date.now() } }); } catch (e) {} }); // v1.27 두 캠 시간 맞춤
   chan.on('broadcast', { event: 'dual' }, p => clDualSet(p && p.payload)); // v1.27 두 캠 짝
   try {
-    await new Promise((res, rej) => chan.subscribe(st => {
-      if (st === 'SUBSCRIBED') res();
-      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
-    }));
+    await rtJoin(chan); // v1.56
   } catch (e) {
+    rtDropChan(chan); // v1.56: 남겨 두면 다음 시작이 같은 채널을 받아 영원히 기다림
     ccStream.getTracks().forEach(t => t.stop()); ccStream = null;
-    toast('중계 연결 실패: ' + (e.message || e)); return;
+    try { ccLog('join-fail', String((e && e.message) || e).slice(0, 40) + (ccClaimErr ? ' / 코드 등록 ' + ccClaimErr : '')); } catch (x) {}
+    toast('중계 연결 실패: ' + (e.message || e) + (ccClaimErr ? ' — 캠 코드 등록도 못 했어요(' + ccClaimErr + '). 인터넷 연결을 확인해 주세요' : '')); return;
   }
   ccChan = chan; ccCode = code;
   try { sessionStorage.setItem('tm-cc-running', '1'); sessionStorage.setItem('tm-cc-alive', String(Date.now())); } catch (e) {} try { ccDownAlert(false); } catch (e) {} // v1.29: 전화 중 크롬이 페이지를 꺼도 새로 열리면 자동 재시작
@@ -11390,6 +11433,16 @@ async function ccFlush() { // 1분마다: 자체 재생 가능한 세그먼트�
   try { await ccSealSeg(); } catch (e) {}
   ccBusy = false;
   if (ccStream) ccStartRec();
+}
+function ccCutReq(p) { // v1.56: 채널로 온 ✂️·챌린지 요청 빈도 제한(저장소 보호) — 1초 안 반복이거나 10분에 40번 넘으면 거절
+  const now = Date.now(), q = ccCutReq._ts || (ccCutReq._ts = []);
+  while (q.length && now - q[0] > 600000) q.shift();
+  if ((q.length && now - q[q.length - 1] < 1000) || q.length >= 40) {
+    try { ccLog('cut-limit', q.length + '번/10분'); } catch (e) {}
+    if (ccChan) { try { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: '요청이 너무 잦아요 — 잠시 뒤 다시 눌러 주세요', limited: true, ch: !!(p && p.challenge) } }); } catch (e) {} }
+    return;
+  }
+  q.push(now); return ccOnCut(p);
 }
 async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨). v1.14: p.challenge면 마지막 바운스 앞뒤만
   if (ccTrialOn && ccChan) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: '캠이 초당 장수 시험 중이에요 (1분)' } }); return; } // v1.48b
@@ -11837,12 +11890,22 @@ async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (�
 }
 
 // --- 뷰어(내 폰) ---
+async function cvDenyMsg(code, e, who) { // v1.56: 014b 뒤엔 다른 계정의 캠·아직 켠 적 없는 코드는 연결이 거부됨 → 이유를 알려 줌
+  let st = '';
+  try { const { data, error } = await rpcWithin('cam_code_status', { p_code: code }, 4000); if (!error) st = String(data || ''); } catch (x) {}
+  if (st === 'other') return who + '캠(코드 ' + code + ')은 다른 계정의 캠이에요 — 캠 폰 화면의 코드를 확인하거나, 캠 폰과 같은 계정으로 로그인해 주세요';
+  if (st === 'none') return who + '캠 코드 ' + code + ' — 아직 등록 전이에요. 캠 폰에서 클럽캠을 먼저 켜 주세요';
+  return who + '캠 연결 실패: ' + ((e && e.message) || e);
+}
+function rtDropChan(chan) { // v1.56: 거부된 채널은 지움(그대로 두면 라이브러리가 계속 다시 들어가려 함)
+  try { if (TMAuth.client.removeChannel) TMAuth.client.removeChannel(chan); else chan.unsubscribe(); } catch (e) {}
+}
 async function cvWatch() {
   const code = ($('cc-code-in').value || '').trim().toUpperCase();
   if (code.length !== 6) { toast('캠 코드 6자리를 입력해 주세요'); return; }
   if (!(serverMode() && TMAuth.isLoggedIn)) { toast('먼저 로그인해 주세요'); return; }
   if (cvChan) await cvStop(true);
-  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 로그인 사용자만 (007)
+  const chan = TMAuth.client.channel('cam:' + code, { config: { private: true, broadcast: { self: false } } }); // private: 014b 뒤엔 캠 주인 계정·관리자만
   chan.on('broadcast', { event: 'frame' }, p => { cvFrame(p.payload); cvPullTick(); });
   chan.on('broadcast', { event: 'camclip' }, p => cvClip(p.payload));
   chan.on('broadcast', { event: 'call' }, p => cvCall(p.payload)); // 🤖 라이브 판정 피드
@@ -11851,11 +11914,8 @@ async function cvWatch() {
   chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'A')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'A')); // v1.16
   chan.on('broadcast', { event: 'rtc' }, p => cvPullRtc(p.payload)); // 📥 PC로 받기 응답 (v0.96)
   try {
-    await new Promise((res, rej) => chan.subscribe(st => {
-      if (st === 'SUBSCRIBED') res();
-      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
-    }));
-  } catch (e) { toast('캠 연결 실패: ' + (e.message || e)); return; }
+    await rtJoin(chan); // v1.56
+  } catch (e) { rtDropChan(chan); toast(await cvDenyMsg(code, e, '')); return; } // v1.56
   cvChan = chan; cvCode = code;
   try { localStorage.setItem('tm-cvcode', code); } catch (e) {}
   cvLastFrame = Date.now(); cvHelloN = 0;
@@ -11886,8 +11946,8 @@ async function cvWatchB() { // 반대편 캠(B) 추가 시청 (v0.65)
   chan.on('broadcast', { event: 'orientlost' }, p => cvOrientLost(p.payload, 'B')); // v1.49c
   chan.on('broadcast', { event: 'camdown' }, p => cvCamDown(p.payload, 'B')); chan.on('broadcast', { event: 'camup' }, p => cvCamUp(p.payload, 'B')); // v1.16
   try {
-    await new Promise((res, rej) => chan.subscribe(st => { if (st === 'SUBSCRIBED') res(); else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st)); }));
-  } catch (e) { toast('B 캠 연결 실패: ' + (e.message || e)); return; }
+    await rtJoin(chan); // v1.56
+  } catch (e) { rtDropChan(chan); toast(await cvDenyMsg(code, e, 'B ')); return; } // v1.56
   cvChanB = chan; cvCodeB = code;
   try { localStorage.setItem('tm-cvcode2', code); } catch (e) {}
   cvLastFrameB = Date.now(); cvHelloNB = 0;
@@ -12736,7 +12796,7 @@ async function cvClip(p) { return cvClipIn('A', p); }
 async function cvClipIn(slot, p) { // v1.54: A·B 캠 클립 공통 — 챌린지 클립은 cvChGot(한 개만 자동 판독), 판독 중엔 판독 센터 화면을 바꾸지 않음
   if (!p) return;
   const st = $('cc-view-status'), B = slot === 'B';
-  if (p.err) { if (st) st.textContent = (B ? 'B 캠' : '캠') + ' 쪽 실패: ' + p.err; cvChErr(slot); return; }
+  if (p.err) { if (st) st.textContent = (B ? 'B 캠' : '캠') + ' 쪽 실패: ' + p.err; if (!p.limited || p.ch) cvChErr(slot); return; } /* v1.56: 챌린지 아닌 요청이 빈도 제한에 걸린 건 챌린지 실패가 아님 */
   if (st) st.textContent = B ? '⬇️ B 캠 클립 내려받는 중…' : '⬇️ 클립 내려받는 중…';
   const gen = B ? cvGenB : cvGen; // v1.54c
   let data;
