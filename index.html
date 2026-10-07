@@ -1161,6 +1161,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <button type="button" class="btn full" style="margin-top:8px" id="ai-run-btn" onclick="aiAnalyze()">이 장면 공 추적 (빠름)</button>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-scan-btn" onclick="aiScanClip()">클립 전체 자동 판독 — 모든 바운스 찾기</button>
         <div id="ai-scan-list" style="margin-top:4px"></div>
+        <div class="row" style="gap:6px;align-items:center;margin-top:8px"><span class="muted" style="font-size:12px">판정 기준</span><select id="ai-judge" style="flex:1" onchange="aiJudgeSet(this.value)"><option value="court">코트 라인 (랠리 공)</option><option value="serve">서브 — 공이 떨어진 쪽 서비스 박스</option><option value="serve-deuce">서브 — 듀스 쪽에서 넣은 서브</option><option value="serve-ad">서브 — 애드 쪽에서 넣은 서브</option></select></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (기본 소형 v2 · 첫 실행 0.8MB)</button>
         <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v16.onnx">소형 v16 — 빠름 (0.8MB, 9/9~9/28 학습·실내 체육관 포함, 기본)</option><option value="ball_tiny_xl_v15.onnx">소형 v15 — 이전 (9/28 체육관 없음)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v16.onnx|wasm">소형 v16 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
         <div class="muted" style="font-size:11px;margin-top:3px">소형 v16 = WASB를 선생님으로 우리 코트 영상(9/9~9/28, 야간·파란 하드코트·두 캠 동시·초광각 폴드3·실내 체육관 포함) 학습, 멈춘 물체는 학습에서 뺌(0.8MB, 검증 영상 17개 재현율 90%·정밀도 92%·바운스 144/169, 새 체육관 바운스 8/8, 2026-09-29). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
@@ -1398,6 +1399,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <div id="cc-call-sum"></div>
           <button type="button" class="btn small full" style="margin-top:6px;background:#c0392b" onclick="cvCut()">✂️ 방금 20초 가져오기 — 시비 순간 판독</button>
           <button type="button" class="btn small full" style="margin-top:6px;background:#8e44ad" onclick="cvChallenge()">챌린지 — 마지막 바운스 바로 판독 (캠이 앞뒤 4초만 보내고 자동 분석)</button>
+          <button type="button" class="btn small full" style="margin-top:6px;background:#6c3483" onclick="cvChallenge(true)">서브 챌린지 — 마지막 서브가 서비스 박스 안인지 (폴트 판독)</button>
         </div>
         <div class="row" style="gap:6px;margin-top:8px">
           <button type="button" class="btn small outline" style="flex:1" onclick="ccShareAll()">캠 영상 내보내기 (<span id="cc-seg-n">0</span>개 · <span id="cc-seg-mb">0</span>MB) — 사진 앨범·드라이브로</button>
@@ -2172,7 +2174,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.57';
+const APP_VERSION = 'v1.58';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -4632,9 +4634,10 @@ function lvRCPushState() {
   try { cvRenderScore(); } catch (e) {}
   if (live && typeof cvChan !== 'undefined') { // 공기계 전체 화면에 점수 표시 (v0.72)
     const d = live.done ? ['✓', '✓'] : liveDisp();
-    const sc = { type: 'broadcast', event: 'score', payload: { d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1], sets: live.sets.map(x => x[0] + '-' + x[1]).join(' '), n0: liveTeams().mine, n1: liveTeams().theirs, done: !!live.done } };
+    const sc = { type: 'broadcast', event: 'score', payload: { d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1], sets: live.sets.map(x => x[0] + '-' + x[1]).join(' '), n0: liveTeams().mine, n1: liveTeams().theirs, done: !!live.done, side: lvServeSide() } };
     if (cvChan) { try { cvChan.send(sc); } catch (e) {} }
     if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sc); } catch (e) {} }
+    try { if (cvChan || cvChanB) { const k = [d[0], d[1], live.g[0], live.g[1], sc.payload.sets, live.tb ? 1 : 0, live.done ? 1 : 0].join('|'); if (k !== cvLastScoreKey) { cvLastScoreKey = k; cvLastScorePushAt = Date.now(); } } } catch (e) {} // v1.58c · v1.58d 점수가 바뀐 때만(폴트·렛·태그·토글로 다시 그려도 그대로)
   }
   if (!lvRC || lvRC.role !== 'host' || !lvRC.chan || !live) return;
   const d = live.done ? ['✓', '✓'] : liveDisp();
@@ -5141,7 +5144,7 @@ function lvFault() {
   if (live.fault >= 2) { live.fault = 0; lvSpeak('더블 폴트'); setTimeout(() => livePoint(1 - live.srv), 900); }
   else { lvSpeak('폴트'); renderLive(); }
 }
-function lvLet() { if (!live || live.done) return; lvSpeak('렛, 다시'); }
+function lvLet() { if (!live || live.done) return; lvSpeak('렛, 다시'); try { lvRCPushState(); } catch (e) {} } // v1.58b 캠이 다음 바운스를 서브로 보게(점수는 그대로)
 function lvBeep() {
   try {
     const ac = lvBeep._ac || (lvBeep._ac = new (window.AudioContext || window.webkitAudioContext)());
@@ -8006,6 +8009,28 @@ function aiVerdict(cx, cy, singles, baseW) { // 코트 좌표(m, 라인 중심 �
   const inCourt = dEdge >= -AI_BALL_R;    // 공 가장자리가 라인 바깥 가장자리에 닿으면 IN
   return { call: inCourt ? 'IN' : 'OUT', distCm: Math.round(Math.abs(dEdge) * 100), close: Math.abs(dEdge) < 0.05, singles };
 }
+function aiServeVerdict(cx, cy, side) { // v1.58: 서브 = 받는 쪽 서비스 박스(서비스라인·센터서비스라인·단식 사이드라인, 모두 5cm). side = 서버가 선 쪽 'deuce'|'ad' — 모르면 공이 떨어진 쪽 박스(길이·옆 폴트만)
+  const W = AI_COURT_W, L = AI_COURT_L, mid = W / 2, inL = AI_SINGLES_IN, inR = W - AI_SINGLES_IN;
+  const far = cy < L / 2; // 받는 쪽 = 공이 떨어진 쪽(서브는 네트를 넘어감)
+  let left; // 목표 박스가 화면 왼쪽(x 작음)인가 — 받는 사람 기준 듀스 박스 = 그 사람의 오른쪽: 먼 쪽 사람은 카메라를 보므로 화면 왼쪽, 가까운 쪽은 화면 오른쪽
+  if (side === 'deuce' || side === 'ad') left = far ? side === 'deuce' : side === 'ad';
+  else left = cx < mid;
+  const ySvc = far ? L / 2 - 6.40 : L / 2 + 6.40;
+  const ds = [['사이드라인', left ? cx - inL : inR - cx], ['센터서비스라인', left ? mid - cx : cx - mid], ['서비스라인', far ? cy - ySvc : ySvc - cy]];
+  const [line, d] = ds.reduce((a, b) => (b[1] < a[1] ? b : a));
+  const dEdge = d + AI_LINE_W / 2; // 라인 바깥 가장자리 기준(박스 안쪽 +)
+  const ok = dEdge >= -AI_BALL_R;   // 공 가장자리가 라인에 닿으면 IN
+  const boxSide = (far && left) || (!far && !left) ? 'deuce' : 'ad';
+  const rect = [left ? inL : mid, far ? ySvc : L / 2, left ? mid : inR, far ? L / 2 : ySvc];
+  return { call: ok ? 'IN' : 'FAULT', distCm: Math.round(Math.abs(dEdge) * 100), close: Math.abs(dEdge) < 0.05, serve: true, line, box: boxSide, sideKnown: side === 'deuce' || side === 'ad', rect };
+}
+let aiJudge = 'court', aiJudgeNote = '', aiJudgeHintSide = null, aiInChallenge = false; // v1.58 판정 기준: court | serve | serve-deuce | serve-ad · v1.58b 챌린지 안내('fallback' 서브 바운스 못 찾음 | 'hint' 서브였을 수 있음)
+function aiJudgeVerdict(cx, cy) { return aiJudge === 'court' ? aiVerdict(cx, cy, undefined, aiBaseW) : aiServeVerdict(cx, cy, aiJudge === 'serve-deuce' ? 'deuce' : aiJudge === 'serve-ad' ? 'ad' : null); }
+function aiJudgeSet(v, keep) { // v1.58: 바꾸면 결과가 있으면 다시 분석하지 않고 다시 판정
+  aiJudge = ['serve', 'serve-deuce', 'serve-ad'].includes(v) ? v : 'court';
+  const sel = $('ai-judge'); if (sel && sel.value !== aiJudge) sel.value = aiJudge;
+  if (!keep && aiTraj.length >= 4 && aiFinish._last && !aiBusy) aiFinish.apply(null, aiFinish._last);
+}
 function aiGroundFix(H, vw, vh, m) { // v1.55: 공 중심(바닥 위 3.3cm)의 코트 좌표 → 바닥 접점. 보정에서 구한 카메라 위치 쪽으로 r/높이만큼 당김. 카메라 위치를 못 믿으면 그대로
   try { if (!H || !m) return m; const p = clCamPose(H, vw, vh); if (!p || !(p.Z > 0.6 && p.Z < 20) || !isFinite(p.X) || !isFinite(p.Y)) return m; const k = 1 - AI_BALL_R / p.Z; return [p.X + (m[0] - p.X) * k, p.Y + (m[1] - p.Y) * k]; } catch (e) { return m; }
 }
@@ -8099,7 +8124,7 @@ function aiCalibStart() {
   const v = $('vj-video');
   if (!v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   v.pause();
-  aiCorners = []; aiH = null; aiPicking = true; aiBaseW = null; aiCalRef = null; // v1.55 수동 보정은 5cm 기본
+  aiCorners = []; aiH = null; aiPicking = true; aiBaseW = null; aiCalRef = null; aiCalMode = 'corners'; // v1.55 수동 보정은 5cm 기본 · v1.58b '캠 보정' 표시 지움
   const c = $('ai-canvas'); c.classList.add('picking');
   aiSyncCanvas(); aiDraw();
   aiStatus('📐 복식 코트 네 귀퉁이를 순서대로 탭하세요: ① 왼쪽 위 → ② 오른쪽 위 → ③ 오른쪽 아래 → ④ 왼쪽 아래 (화면에 보이는 대로)');
@@ -8344,6 +8369,7 @@ function aiMiniCourt(c, cx, cy, vd) { // 위에서 본 코트 + 착지점
   g.fillStyle = '#2a6f97'; g.fillRect(0, 0, W, H); g.fillStyle = '#3d8bbf'; { const [x0, y0] = P(0, 0), [x1, y1] = P(AI_COURT_W, AI_COURT_L); g.fillRect(x0, y0, x1 - x0, y1 - y0); }
   g.strokeStyle = '#fff'; g.lineWidth = 1.5; aiCourtSegs().forEach(sg => { const [x0, y0] = P(sg[0], sg[1]), [x1, y1] = P(sg[2], sg[3]); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); });
   { const [x0, y0] = P(0, AI_COURT_L / 2), [x1] = P(AI_COURT_W, 0); g.strokeStyle = '#111'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0 - 4, y0); g.lineTo(x1 + 4, y0); g.stroke(); }
+  if (vd && vd.serve && vd.rect) { const [x0, y0] = P(vd.rect[0], vd.rect[1]), [x1, y1] = P(vd.rect[2], vd.rect[3]); g.fillStyle = 'rgba(212,233,78,.35)'; g.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); } // v1.58 서브 박스
   if (cx != null && isFinite(cx) && isFinite(cy)) {
     const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, cy));
     const [bx, by] = P(qx, qy);
@@ -8382,7 +8408,26 @@ function aiResultCard(info) {
   res.appendChild(d);
   const cc = $('ai-card-court'); if (info.cx != null) aiMiniCourt(cc, info.cx, info.cy, info.vd); else cc.style.display = 'none';
   aiCropDraw(info);
-  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견 ' + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? info.vd.call + ' ' + info.vd.distCm + 'cm' : '보정 없음'); d.appendChild(cap); }
+  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견' + (ci.serve ? '(코트 라인 기준) ' : ' ') + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? (info.vd.serve ? (info.vd.call === 'IN' ? '서브 IN' : '폴트') : info.vd.call) + ' ' + info.vd.distCm + 'cm' : '보정 없음') + (ci.serve && ci.serveAgo != null ? ' · ' + ci.serveAgo + '초 전 서브' : '') + (ci.cal ? ' · 캠의 코트 보정' : ''); /* v1.58b */ d.appendChild(cap); }
+}
+function aiApplyCamCal(cal, v) { // v1.58: 챌린지 클립과 함께 온 캠의 코트 보정을 판독 센터에 — 잘못된 값이면 안 씀
+  try {
+    if (!cal || !Array.isArray(cal.c) || cal.c.length !== 4 || !v || !v.videoWidth) return false;
+    const m = ['corners', 'service', 'auto-svc'].includes(cal.m) ? cal.m : null; if (!m) return false;
+    const k = cal.w > 0 ? v.videoWidth / cal.w : 1, k2 = cal.h > 0 ? v.videoHeight / cal.h : k;
+    if (!(Math.abs(k - k2) < 0.02 * k)) return false; // 화면 비율이 다르면(가로·세로 바뀜) 안 씀
+    const pts = cal.c.map(q => [Number(q[0]) * k, Number(q[1]) * k]);
+    if (!pts.every(q => isFinite(q[0]) && isFinite(q[1]))) return false;
+    const H = aiHomography(pts, clCourtDst(m)); if (!H) return false;
+    aiCorners = pts; aiH = H; aiCalMode = 'cam'; aiCalRef = null;
+    aiBaseW = cal.bw > 0.02 && cal.bw < 0.12 ? cal.bw : null;
+    let rf = null; try { aiDetectCourtSvc.netY = null; rf = aiCalRefineV(v, pts, clCourtDst(m), m); } catch (e) {} // v1.58c 지난 장면의 네트 위치로 검사하지 않게 // v1.58b 이 장면의 흰 라인에 맞춰 다듬기(되면 지금 화면과 맞다는 확인도 됨)
+    if (rf && rf.H) { aiCorners = rf.corners; aiH = rf.H; aiCalRef = rf; if (rf.wBase) aiBaseW = rf.wBase; }
+    return { refined: !!(rf && rf.H) };
+  } catch (e) { return false; }
+}
+function lvServeSide() { // v1.58: 지금 포인트의 서브가 어느 쪽에서 들어가는지(점수판) — 포인트 합이 짝수면 듀스 쪽(타이브레이크도 같음), 노애드 결정 포인트는 받는 쪽이 고르므로 모름
+  try { if (typeof live === 'undefined' || !live || live.done || !live.p) return null; const a = live.p[0] | 0, b = live.p[1] | 0; if (live.noAd && !live.tb && a >= 3 && b >= 3 && a === b) return null; return (a + b) % 2 === 0 ? 'deuce' : 'ad'; } catch (e) { return null; }
 }
 async function aiChallengeRun(p, who) { // v1.14: 챌린지 클립이 열리면 바운스 시각(끝에서 fromEnd)으로 이동해 정밀 추적 자동 실행. v1.54 who = 어느 캠 영상인지
   const v = $('vj-video'); if (!v || !p) return;
@@ -8396,10 +8441,16 @@ async function aiChallengeRun(p, who) { // v1.14: 챌린지 클립이 열리면 
   if (!isFinite(dur) || dur <= 0) dur = 4;
   const t = Math.min(Math.max(0.3, dur - (p.fromEnd || 0) / 1000), Math.max(0.3, dur - 0.3));
   v.currentTime = t; await new Promise(res => { v.addEventListener('seeked', res, { once: true }); setTimeout(res, 2500); });
-  if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ': ' + t.toFixed(1) + '초 지점 자동 판독 중…' + (p.call ? ' (캠 실시간 의견 ' + p.call + (p.distCm != null ? ' ' + p.distCm + 'cm' : '') + ')' : '');
+  if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ': ' + t.toFixed(1) + '초 지점 자동 판독 중…' + (p.call ? ' (캠 실시간 의견' + (p.serve || p.serveAsk ? '(코트 라인 기준) ' : ' ') + p.call + (p.distCm != null ? ' ' + p.distCm + 'cm' : '') + ')' : ''); /* v1.58b */
   if (aiBusy) { if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ' 판독을 못 했어요 — 다른 판독이 돌고 있어요. 끝난 뒤 정밀 추적을 눌러 주세요'; return; } // v1.54
   aiChallengeInfo = { call: p.call, distCm: p.distCm, close: !!p.close, guess: !!p.guess, who: who || '' };
-  try { await aiAnalyzeDeep(false, p.guess ? null : t); } catch (e) {} // v1.55 캠이 잰 바운스 시각을 기준으로(추정이면 없음)
+  { const serve = !!(p.serve || p.serveAsk), ok = x => x === 'deuce' || x === 'ad'; // v1.58b 듀스/애드는 서브 때 값(캠) → 누른 때 값(본폰) — 판독할 때 점수는 안 씀(그새 바뀜)
+    const side = serve ? (ok(p.side) ? p.side : p.sideSet ? null : ok(p.sideAsk) ? p.sideAsk : null) : null; // v1.58c 점수판이 '모름'(노애드 결정 포인트)이라 했으면 누른 때 값으로 덮지 않음
+    aiJudgeSet(serve ? (side ? 'serve-' + side : 'serve') : 'court', true); aiChallengeInfo.serve = serve; aiChallengeInfo.serveAgo = serve && Number.isFinite(p.serveAgo) ? p.serveAgo : null;
+    aiJudgeNote = serve ? (p.guess ? 'guess' : !p.serveB ? 'fallback' : p.serveHow === 'gap' ? 'gap' : p.serveAlt ? 'alt' : '') : (p.serveHint ? 'hint' : ''); aiJudgeHintSide = !serve && p.serveHint && ok(p.side) ? p.side : null; } // v1.58c
+  if (p.cal) { const rc = aiApplyCamCal(p.cal, v); // v1.58 캠의 코트 보정을 먼저 · v1.58b 이 장면에서 다듬어지지 않은 지난 세션 보정이면 판독 센터 자체 보정이 되는지 먼저
+    if (rc) { aiChallengeInfo.cal = true; if (!rc.refined && !p.cal.fresh) { const keep = [aiCorners, aiH, aiCalMode, aiBaseW]; aiH = null; let m = null; try { m = aiAutoCalibCore(v); } catch (e) {} if (m) aiChallengeInfo.cal = false; else { aiCorners = keep[0]; aiH = keep[1]; aiCalMode = keep[2]; aiBaseW = keep[3]; } } } }
+  aiInChallenge = true; try { await aiAnalyzeDeep(false, p.guess ? null : t); } catch (e) {} aiInChallenge = false; // v1.58c 챌린지 안내를 이 판독에만 · v1.55 캠이 잰 바운스 시각을 기준으로(추정이면 없음)
   aiChallengeInfo = null; // v1.54c 결과 카드가 못 쓰고 남은 설명이 다음 수동 판독에 붙지 않게
   if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ' 결과가 아래 판독 센터에 있어요 (확대 장면 + 미니 코트)';
   const card = $('ai-card'); if (card) { try { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
@@ -8571,6 +8622,7 @@ async function aiScanClip() { // 📼 클립 전체를 훑어 모든 바운스�
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   if (aiBusy) return; aiBusy = true;
+  if (!aiInChallenge) { aiJudgeNote = ''; aiJudgeHintSide = null; } // v1.58d 스캔으로 고른 바운스에는 챌린지 안내를 붙이지 않음
   const btn = $('ai-scan-btn'); if (btn) btn.disabled = true;
   try {
     v.pause(); aiTrailStop();
@@ -8629,6 +8681,7 @@ function aiGoHit(i) {
   v.currentTime = Math.max(0, h.t - 0.5);
   v.playbackRate = 0.25;
   document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
+  if (!aiInChallenge) { aiJudgeNote = ''; aiJudgeHintSide = null; } // v1.58d
   aiFinish(h.traj[0].t, h.traj[h.traj.length - 1].t);
   v.play();
 }
@@ -8636,6 +8689,7 @@ async function aiAnalyze() {
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   if (aiBusy) return; aiBusy = true;
+  if (!aiInChallenge) { aiJudgeNote = ''; aiJudgeHintSide = null; } // v1.58c
   $('ai-run-btn').disabled = true;
   try {
     v.pause();
@@ -9500,6 +9554,7 @@ async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운�
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   if (aiBusy) return; aiBusy = true;
+  if (!more && !aiInChallenge) { aiJudgeNote = ''; aiJudgeHintSide = null; } // v1.58c 직접 판독하면 챌린지 안내를 지움
   const btn = $('ai-deep-btn'); if (btn) btn.disabled = true;
   try {
     v.pause();
@@ -9661,6 +9716,7 @@ function covRender(pts) {
   covStatus('완료!');
 }
 function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰 바운스 시각(그 밖엔 없음 = 예전처럼 가장 낮은 점)
+  aiFinish._last = [t0, t1, anchor]; // v1.58 판정 기준을 바꾸면 다시 판정
   aiCardInfo = null; // v1.14
   const res = $('ai-result');
   if (aiTraj.length < 4) {
@@ -9693,10 +9749,20 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
     if (aiH) {
       const vv0 = $('vj-video'); const [cx, cy] = aiGroundFix(aiH, vv0.videoWidth, vv0.videoHeight, aiMapPt(aiH, rb.x, rb.y)); // v1.55 공 중심 → 바닥 접점
-      const vd = aiVerdict(cx, cy, undefined, aiBaseW); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14 · v1.55 잰 베이스라인 폭
+      const vd = aiJudgeVerdict(cx, cy); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14 · v1.55 잰 베이스라인 폭 · v1.58 판정 기준(코트 라인/서브)
       const cls = vd.close ? 'unsure' : (vd.call === 'IN' ? 'in' : 'out');
-      html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">라인에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${aiCalMode === 'auto-svc' ? ' · 자동 보정' : ''}</span></div>`;
-      say = (vd.call === 'IN' ? '인' : '아웃') + (vd.close ? ', 아슬아슬해요' : '') + ', 라인에서 ' + vd.distCm + '센티';
+      const calNote = aiCalMode === 'auto-svc' ? ' · 자동 보정' : aiCalMode === 'cam' ? ' · 캠의 코트 보정' : '';
+      if (vd.serve) {
+        const boxName = (vd.box === 'deuce' ? '듀스' : '애드') + ' 쪽 서비스 박스';
+        html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 서브 IN' : '🔴 폴트'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">${boxName} ${vd.line}에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${calNote}</span></div>`;
+        if (!vd.sideKnown) html += `<div class="muted" style="font-size:12px;margin-top:4px">듀스·애드를 몰라(점수판을 안 쓰거나 노애드 결정 포인트) 공이 떨어진 쪽 박스로 봤어요 — 길이·옆만. 반대쪽 박스에 들어간 서브까지 보려면 판정 기준에서 듀스 쪽/애드 쪽을 고르세요.</div>`;
+        { const nt = { fallback: '캠이 서브 바운스를 따로 기록하지 못해 마지막 바운스를 봤어요', gap: '캠이 잠시 조용했다가 처음 튄 공을 서브로 골랐어요', alt: '이 서브 뒤에 캠이 서브 같은 바운스를 하나 더 봤어요(두 번째 서브였을 수 있어요)', guess: '캠이 바운스를 기록하지 못해 마지막 몇 초에서 찾았어요' }[aiJudgeNote]; if (nt) html += `<div class="muted" style="font-size:12px;margin-top:4px">${nt} — 확대 장면이 서브인지 확인하세요.</div>`; } // v1.58c
+        say = (['fallback', 'gap', 'guess', 'alt'].includes(aiJudgeNote) ? '서브 바운스인지 확인이 필요해요. ' : '') + (vd.call === 'IN' ? '서브 인' : '폴트') + (vd.close ? ', 아슬아슬해요' : '') + ', ' + vd.line + '에서 ' + vd.distCm + '센티' + (!vd.sideKnown && vd.call === 'IN' ? ', 길이와 옆만 봤어요' : '');
+      } else {
+        html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">라인에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${calNote}</span></div>`;
+        say = (vd.call === 'IN' ? '인' : '아웃') + (vd.close ? ', 아슬아슬해요' : '') + ', 라인에서 ' + vd.distCm + '센티';
+        if (aiJudgeNote === 'hint') html += `<div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px;flex:1">캠이 이 바운스를 서브로 봤어요(점수 입력 뒤 첫 바운스)</span><button type="button" class="btn small" onclick="aiJudgeSet(aiJudgeHintSide ? 'serve-' + aiJudgeHintSide : 'serve')">서브 기준으로 보기</button></div>`;
+      }
       if (vd.close) html += `<div class="muted" style="font-size:12px;margin-top:4px">⚠️ 5cm 이내는 폰 1대 정확도의 한계 안이에요 — 슬로모로 직접 확인하고 합의하세요</div>`;
     } else {
       html += `<div class="muted" style="font-size:12px;margin-top:4px">📐 코트를 자동으로 못 찾았어요 — 고급 › 수동 보정으로 4점을 찍으면 인아웃 의견까지 나와요</div>`;
@@ -9804,7 +9870,7 @@ function aiTrailStop() {
 function aiClear() {
   aiTrailStop(); aiChallengeInfo = null; // v1.54c
   aiBaseW = null; aiCalRef = null; // v1.55 새 영상·지우기 → 잰 베이스라인 폭도 지움
-  aiTraj = []; aiCorners = []; aiH = null; aiPicking = false;
+  aiTraj = []; aiCorners = []; aiH = null; aiPicking = false; aiJudgeSet('court', true); aiFinish._last = null; aiJudgeNote = ''; aiJudgeHintSide = null; aiCalMode = 'corners'; try { aiDetectCourtSvc.netY = null; } catch (e) {} /* v1.58 · v1.58b · v1.58c */
   const c = $('ai-canvas');
   if (c) { c.classList.remove('picking'); const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); }
   const r = $('ai-result'); if (r) r.innerHTML = '';
@@ -10626,7 +10692,7 @@ function ccZoomSetup() { // 지원 기기(주로 안드로이드 크롬)만: 트
 }
 function ccZoomReset() { const sl = $('cc-zoom'); if (!sl) return; const z = parseFloat(sl.min) || 1; sl.value = z; ccZoomApply(z); ccLog('zoom', '1×로'); toast('줌 1×'); } // v1.49b
 function ccZoomApply(z, silent) {
-  const t = ccStream && ccStream.getVideoTracks()[0]; if (!t || !t.applyConstraints) return; z = parseFloat(z);
+  const t = ccStream && ccStream.getVideoTracks()[0]; if (!t || !t.applyConstraints) return; z = parseFloat(z); if (!silent) clCalFresh = false; /* v1.58c 줌을 바꾸면 보정은 다시 확인해야 */
   t.applyConstraints({ advanced: [{ zoom: z }] }).then(() => { const l = $('cc-zoom-val'); if (l) l.textContent = z.toFixed(1) + '×'; if (!silent) { try { localStorage.setItem('tm-cc-zoom', String(z)); } catch (e) {} } }).catch(() => {});
 }
 function ccAspectChange(v) {
@@ -10723,6 +10789,7 @@ document.addEventListener('DOMContentLoaded', () => { const b = $('cc-batch'); i
 function ccVoiceSet(on) { ccVoiceOn = !!on; try { localStorage.setItem('tm-cc-voice', ccVoiceOn ? '1' : '0'); } catch (e) {} if (ccVoiceOn) ccSay({ text: '콜 소리 켬' }); }
 let clAutoCall = true; try { clAutoCall = localStorage.getItem('tm-cl-autocall') !== '0'; } catch (e) {}
 function clAutoCallSet(on) { clAutoCall = !!on; try { localStorage.setItem('tm-cl-autocall', clAutoCall ? '1' : '0'); } catch (e) {} }
+let clServeB = null, ccServeSide = null, clPrevBounceAt = 0, ccPrevChunks = null, clCalFresh = false, ccServeSideSet = false, clGapSinceScore = 0; // v1.58c 점수판이 쪽을 알려 줬는지(모름 포함), 점수 이벤트 뒤 gap으로 바꾼 횟수 // v1.58b 앞 바운스 시각, 바로 앞 구간 끝 15초, 이번 세션에 정한 보정인지 // v1.58 마지막 서브의 첫 바운스, 점수판이 알려 준 다음 서브 쪽
 let ccLastScoreAt = 0, clCallsSinceScore = 99; // 점수판 이벤트 이후 바운스 수 (첫 바운스 = 서브)
 let clDual = null; // v1.27 두 캠 짝 {slot, until} — 뷰어가 10초마다 갱신, 35초 안 오면 풀림
 function clDualOn() { return !!(clDual && Date.now() < clDual.until); }
@@ -10737,10 +10804,9 @@ function clDualNearOk(mC) { return !clDualOn() || !!(mC && mC[1] >= AI_COURT_L /
 function clAutoCallFor(vd, mC, isServe) { // v0.84: 확실한 것만 → 'OUT' | 'FAULT' | null
   if (!vd || !mC) return null;
   const cx = mC[0], cy = mC[1];
-  if (isServe) { // 서비스 박스 4개 합집합: x 1.37~9.60, y 5.485~18.285 (라인 폭·공 반지름 여유 + 20cm)
-    const M = 0.2 + AI_LINE_W / 2 + AI_BALL_R;
-    const inBoxes = cx >= AI_SINGLES_IN - M && cx <= AI_COURT_W - AI_SINGLES_IN + M && cy >= AI_COURT_L / 2 - 6.40 - M && cy <= AI_COURT_L / 2 + 6.40 + M;
-    return inBoxes ? null : 'FAULT';
+  if (isServe) { // v1.58: 받는 쪽 서비스 박스(점수판이 듀스/애드를 알려 주면 그 박스, 모르면 공이 떨어진 쪽 박스) — 확실한 것만: 먼 코트 60cm·가까운 코트 20cm 넘게 밖
+    const sv = aiServeVerdict(cx, cy, ccServeSide), need = (cy < AI_COURT_L / 2 ? 0.6 : 0.2) + AI_BALL_R;
+    return sv.call === 'FAULT' && sv.distCm >= need * 100 ? 'FAULT' : null;
   }
   if (vd.call === 'OUT' && !vd.close && vd.distCm >= (cy < AI_COURT_L / 2 ? 60 : 15)) return 'OUT'; // v1.25: 먼 코트는 60cm 이상만(한 대 카메라 오차)
   return null;
@@ -10940,6 +11006,7 @@ function ccDownAlert(on, msg, o) { // 사람이 필요할 때: 캠 폰이 말로
 async function ccReacquire(why) {
   if (why === 'lens' && ccTrialOn) { if (!ccLensPending) { ccLensPending = true; ccLog('lens-wait', '초당 장수 시험 중 — 끝나고 바꿈'); const w = () => { if (!ccChan || !ccStream) { ccLensPending = false; return; } if (ccTrialOn || ccReacq) { setTimeout(w, 2000); return; } ccLensPending = false; ccReacquire('lens'); }; setTimeout(w, 2000); } return; } // v1.50·b 시험 중엔 렌즈 때문에 다시 열지 않고, 끝나면 한 번만
   if (!ccChan || ccReacq) return; ccReacq = true;
+  if (why === 'lens' || why === 'manual' || why === 'aspect') clCalFresh = false; // v1.58c 렌즈·화각을 바꾸면 보정은 다시 확인해야
   ccStatus('📷 카메라 다시 여는 중… (' + (why === 'manual' || why === 'tap' ? '수동' : why) + ')');
   const camReq = navigator.mediaDevices.getUserMedia(ccCamConstraints()); // 탭 직후 즉시 요청 — 어떤 await보다 먼저 (v0.58)
   if (why === 'tap' || why === 'manual') { ccTtsUnlock(); ccLandscapeLock(); } // v1.13: 탭으로 다시 열 때만(자동 재획득은 제스처가 아님) · v1.30 가로 고정
@@ -11526,6 +11593,7 @@ async function ccSealSeg() { // 녹화를 멈추고 현재 구간을 통째로 �
   try {
   await ccStopRec();
   const chunks = ccChunks; ccChunks = []; // v1.30: 저장한 조각은 비움(녹화 재시작 전에 또 저장해도 중복 없음)
+  if (chunks.length > 1) { const lastAt = chunks[chunks.length - 1].at, ty = (segMeta && segMeta.codec) || (ccFmt && ccFmt.type) || 'video/webm'; ccPrevChunks = { c: [chunks[0]].concat(chunks.slice(1).filter(c => c.at >= lastAt - 62000)), type: ty, ext: ty.indexOf('mp4') >= 0 ? 'mp4' : 'webm' }; } // v1.58b 챌린지가 바로 앞 구간을 볼 수 있게(머리 + 끝) · v1.58c 30초, 그 구간의 형식
   if (chunks.length > 1 && ccDb) {
     try {
       const blob = new Blob(chunks.map(c => c.blob), { type: ccFmt.type });
@@ -11586,23 +11654,36 @@ function ccCutReq(p) { // v1.56: 채널로 온 ✂️·챌린지 요청 빈도 �
 }
 async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업로드 (전체 구간은 폰에 저장됨). v1.14: p.challenge면 마지막 바운스 앞뒤만
   if (ccTrialOn && ccChan) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { err: '캠이 초당 장수 시험 중이에요 (1분)' } }); return; } // v1.48b
+  if (p && p.challenge && !p._pin) { const sb0 = p.serve && clServeB && clServeB.bounceAt && Date.now() - clServeB.bounceAt < CC_CH_MAXAGE * 1000 ? clServeB : null, b0 = sb0 || (clLast && clLast.bounceAt && Date.now() - clLast.bounceAt < CC_CH_MAXAGE * 1000 ? clLast : null); p = Object.assign({}, p, { _pin: 1, _sb: sb0, _b: b0, _bServe: !!b0 && b0 === clServeB }); } /* v1.58d 요청을 받은 때의 바운스로 고정 — 기다리거나 다시 시도하는 동안 새 바운스로 바뀌지 않게 */
+  if (ccBusy && p && p.challenge && ccStream && ccChan && !ccOffline() && (p._retry | 0) < 10) { setTimeout(() => ccOnCut(Object.assign({}, p, { _retry: (p._retry | 0) + 1 })), 1000); return; } // v1.58c 하이라이트 클립을 올리는 중이면 끝난 뒤 다시
   if (ccBusy || !ccStream || !ccChan || ccOffline()) return; // v1.57: 중계가 없으면 올릴 수 없음(자동 클립 포함 — 녹화 조각을 일찍 닫지 않게)
   const ch = !!(p && p.challenge);
-  const b = ch && clLast && clLast.bounceAt && Date.now() - clLast.bounceAt < CC_CH_MAXAGE * 1000 ? clLast : null;
+  const wantServe = ch && !!(p && p.serve); // v1.58 서브 챌린지: 마지막 서브의 첫 바운스(점수판을 쓸 때), 없으면 마지막 바운스
+  const sb = ch ? p._sb || null : null; /* v1.58d 받은 때 고정한 값 */
+  const b = ch ? p._b || null : null;
   if (b) { const wait = b.bounceAt + CC_CH_AFTER * 1000 + 400 - Date.now(); if (wait > 0) { setTimeout(() => ccOnCut(p), wait); return; } } // 반등 뒤 장면이 녹화될 때까지
   ccBusy = true;
   ccStatus(ch ? '챌린지 클립 잘라서 올리는 중…' : '✂️ 클립 잘라서 올리는 중…');
   try {
+    const prevSeg = ccPrevChunks, prevChunks = prevSeg && prevSeg.c; // v1.58b 점수 표시로 바로 앞 구간이 닫혔으면 그 바운스는 앞 구간에 있음
     const chunks = await ccSealSeg();
     const cutoff = Date.now() - CC_CUT * 1000;
-    const cut = ch ? ccPickChunks(chunks, b ? b.bounceAt - CC_CH_BEFORE * 1000 : Date.now() - CC_CH_FALLBACK * 1000, b ? b.bounceAt + CC_CH_AFTER * 1000 : Date.now()) : chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
+    const src = ch && b && prevChunks && prevChunks.length > 1 && (chunks.length < 2 || b.bounceAt < chunks[1].at - 1000) && prevChunks[prevChunks.length - 1].at >= b.bounceAt ? prevChunks : chunks; // v1.58c 지금 구간이 짧아도
+    const fmt = src === prevChunks ? prevSeg : ccFmt; // v1.58c 그 구간의 형식
+    const cut = ch ? ccPickChunks(src, b ? b.bounceAt - CC_CH_BEFORE * 1000 : Date.now() - CC_CH_FALLBACK * 1000, b ? b.bounceAt + CC_CH_AFTER * 1000 : Date.now()) : chunks.filter((c, i) => i === 0 || c.at >= cutoff); // 첫 청크(헤더)는 항상 포함
     if (cut.length < 2) throw new Error('버퍼에 영상이 없어요');
-    const blob = new Blob(cut.map(c => c.blob), { type: ccFmt.type });
+    const blob = new Blob(cut.map(c => c.blob), { type: fmt.type });
     const at = Date.now();
-    const path = 'cam/' + ccCode + '/' + at + '.' + ccFmt.ext;
-    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: ccFmt.type, upsert: true });
+    const path = 'cam/' + ccCode + '/' + at + '.' + fmt.ext;
+    const { error } = await TMAuth.client.storage.from('clips').upload(path, blob, { contentType: fmt.type, upsert: true });
     if (error) throw error;
     const pay = { path, at };
+    if (ch) { // v1.58b 서브 챌린지만 서비스 박스로(듀스/애드는 서브 때 값), 보통 챌린지는 코트 라인(캠이 서브라고 본 바운스면 힌트만)
+      const sideSrc = sb || (b && p._bServe ? b : null); // v1.58c 보통 챌린지 힌트도 그 서브 때 쪽
+      pay.serve = wantServe; pay.serveB = !!sb; pay.serveHow = sb ? sb.how : null; pay.side = sideSrc && (sideSrc.side === 'deuce' || sideSrc.side === 'ad') ? sideSrc.side : null; pay.sideSet = !!(sideSrc && sideSrc.sideSet);
+      pay.serveAgo = sb ? Math.max(0, Math.round((Date.now() - sb.bounceAt) / 1000)) : null; pay.serveHint = !wantServe && !!b && !!p._bServe && b.how === 'score'; pay.serveAlt = !!(sb && sb.altAt && sb.altAt > sb.bounceAt); /* v1.58d */
+    }
+    try { const cv0 = $('cc-cam'); if (clH && clCorners && clCorners.length === 4 && cv0 && cv0.videoWidth > cv0.videoHeight) pay.cal = { c: clCorners.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]), m: clCalMode, w: cv0.videoWidth, h: cv0.videoHeight, bw: clBaseW || null, fresh: !!clCalFresh }; } catch (e) {} // v1.58 캠의 코트 보정 · v1.58b 가로 화면일 때만, 이번 세션에 정한 것인지
     if (ch) { const last = cut[cut.length - 1]; pay.challenge = true; pay.fromEnd = b ? Math.max(0, last.at - b.bounceAt) : CC_CH_FALLBACK_SEEK * 1000; pay.call = b ? b.call : null; pay.distCm = b ? b.distCm : null; pay.close = b ? !!b.close : false; pay.guess = !b; ccLog('challenge', (b ? '바운스 ' + Math.round((Date.now() - b.bounceAt) / 1000) + '초 전' : '바운스 기록 없음') + ' · 청크 ' + cut.length); }
     ccChan.send({ type: 'broadcast', event: 'camclip', payload: pay });
     ccStatus('✂️ 클립 전송 완료 (' + Math.round(blob.size / 1024) + 'KB) — 🔴 녹화+중계 계속');
@@ -11799,7 +11880,7 @@ async function ccStop(silent) {
   const v = $('cc-cam'); if (v) v.srcObject = null;
   if (ccWakeLock) { try { await ccWakeLock.release(); } catch (e) {} ccWakeLock = null; }
   if (ccChan) { try { await ccChan.unsubscribe(); } catch (e) {} ccChan = null; }
-  ccRec = null; ccChunks = []; ccCode = null;
+  ccRec = null; ccChunks = []; ccCode = null; ccPrevChunks = null; clServeB = null; /* v1.58c */ ccServeSide = null; ccServeSideSet = false; ccLastScoreAt = 0; clCallsSinceScore = 99; clGapSinceScore = 0; clPrevBounceAt = 0; /* v1.58d */
   if (ccSendTimer) { clearInterval(ccSendTimer); ccSendTimer = null; }
   if (ccSendMode) { ccSendMode = false; const sb = $('cc-send-btn'); if (sb) sb.textContent = 'PC로 영상 보내기 대기 (카메라 안 켬)'; const ss = $('cc-send-status'); if (ss) ss.textContent = ''; }
   const w = $('cc-cam-wrap'); if (w) w.style.display = 'none';
@@ -11812,6 +11893,8 @@ const CC_HL_SEC = 10, CC_HL_MAX = 60;
 let ccHlN = 0;
 function ccScore(p) {
   ccLastScoreAt = Date.now(); clCallsSinceScore = 0; // v0.84: 다음 바운스가 서브
+  ccServeSide = p && (p.side === 'deuce' || p.side === 'ad') ? p.side : null; // v1.58 점수판이 알려 준 다음 서브 쪽
+  ccServeSideSet = !!(p && Object.prototype.hasOwnProperty.call(p, 'side')); clGapSinceScore = 0; // v1.58c 점수판이 쪽을 알려 줬음(노애드 결정 포인트면 null = 모름)
   const el = $('cc-full-score'); if (!el || !p || typeof p !== 'object') return;
   const d0 = String(p.d0 == null ? '' : p.d0).slice(0, 4), d1 = String(p.d1 == null ? '' : p.d1).slice(0, 4);
   el.style.display = 'block';
@@ -12205,7 +12288,7 @@ let clOn = false, clH = null, clCorners = [], clPicking = false, clFrames = [], 
 let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0, clLast = null, clTimer = null, clNCalls = 0;
 function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
-  clOn = false; clH = null; clCorners = []; clPicking = false; clBaseW = null; /* v1.55 */ clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
+  clOn = false; clH = null; clCorners = []; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
   if (typeof clAutoTimer !== 'undefined' && clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } clLensSwitches = 0; clUltraAllowed = false; clLensPrevId = ''; // v1.21/v1.23
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   const c = $('cl-singles'); if (c) c.checked = !!aiSingles;
@@ -12233,7 +12316,7 @@ function clRestoreCal() {
     const d = JSON.parse(localStorage.getItem('tm-clcal') || 'null');
     if (d && d.vw === v.videoWidth && d.vh === v.videoHeight && Array.isArray(d.corners) && d.corners.length === 4) {
       clCalModeChange(d.mode === 'service' ? 'service' : d.mode === 'auto-svc' ? 'auto-svc' : 'corners');
-      clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst()); clBaseW = d.baseW > 0.02 && d.baseW < 0.12 ? d.baseW : null; // v1.55
+      clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst()); clCalFresh = false; clBaseW = d.baseW > 0.02 && d.baseW < 0.12 ? d.baseW : null; // v1.55 · v1.58b 지난 보정
       if (clH) { clStatus('📐 지난 보정을 복원했어요 (카메라 위치가 바뀌었으면 ✨ 자동 보정 다시) — 🤖 라이브 판정을 켜세요'); clDraw(); clHeightShow(); }
     }
   } catch (e) {}
@@ -12297,7 +12380,7 @@ function clHeightShow() { // 보정이 정해질 때마다 호출 — 캠 화면
   el.style.background = r.level === 'good' ? '#e8f3ec' : r.level === 'mid' ? '#fff4d6' : '#fdeaea'; el.style.color = r.level === 'good' ? '#1b7a43' : r.level === 'mid' ? '#8a5a00' : '#c0392b';
   try { ccLog('height', r.level + ' ' + r.Z.toFixed(1) + 'm 뒤 ' + r.back.toFixed(1) + 'm 가림 ' + r.hidPct + '%'); } catch (e) {}
 }
-function clClearCal() { clCorners = []; clH = null; clPicking = false; clBaseW = null; /* v1.55 */ try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
+function clClearCal() { clCorners = []; clH = null; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
 let clAutoTimer = null, clAutoTries = 0, clLensSwitches = 0, clAutoSaid = '', clLensPrevId = '', clAutoFailAfterSwitch = 0, clUltraAllowed = false;
 function clAutoSchedule() { // 캠 시작 3초 뒤 자동 보정, 실패하면 15초마다(최대 20회). 렌즈 자동 전환 뒤 재획득에도 다시 잡힘
   if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; }
@@ -12352,7 +12435,7 @@ function clAutoCalib(silent) {
     clCalModeChange(mode);
     clCorners = q.map(c => [c[0] * sx, c[1] * sy]);
     { const rf = aiCalRefineV(v, clCorners, clCourtDst(), mode); clBaseW = rf ? rf.wBase : null; if (rf) clCorners = rf.corners; ccLog('cal-refine', rf ? 'rms ' + rf.rms0 + '→' + rf.rms1 + ' n' + rf.n + (rf.wBase ? ' base ' + Math.round(rf.wBase * 100) + 'cm' : '') : (aiCalRefineV.why || 'skip')); } // v1.55
-    clH = aiHomography(clCorners, clCourtDst());
+    clH = aiHomography(clCorners, clCourtDst()); clCalFresh = !!clH; // v1.58b 이번 세션에 정한 보정
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
     if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✨ 자동 보정 완료' + (mode === 'auto-svc' ? ' (베이스라인·서비스라인 기준)' : '') + ' — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
     else clStatus('보정 계산 실패 — 📐 수동으로 4점을 탭하세요');
@@ -12385,7 +12468,7 @@ function clCanvasClick(ev) {
   const sn = aiSnapToLine(v, px, py); if (sn) { px = sn[0]; py = sn[1]; }
   clCorners.push([px, py]);
   if (clCorners.length === 4) {
-    clH = aiHomography(clCorners, clCourtDst());
+    clH = aiHomography(clCorners, clCourtDst()); clCalFresh = !!clH; // v1.58b 이번 세션에 정한 보정
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
     if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✅ 수동 보정 완료 — 🤖 라이브 판정을 켜세요'); clHeightShow(); }
     else { clCorners = []; clStatus('보정 실패 — 네 점이 일직선이면 안 돼요. 다시 📐 수동'); }
@@ -12579,6 +12662,15 @@ function clLoop() {
   } catch (e) { /* 프레임 하나 실패는 무시 */ }
   next();
 }
+function clServePick(isServe, mC, sinceScore) { // v1.58b 서브 후보 = 점수판 이벤트 뒤 첫 바운스, 또는 3.5초 넘게 바운스가 없다가 처음 나온 바운스(첫 서브 폴트를 점수판에 안 넣어도 두 번째 서브)
+  const prevB = clPrevBounceAt; clPrevBounceAt = clLast.bounceAt;
+  if (isServe) { try { const sv = mC ? aiServeVerdict(mC[0], mC[1], ccServeSide) : null; clLast.svFault = sv ? (sv.call === 'FAULT' || !!sv.close) : null; } catch (e) { clLast.svFault = null; } } // v1.58c 이 서브가 폴트로 보이나 · v1.58d 보정이 없거나 아슬아슬하면 null = 모름
+  const scoreServe = clServeB && clServeB.how === 'score' && clServeB.bounceAt >= ccLastScoreAt && clLast.bounceAt - clServeB.bounceAt <= 30000; // 같은 포인트(점수판 서브 뒤 30초 안)
+  const quiet = !prevB || clLast.bounceAt - prevB >= 3500, sideFresh = sinceScore <= 45; // v1.58d 점수판이 알려 준 쪽은 점수 뒤 45초 안의 서브에만
+  let take = isServe;
+  if (!take && quiet) { if (!scoreServe || (clServeB.svFault !== false && clGapSinceScore === 0)) take = true; else clServeB.altAt = clLast.bounceAt; } // v1.58c 점수판 서브는 한 번만 바꿈 · v1.58d 캠이 IN이라고 본 서브는 두고 '뒤에 서브 같은 바운스가 또 있었음' 표시
+  if (take) { if (!isServe && scoreServe) clGapSinceScore++; clServeB = clLast; clServeB.side = sideFresh ? ccServeSide : null; clServeB.sideSet = sideFresh && ccServeSideSet; clServeB.how = isServe ? 'score' : 'gap'; }
+}
 function clDetect(tw, th, v) {
   const track = clModelLive ? clModelTrack(clFrames, tw) : clPickTrack(clFrames, tw); // v1.07
   if (!track || track.pts.length < 6) return;
@@ -12606,6 +12698,7 @@ function clDetect(tw, th, v) {
   const auto = clDualNearOk(mC) ? clAutoCallFor(vd, mC, isServe) : null; // v0.84 · v1.27 두 캠이면 내 쪽 코트 절반만 콜
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
   clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt: at - Math.round((performance.now() / 1000 - rb.t) * 1000) }; // bounceAt = 벽시계 기준 착지 시각 (v1.14 챌린지 창)
+  try { clServePick(isServe, mC, sinceScore); } catch (e) {} // v1.58b 서브 후보 · v1.58d 따로 뺌(clServePick)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
   clHlLogAdd(pts.map(p => ({ t: at - Math.round((performance.now() / 1000 - p.t) * 1000), x: p.x * sx, y: p.y * sy })), { t: clLast.bounceAt, x: px, y: py, cx: mC ? mC[0] : null, cy: mC ? mC[1] : null, call: vd ? vd.call : null, distCm: vd ? vd.distCm : 0, close: !!(vd && vd.close) }); // v1.25 세로 하이라이트용
   [900, 1800, 2700, 3600, 4300].forEach(ms => setTimeout(() => { try { clDraw(); } catch (e) {} }, ms));
@@ -12725,7 +12818,7 @@ function cvCall(p, slot) {
       const c = cvCalls[i];
       if (c.slot === slot || c.alt || !cvDualSame(me, c)) continue;
       const prim = cvDualPrimary(me, c), sec = prim === me ? c : me;
-      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm };
+      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm }; prim.serve = !!(prim.serve || sec.serve); // v1.58c 합쳐도 서브 표시 유지
       prim.conflict = !!(prim.call && sec.call && prim.call !== sec.call);
       prim.farOnly = prim.near === false && sec.near === false;
       cvCalls = cvCalls.filter(x => x !== sec);
@@ -12803,15 +12896,15 @@ function cvCamUp(p, slot) {
   const k = p && p.kind, st = $('cc-view-status'); if (st) st.textContent = (slot === 'B' ? 'B 캠' : '캠') + (k === 'save' ? ' 영상 저장이 다시 돼요 (저장 못 한 구간이 있을 수 있어요)' : k === 'space' ? ' 저장 공간 알림이 풀렸어요' : ' 카메라가 다시 켜졌어요' + (p && p.sec ? ' (' + p.sec + '초 끊김)' : '')); // v1.51e 종류대로
   cvDownSaid = 0;
 }
-function cvChallenge() { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독
+function cvChallenge(serve) { // v1.14: 캠에 마지막 바운스 앞뒤 짧은 클립을 요청 → 도착하면 aiChallengeRun이 자동 판독 · v1.58 serve = 서브 챌린지(캠이 마지막 서브의 첫 바운스를 보내고 서비스 박스로 판독)
   if (!cvChan && !cvChanB) { toast('먼저 캠에 연결해 주세요'); return; }
-  const m = { type: 'broadcast', event: 'cut', payload: { at: Date.now(), challenge: true } };
+  const m = { type: 'broadcast', event: 'cut', payload: { at: Date.now(), challenge: true, serve: !!serve } };
   const dual = !!(cvChan && cvChanB);
-  const pick = dual ? cvChallengeSlot() : null; // v1.27: 두 캠이면 마지막 바운스를 본 캠에만
+  const pick = dual ? (serve ? cvServeSlot() : cvChallengeSlot()) : null; // v1.27: 두 캠이면 마지막 바운스를 본 캠에만 · v1.58b 서브 챌린지는 서브 바운스를 가까이서 본 캠
   const slots = [];
   if (cvChan && pick !== 'B') { try { cvChan.send(m); slots.push('A'); } catch (e) {} }
   if (cvChanB && pick !== 'A') { try { cvChanB.send(m); slots.push('B'); } catch (e) {} }
-  cvChStart(slots, dual && !pick ? cvChPrefer() : null); // v1.54
+  cvChStart(slots, dual && !pick ? (serve ? cvServePref() : cvChPrefer()) : null, serve ? { serve: true, side: lvServeSide() } : null); // v1.54 · v1.58b 서브 챌린지는 누른 때의 듀스/애드도
   const st = $('cc-view-status');
   if (st) st.textContent = slots.length > 1 ? '챌린지 요청을 두 캠에 보냄 — 마지막 바운스를 본 캠 영상부터 자동으로 판독해요 (10초쯤)'
     : '챌린지 요청 보냄' + (dual ? ' (' + cvChName(slots[0]) + ')' : '') + ' — 캠이 바운스 앞뒤 4초를 올리면 자동으로 판독해요 (10초쯤)';
@@ -12824,14 +12917,19 @@ function cvChPrefer() { // v1.54: 두 캠에 다 보낼 때(마지막 바운스�
   const c = cvCalls[0];
   return c && Date.now() - c.rx <= 90000 && (c.slot === 'A' || c.slot === 'B') ? c.slot : null;
 }
-function cvChStart(slots, pref) {
+let cvLastScorePushAt = 0, cvLastScoreKey = ''; // v1.58c 본폰이 마지막으로 점수를 캠에 보낸 때 · v1.58d 점수가 바뀐 때만
+function cvServeCall() { const c = cvCalls.find(x => x.serve && Date.now() - x.rx <= 90000 && (!cvLastScorePushAt || x.rx >= cvLastScorePushAt)); return c || null; } // v1.58b 마지막 서브 바운스 기록 · v1.58c 마지막 점수 뒤 것만
+function cvServeSlot() { const c = cvServeCall(); return c && c.near === true && !c.farOnly ? c.slot : null; }
+function cvServePref() { const c = cvServeCall(); return c && (c.slot === 'A' || c.slot === 'B') ? c.slot : null; }
+function cvChStart(slots, pref, ask) {
   if (cvChReq && cvChReq.timer) clearTimeout(cvChReq.timer);
-  cvChReq = { t: Date.now(), slots, pref, got: {}, err: {}, run: null, timer: null };
+  cvChReq = { t: Date.now(), slots, pref, got: {}, err: {}, run: null, timer: null, ask: ask || null }; // v1.58b ask = 서브 챌린지 요청(누른 때의 쪽)
   cvLaterClear('ch'); // 지난 포인트의 챌린지 버튼은 치움
 }
 function cvChBest(r) { // 도착한 챌린지 클립 중 자동 판독할 것: 고른 캠(없으면 null) → 실제 바운스 기록이 있는 클립 → 먼저 온 것
   if (r.pref) return r.got[r.pref] ? r.pref : null; // 먼 쪽 캠만 본 바운스 — 다른 캠 클립은 다른 바운스일 수 있음
   const have = ['A', 'B'].filter(k => r.got[k]).sort((a, b) => r.got[a].rx - r.got[b].rx);
+  if (r.ask && r.ask.serve) { const sc = k => (r.got[k].p.serveB ? 2 : 0) + (r.got[k].p.serveHow === 'score' ? 1 : 0) + (r.got[k].p.guess ? -1 : 0); return have.slice().sort((a, b) => sc(b) - sc(a) || r.got[a].rx - r.got[b].rx)[0] || null; } // v1.58c 서브 챌린지: 서브 바운스를 기록한 캠 영상 먼저
   return have.find(k => !r.got[k].p.guess) || have[0] || null;
 }
 function cvChGiveUp(r) { // 고른 캠 영상이 안 옴 → 다른 캠 영상은 버튼으로만 (고른 캠 영상이 늦게 오면 그때 판독)
@@ -12845,6 +12943,7 @@ function cvChDecide(r) {
   const pending = r.slots.filter(k => !r.got[k] && !r.err[k]); // 아직 안 온 캠
   let pick = null;
   if (r.pref || !pending.length) pick = cvChBest(r);
+  else if (r.ask && r.ask.serve) pick = ['A', 'B'].find(k => r.got[k] && r.got[k].p.serveB && r.got[k].p.serveHow === 'score') || null; // v1.58c 점수판 서브를 기록한 캠이면 바로, 아니면 다른 캠을 기다림
   else pick = ['A', 'B'].filter(k => r.got[k] && !r.got[k].p.guess).sort((a, b) => r.got[a].rx - r.got[b].rx)[0] || null;
   if (pick) { cvChRun(pick, r.got[pick].blob, r.got[pick].p, r); return; }
   if (!pending.length) { cvChGiveUp(r); return; }
@@ -12894,7 +12993,7 @@ function cvChRun(slot, blob, p, r) { // 챌린지 클립 하나를 판독 센터
       if (genGone()) return;
       if (aiBusy) { cvLaterSet('ch', slot, blob, p, r, '다른 판독이 아직 끝나지 않아 ' + cvChName(slot) + ' 챌린지 영상은 아래 버튼으로 뒀어요'); return; }
       vjLoadBlob(blob, cvChName(slot) + ' 챌린지 영상 도착 — 자동으로 판독해요');
-      await aiChallengeRun(p, cvChName(slot));
+      await aiChallengeRun(r && r.ask ? Object.assign({}, p, { serveAsk: !!r.ask.serve, sideAsk: r.ask.side || null }) : p, cvChName(slot)); // v1.58b 옛 캠(서브 표시 없음)도 본폰 요청대로
       if (r && cvLater && cvLater.req === r) { const st = $('cc-view-status'); if (st) st.textContent += ' · ' + cvChName(cvLater.slot) + ' 영상은 아래 버튼으로'; }
     } finally { cvChRunning = Math.max(0, cvChRunning - 1); }
   };
