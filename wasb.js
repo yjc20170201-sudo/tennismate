@@ -111,7 +111,7 @@ window.WASB = (function () {
         for (let y = Math.max(0, by - 12); y <= Math.min(H - 1, by + 12); y++) for (let x = Math.max(0, bx - 12); x <= Math.min(W - 1, bx + 12); x++) {
           const j = y * W + x; taken[j] = 1; const v = h2[j]; if (v > thr) { wx += x * v; wy += y * v; ws += v; }
         }
-        cands.push({ x: (wx / ws) * sx, y: (wy / ws) * sy, conf: best });
+        cands.push({ x: (wx / ws + 0.5) * sx - 0.5, y: (wy / ws + 0.5) * sy - 0.5, conf: best }); // v1.60 반 픽셀: 모델 칸 i의 중심 = 원래 영상 (i+0.5)·배율−0.5
       }
       res.push(cands.length ? Object.assign({}, cands[0], { cands }) : null);
     }

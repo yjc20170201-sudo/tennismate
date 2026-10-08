@@ -2174,7 +2174,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.59';
+const APP_VERSION = 'v1.60';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -7938,7 +7938,32 @@ function aiFitQuad(pts) { // 최소제곱 2차 피팅 [a,b,c]
   const sol = aiSolve(A, B);
   return sol ? { a: sol[0], b: sol[1], c: sol[2], t0 } : null;
 }
-function aiRefineBounce(traj, bi) {
+function aiRefineBounce(traj, bi) { // v1.60: 하강 끝을 bi·bi−1 두 경우로 풀어 착지 시각이 자기 프레임 사이에 오고 잔차가 작은 쪽(예전엔 bi를 늘 하강 쪽에 넣어 이미 튀어 오른 표본이면 공중 점에 묶였음)
+  let best = null;
+  for (const s of [bi, bi - 1]) { const r = aiRefineBounceSplit(traj, s); if (r && (!best || r.res < best.res)) best = r; }
+  if (best) return { t: best.t, x: best.x, y: best.y };
+  return aiRefineBounceOld(traj, bi);
+}
+function aiRefineBounceSplit(traj, s) { // s = 하강 마지막 표본 → 착지는 traj[s]와 traj[s+1] 사이. 하강 = 2차식, 반등 = 첫 두 점 직선(세 번째 점은 잔차로)
+  if (s < 2 || s + 2 > traj.length - 1) return null;
+  const pre = traj.slice(Math.max(0, s - 5), s + 1), post = traj.slice(s + 1, Math.min(traj.length, s + 4));
+  if (pre.length < 3 || post.length < 2) return null;
+  const q = aiFitQuad(pre); if (!q || Math.abs(q.a) < 1e-6) return null;
+  const p1 = post[0], p2 = post[1]; if (p2.t <= p1.t) return null;
+  const m = (p2.y - p1.y) / (p2.t - p1.t), c2 = p1.y - m * p1.t;
+  const qa = q.a, qb = q.b - 2 * q.a * q.t0 - m, qc = q.a * q.t0 * q.t0 - q.b * q.t0 + q.c - c2;
+  const disc = qb * qb - 4 * qa * qc; if (disc < 0) return null;
+  const lo = traj[s].t - 1e-3, hi = traj[s + 1].t + 1e-3; let tStar = null;
+  { const rt = (-qb + Math.sqrt(disc)) / (2 * qa); if (rt >= lo && rt <= hi) tStar = rt; } // v1.60c 꺾이는 쪽 근만(f' = +√disc)
+  if (tStar === null) return null;
+  const Q = t => q.a * (t - q.t0) * (t - q.t0) + q.b * (t - q.t0) + q.c;
+  if (Q(p2.t) - p2.y < 1) return null; // v1.60c 반등 점이 하강 포물선보다 위(화면 y 작게)로 벗어나야 — 아니면 아직 떨어지는 중
+  let res = 0; pre.forEach(p => { res += (p.y - Q(p.t)) ** 2; }); res = Math.sqrt(res / pre.length);
+  if (post[2]) res += Math.abs(post[2].y - (m * post[2].t + c2)) / 2 * Math.max(1, (p2.t - p1.t) / Math.max(1e-3, post[2].t - p2.t)); // v1.60c 직선 간격에 맞춤
+  const xp = pre.slice(-3), mx = (xp[xp.length - 1].x - xp[0].x) / ((xp[xp.length - 1].t - xp[0].t) || 1e-3);
+  return { t: tStar, x: xp[xp.length - 1].x + mx * (tStar - xp[xp.length - 1].t), y: Q(tStar), res };
+}
+function aiRefineBounceOld(traj, bi) {
   const pre = traj.slice(Math.max(0, bi - 5), bi + 1);
   const post = traj.slice(bi + 1, Math.min(traj.length, bi + 4)); // 바운스 샘플 제외 — 순수 반등 구간만
   if (pre.length < 3 || post.length < 2) return null;
@@ -12742,7 +12767,7 @@ function clDetect(tw, th, v) {
   if (performance.now() / 1000 - pts[bi].t < 0.12) return; // 반등 직후 표본이 더 모이면 다음 틱에
   const rb = aiRefineBounce(pts, bi) || pts[bi];
   const sx = v.videoWidth / tw, sy = v.videoHeight / th;
-  const px = rb.x * sx, py = rb.y * sy;
+  const px = (rb.x + 0.5) * sx - 0.5, py = (rb.y + 0.5) * sy - 0.5; // v1.60b 줄인 화면 칸 중심 → 원래 영상
   let vd = null;
   let mC = null;
   if (clH) { mC = aiGroundFix(clH, v.videoWidth, v.videoHeight, aiMapPt(clH, px, py)); vd = aiVerdict(mC[0], mC[1], undefined, clBaseW); } // v1.55 바닥 접점·잰 베이스라인 폭
