@@ -2174,7 +2174,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.60';
+const APP_VERSION = 'v1.61';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8008,6 +8008,7 @@ function aiBounceIdxT(traj, anchor) { // v1.55: ① 챌린지(anchor = 캠이 �
     }
     if (cand.length) { cand.sort((a, b) => Math.abs(traj[a].t - anchor) - Math.abs(traj[b].t - anchor)); bi = cand[0]; }
   }
+  if (anchor != null && bi >= 0 && Math.abs(traj[bi].t - anchor) > 0.6) return -1; // v1.61 챌린지: 캠이 잰 바운스 시각과 동떨어진 바운스(앞 랠리·다음 공)는 답하지 않음
   if (bi < 2 || bi + 1 >= traj.length) return bi;
   const dts = []; for (let i = 1; i < traj.length; i++) dts.push(traj[i].t - traj[i - 1].t); dts.sort((a, b) => a - b); const md = dts[Math.floor(dts.length / 2)] || 1 / 30;
   if (traj[bi].t - traj[bi - 1].t > Math.max(0.05, md * 2.5) && traj[bi - 1].y > traj[bi - 2].y && traj[bi + 1].y < traj[bi].y) return bi - 1;
@@ -9429,7 +9430,7 @@ function aiTrackCands(frames, vw, maxSteps, opt) { // v1.55 opt {lo, hi}: hi 이
       const px = last.x + tr.vx * steps, py = last.y + tr.vy * steps; let best = null, bd = vw * 0.12 * steps; const tight = Math.max(8, vw * 0.025) * Math.min(steps, 2);
       cands.forEach((c, i) => { if (used.has(i)) return; const d = Math.hypot(c.x - px, c.y - py);
         if (opt && (c.conf || 0) < opt.hi && (d > tight || f.t - last.t > 0.07)) return;
-        if (opt && tr.miss > 6) { const rev = tr.vy > 0 && c.y <= last.y + vw * 0.03 && Math.abs(c.x - px) <= Math.max(16, vw * 0.04) * Math.min(steps, 3); if (!rev && ((last.s || 0) < opt.hi || d > tight)) return; } // 오래 놓친 트랙(놓친 수는 높은 점수 점부터): 내려오던 공이 튀어 오른 자리, 또는 마지막 점이 높은 점수이고 예측 바로 근처만 // 낮은 점수 후보는 바로 앞 점(0.07초 안)의 예측 위치 바로 근처만 · 옛 규칙이면 끊겼을 만큼 오래 놓친 트랙은 예측 근처 또는 내려오던 공이 같은 x 근처에서 튀어 오른 자리만(아래쪽 다른 물체로 건너뛰지 않게)
+        if (opt && tr.miss > 6) { const rev = tr.vy > 0 && c.y <= last.y + vw * 0.03 && Math.abs(c.x - px) <= Math.max(16, vw * 0.04) * Math.min(steps, 3); if (!rev && (((last.s || 0) < opt.hi && ((c.conf || 0) < opt.hi || f.t - last.t > 0.07)) || d > tight)) return; } /* v1.61: 마지막 점이 낮은 점수여도 0.07초 안에 이어 온 트랙이면(착지 순간을 낮은 점수로 따라온 공) 예측 바로 근처의 높은 점수 후보는 받음 */ // 오래 놓친 트랙(놓친 수는 높은 점수 점부터): 내려오던 공이 튀어 오른 자리, 또는 마지막 점이 높은 점수이고 예측 바로 근처만 // 낮은 점수 후보는 바로 앞 점(0.07초 안)의 예측 위치 바로 근처만 · 옛 규칙이면 끊겼을 만큼 오래 놓친 트랙은 예측 근처 또는 내려오던 공이 같은 x 근처에서 튀어 오른 자리만(아래쪽 다른 물체로 건너뛰지 않게)
         if (d < bd) { bd = d; best = i; } });
       if (best != null) { const c = cands[best]; used.add(best); tr.vx = (c.x - last.x) / steps; tr.vy = (c.y - last.y) / steps; tr.pts.push({ t: f.t, x: c.x, y: c.y, s: c.conf }); if (!opt || (c.conf || 0) >= opt.hi) tr.miss = 0; else tr.miss++; } // v1.55 낮은 점수로 이으면 놓친 수가 그대로 쌓임(v1.54처럼 마지막 확실한 점부터)
       else if (++tr.miss > 6 && (!opt || f.t - last.t > 0.25)) tr.dead = true;
@@ -9441,8 +9442,36 @@ function aiTrackCands(frames, vw, maxSteps, opt) { // v1.55 opt {lo, hi}: hi 이
   const an = opt && opt.anchor != null ? opt.anchor : null; // v1.55: 판독 센터 — 사용자가 멈춘 시점(챌린지는 바운스 시각)을 지나는 트랙 우선
   const best = (an != null && pick(tracks.filter(tr => tr.pts.some(p => Math.abs(p.t - an) <= 0.12)))) || pick(tracks);
   if (!best) return [];
+  if (opt) { aiTrackExt(best, frames, vw, opt, isStatic, -1); aiTrackExt(best, frames, vw, opt, isStatic, 1); } // v1.61
   let e = best.pts.length; if (opt) while (e > 0 && (best.pts[e - 1].s || 0) < opt.hi) e--; // 낮은 점수 점만 남은 꼬리는 버림(굴러가는 공·발 옆으로 새는 것)
+  if (opt && e < best.pts.length) { const bf = aiBounceIdx(best.pts.map(q => q.y)); if (bf >= 2 && bf >= e - 2) e = Math.min(best.pts.length, Math.max(e, bf + 4)); } // v1.61 단, 꼬리 안(또는 끝 바로 앞)이 바운스면 반등 몇 점은 남김 — 라인 위 착지처럼 튀어 오른 공이 계속 낮은 점수일 때 착지 보간에 필요
   return best.pts.slice(0, e);
+}
+function aiTrackExt(tr, frames, vw, opt, isStatic, dir) { // v1.61: 고른 트랙을 dir = -1 앞쪽(시간 거꾸로)·+1 뒤쪽으로 낮은 점수 후보까지 이어 붙임(예측 바로 근처만). 트랙이 바운스를 아직 못 담았을 때만 — 착지 앞(하강)이나 뒤(반등)가 낮은 점수뿐(라인 위·흰 신발 옆)이라 높은 점수 트랙이 착지에서 시작하거나 끝나던 경우. 아래로 가던 공이 같은 x 근처에서 위로 바뀌는 자리(거꾸로 가면 반등→하강)는 한 번만 꺾어 이어 감. 이어 붙인 결과에 바운스가 안쪽(양쪽 2점↑)에 생기고, 떨어질 때가 튀어 오를 때보다 너무 느리지 않을 때만 반영
+  const p = tr.pts, n = p.length; if (n < 2) return 0;
+  { const bi = aiBounceIdx(p.map(q => q.y)); if (dir < 0 ? bi >= 2 : bi >= 2 && bi <= n - 3) return 0; }
+  const tight = Math.max(8, vw * 0.025), box = Math.max(16, vw * 0.04);
+  const e0 = dir < 0 ? p[0] : p[n - 1], e1 = dir < 0 ? p[1] : p[n - 2];
+  let last = e0, vx, vy; { const s0 = Math.max(1, Math.round(Math.abs(e0.t - e1.t) * 30)); vx = (e0.x - e1.x) / s0; vy = (e0.y - e1.y) / s0; } // 이어 가는 방향의 속도
+  let k = dir < 0 ? frames.length - 1 : 0; if (dir < 0) while (k >= 0 && frames[k].t >= last.t - 1e-4) k--; else while (k < frames.length && frames[k].t <= last.t + 1e-4) k++;
+  const add = []; let flips = 0;
+  for (; k >= 0 && k < frames.length; k += dir) {
+    const f = frames[k], dt = Math.abs(f.t - last.t); if (dt > 0.1 || Math.abs(f.t - e0.t) > 0.8) break;
+    const steps = Math.max(1, Math.round(dt * 30)), px = last.x + vx * steps, py = last.y + vy * steps;
+    let best = null, bd = 1e9;
+    f.cands.forEach(c => { if ((c.conf || 0) < opt.lo || isStatic(c)) return; const d = Math.hypot(c.x - px, c.y - py);
+      if (d <= tight * Math.min(steps, 2) && dt <= 0.07) { if (d < bd) { bd = d; best = c; } }
+      else if (!flips && !best && vy > 0 && c.y <= last.y + vw * 0.01 && Math.abs(c.y - last.y) <= box * Math.min(steps, 3) && Math.abs(c.x - px) <= box * Math.min(steps, 3)) best = c; });
+    if (!best) continue;
+    const nvy = (best.y - last.y) / steps; if (vy > 0 && nvy < 0) flips++; if (flips > 1) break;
+    vx = (best.x - last.x) / steps; vy = nvy;
+    last = { t: f.t, x: best.x, y: best.y, s: best.conf }; add.push(last);
+  }
+  if (!add.length) return 0;
+  const np = dir < 0 ? add.slice().reverse().concat(p) : p.concat(add), b = aiBounceIdx(np.map(q => q.y));
+  if (b < 2 || (dir > 0 && b > np.length - 3)) return 0; // 바운스를 앞뒤 점과 함께 담을 때만
+  { const a = np[Math.max(0, b - 3)], c = np[Math.min(np.length - 1, b + 3)], vd = (np[b].y - a.y) / ((np[b].t - a.t) || 1), vu = (np[b].y - c.y) / ((c.t - np[b].t) || 1); if (!(vd > 0 && vd >= vu * 0.4)) return 0; } // 튄 공은 떨어질 때보다 느리게 올라감 — 거의 수평으로 오다 빠르게 올라가는 건 착지가 아님
+  tr.pts = np; return add.length;
 }
 function aiCleanTraj(traj, vw) { // v0.80: 시간순 점들을 "한 프레임에 폭 12% 이내"로 이어 가장 긴 트랙만 (먼 코트·관중 오탐 제거)
   if (traj.length < 4) return traj;
