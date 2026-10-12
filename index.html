@@ -2174,7 +2174,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.62';
+const APP_VERSION = 'v1.63';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -6382,12 +6382,21 @@ function renderKdk() {
   if (!el) return;
   if (!kdk) { boardPublish('kdk'); // 참가자 선택 화면 (진행 중이던 보드는 끝난 것으로)
     const all = rosterNames();
-    kdkOrder = [realName(ME.name)]; // 체크하는 순서 = 번호 (제비뽑기 순서대로 체크!)
+    kdkOrder = [realName(ME.name)]; // 직접 모드: 체크하는 순서 = 번호 (제비뽑기 순서대로 체크!)
+    kdkSeedLoad(); kdkRand = new Map(); // v1.63 자동 모드: 고수는 시드 번호, 나머지는 제비뽑기
+    const kdkMode = kdkModeGet();
     el.innerHTML = `<div class="card">
-      <div class="muted" style="margin-bottom:6px">참가자 선택 (5~12명) — <b>체크하는 순서대로 번호</b>가 붙어요. 제비뽑기 결과 순서대로 눌러주세요!</div>
+      <div class="row" style="gap:8px;margin-bottom:6px;flex-wrap:wrap;justify-content:flex-start">
+        <span class="muted" style="font-size:12px">번호 정하기</span>
+        <select id="kdk-mode" onchange="kdkModeSet(this.value)">
+          <option value="auto"${kdkMode === 'auto' ? ' selected' : ''}>자동 (고수 → 시드 번호)</option>
+          <option value="manual"${kdkMode === 'manual' ? ' selected' : ''}>직접 (체크 순서 = 번호)</option>
+        </select>
+      </div>
+      <div class="muted" id="kdk-guide" style="margin-bottom:6px">참가자 선택 (5~12명)</div>
       <div id="kdk-players">` +
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
-        <span class="kdk-num" style="min-width:16px;display:inline-block;text-align:center;font-weight:800;color:#2f9e5f"></span><input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''} onchange="kdkToggle(this)"> ${n}${isMe(n) ? ' (나)' : ''}</label>`).join('') +
+        <span class="kdk-num" style="min-width:16px;display:inline-block;text-align:center;font-weight:800;color:#2f9e5f"></span><input type="checkbox" value="${esc(n)}" ${i === 0 ? 'checked' : ''} onchange="kdkToggle(this)"> ${esc(n)}${isMe(n) ? ' (나)' : ''}<button type="button" class="kdk-seed" style="${KDK_SEED_CSS}" onclick="kdkSeedToggle(event, this)">고수</button></label>`).join('') +
       `</div>
       <div class="row" style="gap:8px;margin-top:8px">
         <input type="text" id="kdk-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')kdkAdd()">
@@ -6395,9 +6404,11 @@ function renderKdk() {
       </div>
       <div id="kdk-court-row" class="row" style="gap:8px;margin-top:8px;display:none">
         <span class="muted" style="font-size:12px">12명 코트 수</span>
-        <select id="kdk-court"><option value="12-2" selected>2코트</option><option value="12-3">3코트</option></select>
+        <select id="kdk-court" onchange="kdkNumSync();kdkCount()"><option value="12-2" selected>2코트</option><option value="12-3">3코트</option></select>
       </div>
       <div class="muted" id="kdk-count" style="margin-top:8px"></div>
+      <div id="kdk-seedinfo" style="margin-top:6px;font-size:12.5px"></div>
+      <div id="kdk-preview" style="margin-top:6px"></div>
       <button class="btn full" style="margin-top:8px" onclick="kdkStart()">개인전 시작</button>
     </div>`;
     kdkNumSync();
@@ -6407,19 +6418,19 @@ function renderKdk() {
   // 대진표 + 순위표
   const st = kdkStandings();
   el.innerHTML = `<div class="card">
-    <div class="row"><b>참가 ${kdk.names.length}명 · ${kdk.games.length}게임${kdk.seed ? ' · 시드(고수 추천 번호): ' + kdk.seed : ''}</b>
+    <div class="row"><b>참가 ${kdk.names.length}명 · ${kdk.games.length}게임${kdk.seed ? (kdk.seedNames && kdk.seedNames.length ? ' · 고수 자리 ' + kdk.seed + '번' : ' · 시드(고수 추천 번호): ' + kdk.seed) : ''}</b>
       <span>
         <button class="btn small" onclick="kdkSaveServer()">결과 저장</button>
         <button class="btn small outline" onclick="if(confirm('개인전을 초기화할까요? 저장 안 한 점수는 사라져요')){kdk=null;renderKdk();}">초기화</button>
       </span></div>
-    <div class="muted" style="font-size:12px;margin-top:2px">${kdk.names.map((n, i) => kdkLabel(i) + '=' + n).join(' · ')}</div>
+    <div class="muted" style="font-size:12px;margin-top:2px">${kdk.names.map((n, i) => kdkLabel(i) + '=' + esc(n) + (kdk.seedNames && kdk.seedNames.includes(n) ? '(고수)' : '')).join(' · ')}</div>
   </div>` +
   kdk.games.map((g, gi) => {
     const done = g.sa !== null;
     return `<div class="card" style="padding:9px 12px">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="badge ${done ? '' : 'gray'}">게임${gi + 1}</span>
-        <b style="flex:1;font-size:13px">${g.a.map(i => kdk.names[i]).join('·')} <span class="muted">vs</span> ${g.b.map(i => kdk.names[i]).join('·')}</b>
+        <b style="flex:1;font-size:13px">${g.a.map(i => esc(kdk.names[i])).join('·')} <span class="muted">vs</span> ${g.b.map(i => esc(kdk.names[i])).join('·')}</b>
         <input type="number" id="kdk-sa-${gi}" min="0" max="9" value="${g.sa === null ? '' : g.sa}" style="width:44px" placeholder="0">
         <b>:</b>
         <input type="number" id="kdk-sb-${gi}" min="0" max="9" value="${g.sb === null ? '' : g.sb}" style="width:44px" placeholder="0">
@@ -6429,7 +6440,7 @@ function renderKdk() {
   }).join('') +
   `<div class="card"><b>🏆 순위표</b>
     <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>득점</th><th>실점</th><th>득실차</th></tr></thead><tbody>` +
-    st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${kdkLabel(r.idx)} ${r.name}</td><td>${r.w}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
+    st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${kdkLabel(r.idx)} ${esc(r.name)}</td><td>${r.w}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
   `</tbody></table>
   <div class="muted" style="font-size:11.5px;margin-top:6px">순위 기준: 승 → 득실차 → 득점 (보드 방식 그대로)</div></div>`;
   boardPublish('kdk');
@@ -6441,13 +6452,55 @@ function kdkToggle(cb) {
   kdkNumSync();
   kdkCount();
 }
-function kdkNumSync() { // 각 이름 옆에 배정된 번호(1~9, A~C) 표시
+// v1.63 자동 번호: 고수(시드)로 고른 사람은 그 인원의 시드 번호(KDK_SEEDS — 표마다 시드끼리는 같은 편이 되지 않음)에, 나머지는 제비뽑기로
+const KDK_SEED_CSS = 'margin-left:4px;padding:1px 7px;border:1px solid #2f9e5f;border-radius:10px;font-size:11px;line-height:1.5;cursor:pointer;background:transparent;color:#2f9e5f';
+let kdkSeedSet = new Set(); // 고수로 고른 이름 (다음 번에도 기억 — tm-kdk-seeds)
+let kdkRand = new Map(); // 이름 → 제비뽑기 값 ([다시 섞기] 전까지 그대로)
+function kdkModeGet() { try { return localStorage.getItem('tm-kdk-mode') === 'manual' ? 'manual' : 'auto'; } catch (e) { return 'auto'; } }
+function kdkModeSet(v) { try { localStorage.setItem('tm-kdk-mode', v === 'manual' ? 'manual' : 'auto'); } catch (e) {} kdkNumSync(); kdkCount(); }
+function kdkSeedLoad() { try { const a = JSON.parse(localStorage.getItem('tm-kdk-seeds') || '[]'); kdkSeedSet = new Set(Array.isArray(a) ? a.filter(x => typeof x === 'string').slice(-40) : []); } catch (e) { kdkSeedSet = new Set(); } }
+function kdkSeedSave() { try { localStorage.setItem('tm-kdk-seeds', JSON.stringify([...kdkSeedSet].slice(-40))); } catch (e) {} } /* 최근 40명 */
+function kdkChecked() { // 체크된 이름 (체크한 순서)
+  const c = new Set([...document.querySelectorAll('#kdk-players input:checked')].map(x => x.value));
+  return kdkOrder.filter(n => c.has(n));
+}
+function kdkKeyOf(n) { return n === 12 ? ($('kdk-court') ? $('kdk-court').value : '12-2') : n; }
+function kdkSeedSlots(n) { const s = KDK_SEEDS[kdkKeyOf(n)]; return s ? s.split('·').map(kdkIdx) : []; }
+function kdkDraw(k) { if (!kdkRand.has(k)) kdkRand.set(k, Math.random()); return kdkRand.get(k); }
+function kdkSeedOf(names) { // 오늘 고수로 쓸 사람 — 시드 자리가 없는 인원(5명)이면 고수 표시는 무시하고 모두 제비뽑기
+  return kdkSeedSlots(names.length).length ? names.filter(n => kdkSeedSet.has(n)) : [];
+}
+function kdkAutoOrder(names) { // 번호 순서대로 이름 배열 — 고수가 시드 자리보다 많으면 null
+  const slots = kdkSeedSlots(names.length).sort((a, b) => kdkDraw('#s' + a) - kdkDraw('#s' + b));
+  const seedList = kdkSeedOf(names);
+  const seeds = seedList.slice().sort((a, b) => kdkDraw(a) - kdkDraw(b));
+  if (seeds.length > slots.length) return null;
+  const rest = names.filter(n => !seedList.includes(n)).sort((a, b) => kdkDraw(a) - kdkDraw(b));
+  const out = new Array(names.length).fill(null);
+  seeds.forEach((n, i) => { out[slots[i]] = n; });
+  let j = 0;
+  for (let p = 0; p < out.length; p++) if (out[p] === null) out[p] = rest[j++];
+  return out;
+}
+function kdkNumSync() { // 각 이름 옆에 배정된 번호(1~9, A~C) 표시 + [고수] 버튼 상태
+  const auto = kdkModeGet() === 'auto';
+  const names = kdkChecked(), ok = names.length >= 5 && names.length <= 12;
+  const order = auto ? (ok ? kdkAutoOrder(names) : null) : names;
+  const noSlots = ok && !kdkSeedSlots(names.length).length; /* 5명: 고수 버튼 숨김(표시는 기억) */
   document.querySelectorAll('#kdk-players label').forEach(lb => {
     const cb = lb.querySelector('input');
     const num = lb.querySelector('.kdk-num');
     if (!cb || !num) return;
-    const i = kdkOrder.indexOf(cb.value);
+    const i = order ? order.indexOf(cb.value) : -1;
     num.textContent = (cb.checked && i >= 0) ? kdkLabel(i) : '';
+    const sb = lb.querySelector('.kdk-seed');
+    if (sb) {
+      const on = kdkSeedSet.has(cb.value);
+      sb.style.display = auto && cb.checked && !noSlots ? '' : 'none';
+      sb.style.background = on ? '#2f9e5f' : 'transparent';
+      sb.style.color = on ? '#fff' : '#2f9e5f';
+      sb.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
   });
 }
 function kdkCount() {
@@ -6456,7 +6509,48 @@ function kdkCount() {
   if (c) c.textContent = `선택: ${n}명 ${n >= 5 && n <= 12 ? '✅' : '(5~12명이어야 해요)'}`;
   const cr = $('kdk-court-row');
   if (cr) cr.style.display = n === 12 ? 'flex' : 'none';
+  kdkSeedInfo();
 }
+function kdkSeedInfo() { // 안내·시드 자리·미리 보기
+  const auto = kdkModeGet() === 'auto';
+  const names = kdkChecked(), n = names.length, ok = n >= 5 && n <= 12;
+  const gd = $('kdk-guide'), box = $('kdk-seedinfo'), pv = $('kdk-preview');
+  if (gd) gd.innerHTML = auto
+    ? '참가자 선택 (5~12명) — 잘 치는 분은 이름 옆 <b>고수</b>를 눌러 주세요. 고수는 시드 번호에, 나머지는 제비뽑기로 번호가 정해져요.'
+    : '참가자 선택 (5~12명) — <b>체크하는 순서대로 번호</b>가 붙어요. 제비뽑기 결과 순서대로 눌러 주세요.';
+  if (!box || !pv) return;
+  if (!ok) { box.innerHTML = ''; pv.innerHTML = ''; return; }
+  const seedTxt = KDK_SEEDS[kdkKeyOf(n)] || '', slots = kdkSeedSlots(n).length;
+  const chosen = names.filter(x => kdkSeedSet.has(x)).length;
+  if (!slots) box.innerHTML = `<span class="muted">${n}명은 고수 자리가 따로 없어요 — 모두 제비뽑기로 정해요.</span>`;
+  else if (!auto) box.innerHTML = `<span class="muted">${n}명 고수(시드) 자리: <b>${seedTxt}번</b> — 고수가 이 번호가 되도록 순서를 맞춰 체크하세요.</span>`;
+  else box.innerHTML = `${n}명 고수(시드) 자리: <b>${seedTxt}번</b> · 고른 고수 <b>${chosen}/${slots}</b>명` +
+    (chosen > slots ? `<div style="color:#c0392b;margin-top:2px">고수가 자리보다 ${chosen - slots}명 많아요 — 고수 표시를 빼 주세요.</div>`
+      : chosen < slots ? `<div class="muted" style="margin-top:2px">남는 시드 자리는 제비뽑기로 채워요.</div>` : '');
+  const order = auto ? kdkAutoOrder(names) : null;
+  if (!order) { pv.innerHTML = ''; return; }
+  const seedNow = kdkSeedOf(names);
+  pv.innerHTML = '<div style="font-size:12.5px;line-height:1.8">' + order.map((x, i) => `<span style="white-space:nowrap;margin-right:9px"><b style="color:#2f9e5f">${kdkLabel(i)}</b> ${seedNow.includes(x) ? '<b>' + esc(x) + '</b>(고수)' : esc(x)}</span>`).join('') +
+    '</div><button type="button" class="btn small outline" style="margin-top:4px" onclick="kdkShuffle()">다시 섞기</button>';
+}
+function kdkSeedToggle(ev, btn) { // 이름 옆 [고수] — 시드 자리에 넣을 사람
+  if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+  const cb = btn && btn.parentElement ? btn.parentElement.querySelector('input') : null;
+  if (!cb) return;
+  if (kdkSeedSet.has(cb.value)) kdkSeedSet.delete(cb.value);
+  else {
+    const names = kdkChecked(), n = names.length;
+    if (n >= 5 && n <= 12) {
+      const slots = kdkSeedSlots(n).length, chosen = names.filter(x => kdkSeedSet.has(x)).length;
+      if (chosen >= slots) { toast(slots ? `${n}명은 고수 자리가 ${slots}개예요` : `${n}명은 고수 자리가 없어요`); return; }
+    }
+    kdkSeedSet.delete(cb.value); kdkSeedSet.add(cb.value); // 최근에 고른 고수가 기억 상한(40명)에서 살아남게
+  }
+  kdkSeedSave();
+  kdkNumSync();
+  kdkCount();
+}
+function kdkShuffle() { kdkRand = new Map(); kdkNumSync(); kdkCount(); }
 function kdkAdd() {
   const inp = $('kdk-add');
   const name = (inp.value || '').replace(/["'<>]/g, '').trim();
@@ -6473,6 +6567,10 @@ function kdkAdd() {
   label.appendChild(num);
   label.appendChild(cb);
   label.appendChild(document.createTextNode(' ' + name));
+  const sb = document.createElement('button');
+  sb.type = 'button'; sb.className = 'kdk-seed'; sb.textContent = '고수'; sb.style.cssText = KDK_SEED_CSS;
+  sb.onclick = function (e) { kdkSeedToggle(e, sb); };
+  label.appendChild(sb);
   box.appendChild(label);
   inp.value = '';
   kdkOrder.push(name);
@@ -6480,15 +6578,21 @@ function kdkAdd() {
   kdkCount();
 }
 function kdkStart() {
-  const checked = new Set([...document.querySelectorAll('#kdk-players input:checked')].map(c => c.value));
-  const names = kdkOrder.filter(n => checked.has(n)); // 체크한 순서 그대로 = 번호 순서
-  if (names.length < 5 || names.length > 12) { toast('⚠️ 개인전은 5~12명이어야 해요'); return; }
-  const key = names.length === 12 ? ($('kdk-court') ? $('kdk-court').value : '12-2') : names.length;
+  const picked = kdkChecked(); // 체크한 순서 그대로 = 직접 모드의 번호 순서
+  if (picked.length < 5 || picked.length > 12) { toast('⚠️ 개인전은 5~12명이어야 해요'); return; }
+  const key = kdkKeyOf(picked.length);
   const table = KDK_TABLES[key];
   if (!table) { toast('이 인원은 아직 지원하지 않아요'); return; }
+  let names = picked, seedNames = [];
+  if (kdkModeGet() === 'auto') { // 고수 → 시드 번호, 나머지 → 제비뽑기 (미리 보기와 같은 순서)
+    names = kdkAutoOrder(picked);
+    if (!names) { toast('고수가 시드 자리보다 많아요 — 고수 표시를 빼 주세요'); return; }
+    seedNames = kdkSeedOf(picked);
+  }
   kdk = {
     names,
     seed: KDK_SEEDS[key] || null,
+    seedNames,
     games: table.map(code => {
       const [a, b] = code.split(':');
       return { a: [...a].map(kdkIdx), b: [...b].map(kdkIdx), sa: null, sb: null };
