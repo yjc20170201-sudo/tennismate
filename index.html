@@ -2177,7 +2177,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.65';
+const APP_VERSION = 'v1.66';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8294,14 +8294,14 @@ function aiCalRefineBest(v, corners, dst, mode, d0) { // v1.59b d0 = 미리 읽�
   aiCalRefineV.why = best ? '' : why.join(' ; ');
   return best;
 }
-let aiBaseW = null, aiCalRef = null; // v1.55: 판독 센터 보정의 잰 베이스라인 폭(m)·다듬기 결과
+let aiBaseW = null, aiCalRef = null, aiCalUnref = false; /* v1.66 자동 보정이 흰 라인에 다듬어지지 않음(검출 4점만) → 판정 보류 */ // v1.55: 판독 센터 보정의 잰 베이스라인 폭(m)·다듬기 결과
 // (COCO-SSD 로더는 v0.47에서 제거 — 공 추적 v3·TrackNet으로 대체됨)
 // ── 코트 보정 ──────────────────────────
 function aiCalibStart() {
   const v = $('vj-video');
   if (!v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   v.pause();
-  aiCorners = []; aiH = null; aiPicking = true; aiBaseW = null; aiCalRef = null; aiCalMode = 'corners'; // v1.55 수동 보정은 5cm 기본 · v1.58b '캠 보정' 표시 지움
+  aiCorners = []; aiH = null; aiPicking = true; aiBaseW = null; aiCalRef = null; aiCalUnref = false; aiCalMode = 'corners'; // v1.55 수동 보정은 5cm 기본 · v1.58b '캠 보정' 표시 지움
   const c = $('ai-canvas'); c.classList.add('picking');
   aiSyncCanvas(); aiDraw();
   aiStatus('📐 복식 코트 네 귀퉁이를 순서대로 탭하세요: ① 왼쪽 위 → ② 오른쪽 위 → ③ 오른쪽 아래 → ④ 왼쪽 아래 (화면에 보이는 대로)');
@@ -8483,7 +8483,8 @@ function aiDetectCourtSvc(d, w, h, lowest) { // v1.59b lowest = 예전 규칙(�
   for (let yy = Math.round(near.y - h * 0.62); yy <= near.y - h * 0.12; yy++) {
     const xa = aiLineX(L.l, yy), xb = aiLineX(R.l, yy); if (xa === null || xb === null || xb - xa < w * 0.15) continue;
     const l = { th: th0, rho: (w / 2) * Math.cos(th0) + yy * Math.sin(th0) };
-    rows.push({ yy, l, sup: aiSegSupportH(grid, l, xa + 4, xb - 4, w, h), out: outSup(l, xa, xb) });
+    const ia = aiIntersect(l, L.l), ib = aiIntersect(l, R.l), oa = ia && isFinite(ia[0]) ? ia[0] : xa, ob = ib && isFinite(ib[0]) ? ib[0] : xb; /* v1.66 바깥 구간(네트 띠 판단)은 기울어진 줄과 사이드라인의 실제 교점 기준 — 카메라가 옆으로 기울면 줄 끝이 yy와 다른 높이라 서비스라인을 네트로 오인했음(10/13 6~8°) */
+    rows.push({ yy, l, sup: aiSegSupportH(grid, l, xa + 4, xb - 4, w, h), out: outSup(l, oa, ob) });
   }
   const netRows = rows.filter(r => r.sup > 0.4 && r.out > 0.35); // 네트 띠(사이드라인 바깥까지 밝은 줄)
   const net = netRows.sort((a, b) => (b.sup + b.out) - (a.sup + a.out))[0] || null;
@@ -8520,7 +8521,8 @@ function aiAutoCalPick(v, d, w2, h2, fast) { // v1.59c fast = 다듬기 없이 �
     if (q && aiCalSane(q, 'auto-svc') && !C.some(c => c.q.every((p, i) => Math.hypot(p[0] - q[i][0], p[1] - q[i][1]) < 2))) C.push({ q, mode: 'auto-svc', netY: aiDetectCourtSvc.netY });
   }
   aiDetectCourtSvc.netY = netY0;
-  if (!C.length) { const q = aiDetectCourt(d, w2, h2); if (q && aiCalSane(q, 'corners')) C.push({ q, mode: 'corners', netY: netY0 }); } // v1.08c
+  const tryCorners = () => { const q = aiDetectCourt(d, w2, h2); if (q && aiCalSane(q, 'corners')) C.push({ q, mode: 'corners', netY: netY0 }); };
+  if (!C.length) tryCorners(); // v1.08c
   aiDetectCourtSvc.why = why[0] === why[1] ? why[0] : why.join(' / ');
   if (!C.length) return null;
   if (fast) return { pts: C[0].q.map(p => [p[0] * sx, p[1] * sy]), mode: C[0].mode, rf: null };
@@ -8530,6 +8532,10 @@ function aiAutoCalPick(v, d, w2, h2, fast) { // v1.59c fast = 다듬기 없이 �
     const pts = c.q.map(p => [p[0] * sx, p[1] * sy]); aiDetectCourtSvc.netY = c.netY; let rf = null;
     try { rf = aiCalRefineBest(v, pts, clCourtDst(c.mode), c.mode, full); } catch (e) {}
     if (!best || (rf ? rf.n : -1) > (best.rf ? best.rf.n : -1)) best = { pts, mode: c.mode, rf };
+  }
+  if (best && !best.rf && best.mode === 'auto-svc' && !C.some(c => c.mode === 'corners')) { /* v1.66 서비스라인 후보가 다듬기에 모두 실패하면 네 귀퉁이도 다듬어 봄(관측 수 비교의 연장) */
+    const k = C.length; aiDetectCourtSvc.netY = netY0; tryCorners();
+    for (const c of C.slice(k)) { const pts = c.q.map(p => [p[0] * sx, p[1] * sy]); aiDetectCourtSvc.netY = c.netY; let rf = null; try { rf = aiCalRefineBest(v, pts, clCourtDst(c.mode), c.mode, full); } catch (e) {} if (rf) best = { pts, mode: c.mode, rf }; }
   }
   aiDetectCourtSvc.netY = netY0;
   return best;
@@ -8543,7 +8549,7 @@ function aiAutoCalibCore(v) { // v0.80: 현재 프레임에서 코트 보정 시
   const pk = aiAutoCalPick(v, data, w2, h2); if (!pk) return null; // v1.59b 후보 여럿 → 다듬어 가장 잘 맞는 것
   const mode = pk.mode; let pts = pk.pts, H = aiHomography(pts, clCourtDst(mode));
   if (!H) return null;
-  const rf = pk.rf; aiCalRef = rf; aiBaseW = rf ? rf.wBase : null; // v1.55 보정 다듬기 · v1.59 단식/복식 가설
+  const rf = pk.rf; aiCalRef = rf; aiCalUnref = !rf; /* v1.66 */ aiBaseW = rf ? rf.wBase : null; // v1.55 보정 다듬기 · v1.59 단식/복식 가설
   if (rf) { pts = rf.corners; H = rf.H; }
   aiCorners = pts; aiH = H; aiCalMode = mode;
   return mode;
@@ -8620,7 +8626,7 @@ function aiApplyCamCal(cal, v) { // v1.58: 챌린지 클립과 함께 온 캠의
     const pts = cal.c.map(q => [Number(q[0]) * k, Number(q[1]) * k]);
     if (!pts.every(q => isFinite(q[0]) && isFinite(q[1]))) return false;
     const H = aiHomography(pts, clCourtDst(m)); if (!H) return false;
-    aiCorners = pts; aiH = H; aiCalMode = 'cam'; aiCalRef = null;
+    aiCorners = pts; aiH = H; aiCalMode = 'cam'; aiCalRef = null; aiCalUnref = false; /* v1.66 캠 보정은 캠이 고른 것 */
     aiBaseW = cal.bw > 0.02 && cal.bw < 0.12 ? cal.bw : null;
     let rf = null; try { aiDetectCourtSvc.netY = null; rf = aiCalRefineV(v, pts, clCourtDst(m), m); if (!rf && !cal.rf) rf = aiCalRefineBest(v, pts, clCourtDst(m), m); } catch (e) {} /* v1.59d 캠이 이미 고른 보정은 그대로 다듬기만, 캠이 다듬지 못한 보정일 때만 가설 넷 */ // v1.58c 지난 장면의 네트 위치로 검사하지 않게 // v1.58b 이 장면의 흰 라인에 맞춰 다듬기(되면 지금 화면과 맞다는 확인도 됨)
     if (rf && rf.H) { aiCorners = rf.corners; aiH = rf.H; aiCalRef = rf; if (rf.wBase) aiBaseW = rf.wBase; }
@@ -8649,7 +8655,7 @@ async function aiChallengeRun(p, who) { // v1.14: 챌린지 클립이 열리면 
     const side = serve ? (ok(p.side) ? p.side : p.sideSet ? null : ok(p.sideAsk) ? p.sideAsk : null) : null; // v1.58c 점수판이 '모름'(노애드 결정 포인트)이라 했으면 누른 때 값으로 덮지 않음
     aiJudgeSet(serve ? (side ? 'serve-' + side : 'serve') : 'court', true); aiChallengeInfo.serve = serve; aiChallengeInfo.serveAgo = serve && Number.isFinite(p.serveAgo) ? p.serveAgo : null;
     aiJudgeNote = serve ? (p.guess ? 'guess' : !p.serveB ? 'fallback' : p.serveHow === 'gap' ? 'gap' : p.serveAlt ? 'alt' : '') : (p.serveHint ? 'hint' : ''); aiJudgeHintSide = !serve && p.serveHint && ok(p.side) ? p.side : null; } // v1.58c
-  if (p.cal) { const snap = () => [aiCorners, aiH, aiCalMode, aiBaseW, aiCalRef], put = q => { aiCorners = q[0]; aiH = q[1]; aiCalMode = q[2]; aiBaseW = q[3]; aiCalRef = q[4]; }; // v1.59 판독 센터가 이 장면에서 직접 보정한 것과 캠 보정을 둘 다 다듬어 라인 관측 수가 많은 쪽
+  if (p.cal) { const snap = () => [aiCorners, aiH, aiCalMode, aiBaseW, aiCalRef, aiCalUnref], put = q => { aiCorners = q[0]; aiH = q[1]; aiCalMode = q[2]; aiBaseW = q[3]; aiCalRef = q[4]; aiCalUnref = !!q[5]; }; // v1.59 판독 센터가 이 장면에서 직접 보정한 것과 캠 보정을 둘 다 다듬어 라인 관측 수가 많은 쪽
     let own = null; try { aiH = null; aiCalRef = null; if (aiAutoCalibCore(v)) own = { s: snap(), n: aiCalRef ? aiCalRef.n || 0 : 0 }; } catch (e) {}
     const rc = aiApplyCamCal(p.cal, v);
     if (rc) { const camN = rc.refined && aiCalRef ? aiCalRef.n || 0 : 0; if (own && (own.n > camN || (!camN && !own.n && !p.cal.fresh))) { put(own.s); aiChallengeInfo.cal = false; } else aiChallengeInfo.cal = true; } else if (own) put(own.s); }
@@ -8681,7 +8687,7 @@ async function aiAutoCalib() {
     if (!r) { aiStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이는 프레임에서 다시 시도하거나, 📐 수동 보정을 써주세요'); return; }
     aiPicking = false;
     const c = $('ai-canvas'); if (c) c.classList.remove('picking');
-    aiStatus(aiH ? '✨ 자동 보정 완료! 주황 윤곽이 코트와 맞는지 확인하세요 — 어긋나면 지우고 📐 수동 보정' : '보정 계산 실패 — 📐 수동 보정을 써주세요');
+    aiStatus(aiH ? (aiCalUnref ? '자동 보정은 했지만 흰 라인에 맞춰지지 않았어요 — 인아웃 판정은 보류돼요. 주황 윤곽을 확인하고 어긋나면 수동 보정으로 4점을 찍어 주세요' : '✨ 자동 보정 완료! 주황 윤곽이 코트와 맞는지 확인하세요 — 어긋나면 지우고 📐 수동 보정') : '보정 계산 실패 — 📐 수동 보정을 써주세요');
     aiSyncCanvas(); aiDraw();
   } catch (e) { aiStatus('자동 보정 오류: ' + (e.message || e)); }
 }
@@ -8859,7 +8865,7 @@ async function aiScanClip() { // 📼 클립 전체를 훑어 모든 바운스�
       if (bi < 2 || bi > pts.length - 2) return;
       const rb = aiRefineBounce(pts, bi) || pts[bi];
       let call = null;
-      if (aiH) { const m = aiGroundFix(aiH, v.videoWidth, v.videoHeight, aiMapPt(aiH, rb.x, rb.y)); call = aiVerdict(m[0], m[1], undefined, aiBaseW); } // v1.55
+      if (aiH && !aiCalUnref) { const m = aiGroundFix(aiH, v.videoWidth, v.videoHeight, aiMapPt(aiH, rb.x, rb.y)); call = aiVerdict(m[0], m[1], undefined, aiBaseW); } /* v1.66 클립 스캔도 다듬지 못한 자동 보정이면 판정 보류 */ // v1.55
       aiScanHits.push({ t: rb.t, x: rb.x, y: rb.y, traj: pts, call });
     });
     aiScanHits.sort((a, b) => a.t - b.t);
@@ -9964,7 +9970,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
       if (L.x > vw * 0.96 && L.x > P.x) exitDir = '오른쪽'; else if (L.x < vw * 0.04 && L.x < P.x) exitDir = '왼쪽'; else if (L.y > vh * 0.96 && L.y > P.y) exitDir = '아래쪽';
     }
     let exitNote = '';
-    if (exitDir && aiH) { try { const L = aiTraj[aiTraj.length - 1]; const m = aiMapPt(aiH, L.x, L.y); const vd = aiVerdict(m[0], m[1], undefined, aiBaseW); exitNote = vd.call === 'OUT' ? ' 마지막으로 보인 위치가 이미 라인 밖 ' + vd.distCm + 'cm였어요 — 아웃일 가능성이 커요' : ' 마지막으로 보인 위치는 아직 코트 안이었어요'; } catch (e) {} }
+    if (exitDir && aiH && !aiCalUnref) { try { const L = aiTraj[aiTraj.length - 1]; const m = aiMapPt(aiH, L.x, L.y); const vd = aiVerdict(m[0], m[1], undefined, aiBaseW); exitNote = vd.call === 'OUT' ? ' 마지막으로 보인 위치가 이미 라인 밖 ' + vd.distCm + 'cm였어요 — 아웃일 가능성이 커요' : ' 마지막으로 보인 위치는 아직 코트 안이었어요'; } catch (e) {} }
     html += `<div class="ai-verdict unsure" style="margin-top:6px">${exitDir ? '화면 밖으로 나감' : '바운스 미확정'}</div><div class="muted" style="font-size:12px;margin-top:4px">${exitDir ? '공이 화면 ' + exitDir + ' 가장자리로 나가 바운스가 카메라 시야 밖이에요.' + exitNote + ' — 카메라를 더 뒤·높게 걸거나 반대편 캠이 필요해요' : flying ? '구간 끝까지 공이 아직 날아가는 중이에요 — 이어서 더 보면 바운스를 찾을 수 있어요' : '구간 안에서 공이 가장 낮아지는 지점을 못 찾았어요 — 공이 튀는 순간에서 멈추고 다시 눌러 주세요'}</div>` +
       (!exitDir && typeof aiDeep !== 'undefined' && aiDeep.frames.length ? `<div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn small" onclick="aiAnalyzeDeep(true)">▶ 2초 더 보기 (이어서 분석)</button></div>` : '');
     say = exitDir ? ('공이 화면 ' + exitDir + ' 밖으로 나갔어요' + (exitNote.includes('아웃일') ? '. 아웃일 가능성이 커요' : '')) : flying ? '공이 아직 날아가는 중이에요. 2초 더 보기를 눌러 주세요' : '바운스를 못 찾았어요';
@@ -9975,7 +9981,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     const refined = rb !== b;
     const v = $('vj-video'); v.currentTime = rb.t; // 바운스 순간으로 이동
     html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
-    if (aiH) {
+    if (aiH && !aiCalUnref) { /* v1.66 */
       const vv0 = $('vj-video'); const [cx, cy] = aiGroundFix(aiH, vv0.videoWidth, vv0.videoHeight, aiMapPt(aiH, rb.x, rb.y)); // v1.55 공 중심 → 바닥 접점
       const vd = aiJudgeVerdict(cx, cy); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14 · v1.55 잰 베이스라인 폭 · v1.58 판정 기준(코트 라인/서브)
       const cls = vd.close ? 'unsure' : (vd.call === 'IN' ? 'in' : 'out');
@@ -9992,6 +9998,9 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
         if (aiJudgeNote === 'hint') html += `<div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px;flex:1">캠이 이 바운스를 서브로 봤어요(점수 입력 뒤 첫 바운스)</span><button type="button" class="btn small" onclick="aiJudgeSet(aiJudgeHintSide ? 'serve-' + aiJudgeHintSide : 'serve')">서브 기준으로 보기</button></div>`;
       }
       if (vd.close) html += `<div class="muted" style="font-size:12px;margin-top:4px">⚠️ 5cm 이내는 폰 1대 정확도의 한계 안이에요 — 슬로모로 직접 확인하고 합의하세요</div>`;
+    } else if (aiH && aiCalUnref) { /* v1.66 자동 보정이 흰 라인에 맞춰지지 않음 → 틀린 판정 대신 보류 */
+      html += `<div class="ai-verdict unsure" style="margin-top:6px">보정 확인 필요</div><div class="muted" style="font-size:12px;margin-top:4px">자동 보정이 이 장면의 흰 라인에 맞춰지지 않아 인아웃 판정을 보류했어요 — 주황 윤곽이 코트와 맞는지 보고, 고급 › 수동 보정으로 4점을 찍으면 판정이 나와요</div>`;
+      say = '바운스는 찾았는데 코트 보정을 확인해야 해요';
     } else {
       html += `<div class="muted" style="font-size:12px;margin-top:4px">📐 코트를 자동으로 못 찾았어요 — 고급 › 수동 보정으로 4점을 찍으면 인아웃 의견까지 나와요</div>`;
       say = '바운스는 찾았는데 코트 보정이 없어요';
@@ -10097,7 +10106,7 @@ function aiTrailStop() {
 }
 function aiClear() {
   aiTrailStop(); aiChallengeInfo = null; // v1.54c
-  aiBaseW = null; aiCalRef = null; // v1.55 새 영상·지우기 → 잰 베이스라인 폭도 지움
+  aiBaseW = null; aiCalRef = null; aiCalUnref = false; // v1.55 새 영상·지우기 → 잰 베이스라인 폭도 지움
   aiTraj = []; aiCorners = []; aiH = null; aiPicking = false; aiJudgeSet('court', true); aiFinish._last = null; aiJudgeNote = ''; aiJudgeHintSide = null; aiCalMode = 'corners'; try { aiDetectCourtSvc.netY = null; } catch (e) {} /* v1.58 · v1.58b · v1.58c */
   const c = $('ai-canvas');
   if (c) { c.classList.remove('picking'); const ctx = c.getContext('2d'); ctx.clearRect(0, 0, c.width, c.height); }
