@@ -1328,7 +1328,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
               <button type="button" class="tag-btn" onclick="ccHardReload()">새로고침</button>
             </div>
             <div class="row" style="gap:6px;margin-top:8px">
-              <select id="cl-calmode" style="flex:1;min-width:0;max-width:100%" onchange="clCalModeChange(this.value)">
+              <select id="cl-calmode" style="flex:1;min-width:0;max-width:100%" onchange="clCalModeSel(this.value)">
               <option value="corners">보정 기준: 네 귀퉁이 (코트 전체가 보일 때)</option>
               <option value="service">보정 기준: 먼 귀퉁이 + 가까운 서비스라인 (가까운 쪽이 잘릴 때)</option>
             </select>
@@ -2177,7 +2177,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.66';
+const APP_VERSION = 'v1.67';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8599,7 +8599,7 @@ function aiCropDraw(info) { // 숨은 <video>로 바운스 프레임을 따로 �
     if (aiH) { const Hi = aiInv3(aiH); if (Hi) { g.strokeStyle = 'rgba(255,230,0,0.9)'; g.lineWidth = 2; aiCourtSegs().forEach(sg => { g.beginPath(); let started = false; for (let k = 0; k <= 60; k++) { const q = aiCourtToImg(Hi, sg[0] + (sg[2] - sg[0]) * k / 60, sg[1] + (sg[3] - sg[1]) * k / 60); if (!isFinite(q[0]) || !isFinite(q[1]) || Math.abs(q[0]) > 1e5) { started = false; continue; } const [px, py] = P(q[0], q[1]); if (!started) { g.moveTo(px, py); started = true; } else g.lineTo(px, py); } g.stroke(); }); } }
     g.fillStyle = 'rgba(255,255,255,0.85)'; aiTraj.forEach(p => { const [px, py] = P(p.x, p.y); if (px >= 0 && px <= c.width && py >= 0 && py <= c.height) { g.beginPath(); g.arc(px, py, 2.5, 0, 7); g.fill(); } });
     const [bx, by] = P(rb.x, rb.y); g.strokeStyle = info.vd ? (info.vd.call === 'IN' ? '#2ecc71' : '#e74c3c') : '#f1c40f'; g.lineWidth = 3; g.beginPath(); g.arc(bx, by, 13, 0, 7); g.stroke();
-    g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, c.height - 18, c.width, 18); g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.fillText('바운스 ' + rb.t.toFixed(2) + '초 · ' + Z + '배 확대' + (aiH ? ' · 노란 선 = 보정된 코트 라인' : ''), 6, c.height - 5);
+    g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, c.height - 18, c.width, 18); g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.fillText('바운스 ' + rb.t.toFixed(2) + '초 · ' + Z + '배 확대' + (aiH ? (info.unref ? ' · 노란 선 = 확인 안 된 보정(판정 보류)' : ' · 노란 선 = 보정된 코트 라인') : ''), 6, c.height - 5); /* v1.67 보류한 보정은 그렇게 표시 */
     c.dataset.drawn = '1';
   } catch (e) {} };
   const onSeek = () => { cv.removeEventListener('seeked', onSeek); draw(); };
@@ -8615,7 +8615,7 @@ function aiResultCard(info) {
   res.appendChild(d);
   const cc = $('ai-card-court'); if (info.cx != null) aiMiniCourt(cc, info.cx, info.cy, info.vd); else cc.style.display = 'none';
   aiCropDraw(info);
-  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견' + (ci.serve ? '(코트 라인 기준) ' : ' ') + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? (info.vd.serve ? (info.vd.call === 'IN' ? '서브 IN' : '폴트') : info.vd.call) + ' ' + info.vd.distCm + 'cm' : '보정 없음') + (ci.serve && ci.serveAgo != null ? ' · ' + ci.serveAgo + '초 전 서브' : '') + (ci.cal ? ' · 캠의 코트 보정' : ''); /* v1.58b */ d.appendChild(cap); }
+  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견' + (ci.serve ? '(코트 라인 기준) ' : ' ') + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? (info.vd.serve ? (info.vd.call === 'IN' ? '서브 IN' : '폴트') : info.vd.call) + ' ' + info.vd.distCm + 'cm' : (info.unref ? '보정 확인 필요' : '보정 없음')) + (ci.serve && ci.serveAgo != null ? ' · ' + ci.serveAgo + '초 전 서브' : '') + (ci.cal ? ' · 캠의 코트 보정' : ''); /* v1.58b */ d.appendChild(cap); }
 }
 function aiApplyCamCal(cal, v) { // v1.58: 챌린지 클립과 함께 온 캠의 코트 보정을 판독 센터에 — 잘못된 값이면 안 씀
   try {
@@ -8626,11 +8626,16 @@ function aiApplyCamCal(cal, v) { // v1.58: 챌린지 클립과 함께 온 캠의
     const pts = cal.c.map(q => [Number(q[0]) * k, Number(q[1]) * k]);
     if (!pts.every(q => isFinite(q[0]) && isFinite(q[1]))) return false;
     const H = aiHomography(pts, clCourtDst(m)); if (!H) return false;
-    aiCorners = pts; aiH = H; aiCalMode = 'cam'; aiCalRef = null; aiCalUnref = false; /* v1.66 캠 보정은 캠이 고른 것 */
+    aiCorners = pts; aiH = H; aiCalMode = 'cam'; aiCalRef = null; aiCalUnref = true; /* v1.67 끝에서 정함 — 중간에 예외가 나면 보류(v1.66은 무조건 판정) */
     aiBaseW = cal.bw > 0.02 && cal.bw < 0.12 ? cal.bw : null;
-    let rf = null; try { aiDetectCourtSvc.netY = null; rf = aiCalRefineV(v, pts, clCourtDst(m), m); if (!rf && !cal.rf) rf = aiCalRefineBest(v, pts, clCourtDst(m), m); } catch (e) {} /* v1.59d 캠이 이미 고른 보정은 그대로 다듬기만, 캠이 다듬지 못한 보정일 때만 가설 넷 */ // v1.58c 지난 장면의 네트 위치로 검사하지 않게 // v1.58b 이 장면의 흰 라인에 맞춰 다듬기(되면 지금 화면과 맞다는 확인도 됨)
+    let rf = null; try { aiDetectCourtSvc.netY = null; rf = cal.rf ? aiCalRefineV(v, pts, clCourtDst(m), m) : aiCalRefineBest(v, pts, clCourtDst(m), m); } catch (e) {} /* v1.67b 캠이 다듬지 못한 보정(옛 캠 rf 없음·calHold)은 처음부터 가설 넷 — 기본 가설 하나가 먼저 '성공'하면 틀린 해 */ /* v1.59d 캠이 이미 고른 보정은 그대로 다듬기만, 캠이 다듬지 못한 보정일 때만 가설 넷 */ // v1.58c 지난 장면의 네트 위치로 검사하지 않게 // v1.58b 이 장면의 흰 라인에 맞춰 다듬기(되면 지금 화면과 맞다는 확인도 됨)
     if (rf && rf.H) { aiCorners = rf.corners; aiH = rf.H; aiCalRef = rf; if (rf.wBase) aiBaseW = rf.wBase; }
-    return { refined: !!(rf && rf.H) };
+    /* v1.67 이 장면에서 다듬지 못한 캠 보정: 사용자가 고른 것(수동·서비스라인 기준)이나 캠이 다듬은 지금 보정만 판정, 다듬지 못한 자동·복원·오래된 보정은 '보정 확인 필요' */
+    const refined = !!(rf && rf.H), src = ['manual', 'auto', 'restore'].includes(cal.src) ? cal.src : null;
+    const user = cal.hold !== true && (m === 'service' || src === 'manual' || (!src && m === 'corners' && !cal.rf)); /* v1.67b 캠이 판정을 쉬던 보정(calHold)은 기준이 무엇이든 사용자가 고른 것이 아님 */ /* 옛 캠(출처 없음)의 corners+다듬기 없음은 수동일 수 있음 — 자동 corners는 10/7·10/13 245장 중 0 */
+    const camOk = cal.rf === true && cal.fresh === true && cal.hold !== true; /* 캠에서 다듬었고 이번 세션·지금 렌즈의 보정(v1.59d 캠의 말을 믿음) */
+    aiCalUnref = !refined && !user && !camOk;
+    return { refined, user, camOk, hold: aiCalUnref };
   } catch (e) { return false; }
 }
 function lvServeSide() { // v1.58: 지금 포인트의 서브가 어느 쪽에서 들어가는지(점수판) — 포인트 합이 짝수면 듀스 쪽(타이브레이크도 같음), 노애드 결정 포인트는 받는 쪽이 고르므로 모름
@@ -8655,10 +8660,11 @@ async function aiChallengeRun(p, who) { // v1.14: 챌린지 클립이 열리면 
     const side = serve ? (ok(p.side) ? p.side : p.sideSet ? null : ok(p.sideAsk) ? p.sideAsk : null) : null; // v1.58c 점수판이 '모름'(노애드 결정 포인트)이라 했으면 누른 때 값으로 덮지 않음
     aiJudgeSet(serve ? (side ? 'serve-' + side : 'serve') : 'court', true); aiChallengeInfo.serve = serve; aiChallengeInfo.serveAgo = serve && Number.isFinite(p.serveAgo) ? p.serveAgo : null;
     aiJudgeNote = serve ? (p.guess ? 'guess' : !p.serveB ? 'fallback' : p.serveHow === 'gap' ? 'gap' : p.serveAlt ? 'alt' : '') : (p.serveHint ? 'hint' : ''); aiJudgeHintSide = !serve && p.serveHint && ok(p.side) ? p.side : null; } // v1.58c
-  if (p.cal) { const snap = () => [aiCorners, aiH, aiCalMode, aiBaseW, aiCalRef, aiCalUnref], put = q => { aiCorners = q[0]; aiH = q[1]; aiCalMode = q[2]; aiBaseW = q[3]; aiCalRef = q[4]; aiCalUnref = !!q[5]; }; // v1.59 판독 센터가 이 장면에서 직접 보정한 것과 캠 보정을 둘 다 다듬어 라인 관측 수가 많은 쪽
+  const pc = p.cal || (p.calHold && typeof p.calHold === 'object' ? Object.assign({}, p.calHold, { rf: false, fresh: false, hold: true }) : null); /* v1.67 캠이 판정을 쉬던 보정(calHold)은 다듬기 후보로만 — 여기서도 다듬지 못하면 보류 */
+  if (pc) { const snap = () => [aiCorners, aiH, aiCalMode, aiBaseW, aiCalRef, aiCalUnref], put = q => { aiCorners = q[0]; aiH = q[1]; aiCalMode = q[2]; aiBaseW = q[3]; aiCalRef = q[4]; aiCalUnref = !!q[5]; }; // v1.59 판독 센터가 이 장면에서 직접 보정한 것과 캠 보정을 둘 다 다듬어 라인 관측 수가 많은 쪽
     let own = null; try { aiH = null; aiCalRef = null; if (aiAutoCalibCore(v)) own = { s: snap(), n: aiCalRef ? aiCalRef.n || 0 : 0 }; } catch (e) {}
-    const rc = aiApplyCamCal(p.cal, v);
-    if (rc) { const camN = rc.refined && aiCalRef ? aiCalRef.n || 0 : 0; if (own && (own.n > camN || (!camN && !own.n && !p.cal.fresh))) { put(own.s); aiChallengeInfo.cal = false; } else aiChallengeInfo.cal = true; } else if (own) put(own.s); }
+    const rc = aiApplyCamCal(pc, v);
+    if (rc) { const camN = rc.refined && aiCalRef ? aiCalRef.n || 0 : 0; if (own && (own.n > camN || (!camN && !own.n && !pc.fresh))) { put(own.s); aiChallengeInfo.cal = false; } else aiChallengeInfo.cal = true; } else if (own) put(own.s); }
   aiInChallenge = true; try { await aiAnalyzeDeep(false, p.guess ? null : t); } catch (e) {} aiInChallenge = false; // v1.58c 챌린지 안내를 이 판독에만 · v1.55 캠이 잰 바운스 시각을 기준으로(추정이면 없음)
   aiChallengeInfo = null; // v1.54c 결과 카드가 못 쓰고 남은 설명이 다음 수동 판독에 붙지 않게
   if (st) st.textContent = '챌린지' + (who ? '(' + who + ')' : '') + ' 결과가 아래 판독 센터에 있어요 (확대 장면 + 미니 코트)';
@@ -8874,7 +8880,7 @@ async function aiScanClip() { // 📼 클립 전체를 훑어 모든 바운스�
       aiStatus('바운스를 못 찾았어요 — 폰 고정 촬영본인지 확인하고, 특정 순간은 🤖 버튼으로 시도해 보세요');
       if (box) box.innerHTML = '';
     } else {
-      aiStatus('📼 스캔 완료 — 바운스 ' + aiScanHits.length + '개 발견! 탭하면 그 순간으로 이동해요' + (aiH ? '' : ' · 📐 코트 보정을 하면 IN/OUT 의견까지 붙어요'));
+      aiStatus('📼 스캔 완료 — 바운스 ' + aiScanHits.length + '개 발견! 탭하면 그 순간으로 이동해요' + (aiH ? (aiCalUnref ? ' · 보정 확인 필요 — ' + (aiCalMode === 'cam' ? '캠의 코트 보정이' : '자동 보정이') + ' 흰 라인에 맞춰지지 않아 IN/OUT은 보류했어요 (고급 › 수동 보정으로 4점을 찍으면 붙어요)' : '') : ' · 📐 코트 보정을 하면 IN/OUT 의견까지 붙어요')); /* v1.67 보류 이유 */
       if (box) box.innerHTML = aiScanHits.map((h, i) =>
         '<button type="button" class="tag-btn" style="margin:2px" onclick="aiGoHit(' + i + ')">' +
         '🟡 ' + h.t.toFixed(1) + 's' + (h.call ? (h.call.call === 'IN' ? ' 🟢IN' : ' 🔴OUT') + (h.call.close ? '?' : '') : '') + '</button>').join('');
@@ -9642,7 +9648,7 @@ async function aiAnalyzeDeepWasb(v, opts) { // 현재 시점 앞 1.2초~뒤 0.8�
   let t1 = more ? Math.min(dur, t0 + 2.0) : Math.min(dur, v.currentTime + 0.8);
   const tMax = more ? Math.min(dur, t0 + 3.5) : Math.min(dur, v.currentTime + 3.3);
   aiTraj = [];
-  if (!aiH) { try { const m = aiAutoCalibCore(v); if (m) aiStatus('📐 코트 자동 보정 완료 (' + (m === 'auto-svc' ? '베이스라인·서비스라인 기준' : '네 귀퉁이') + ') — 공 탐지 시작'); } catch (e) {} }
+  if (!aiH) { try { const m = aiAutoCalibCore(v); if (m) aiStatus(aiCalUnref ? '코트 윤곽은 잡았지만 흰 라인에 맞춰지지 않았어요(인아웃은 보류) — 공 탐지 시작' : '📐 코트 자동 보정 완료 (' + (m === 'auto-svc' ? '베이스라인·서비스라인 기준' : '네 귀퉁이') + ') — 공 탐지 시작'); } catch (e) {} } /* v1.67 */
   const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
   const grab = () => { const c = document.createElement('canvas'); c.width = WASB.W; c.height = WASB.H; c.getContext('2d').drawImage(v, 0, 0, c.width, c.height); return c; };
   // v0.82 먼 코트용 크롭 (가로 25~75%, 세로 15~65% = 원본 대비 2배 확대)
@@ -9999,7 +10005,8 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
       }
       if (vd.close) html += `<div class="muted" style="font-size:12px;margin-top:4px">⚠️ 5cm 이내는 폰 1대 정확도의 한계 안이에요 — 슬로모로 직접 확인하고 합의하세요</div>`;
     } else if (aiH && aiCalUnref) { /* v1.66 자동 보정이 흰 라인에 맞춰지지 않음 → 틀린 판정 대신 보류 */
-      html += `<div class="ai-verdict unsure" style="margin-top:6px">보정 확인 필요</div><div class="muted" style="font-size:12px;margin-top:4px">자동 보정이 이 장면의 흰 라인에 맞춰지지 않아 인아웃 판정을 보류했어요 — 주황 윤곽이 코트와 맞는지 보고, 고급 › 수동 보정으로 4점을 찍으면 판정이 나와요</div>`;
+      aiCardInfo.unref = true; /* v1.67 카드 설명·확대 장면 표시 */
+      html += `<div class="ai-verdict unsure" style="margin-top:6px">보정 확인 필요</div><div class="muted" style="font-size:12px;margin-top:4px">${aiCalMode === 'cam' ? '캠의 코트 보정이' : '자동 보정이'} 이 장면의 흰 라인에 맞춰지지 않아 인아웃 판정을 보류했어요 — 주황 윤곽이 코트와 맞는지 보고, 고급 › 수동 보정으로 4점을 찍으면 판정이 나와요</div>`;
       say = '바운스는 찾았는데 코트 보정을 확인해야 해요';
     } else {
       html += `<div class="muted" style="font-size:12px;margin-top:4px">📐 코트를 자동으로 못 찾았어요 — 고급 › 수동 보정으로 4점을 찍으면 인아웃 의견까지 나와요</div>`;
@@ -11261,7 +11268,7 @@ async function ccReacquire(why) {
     ccStatus(ccSpaceStopped ? '카메라를 다시 열었어요 — 저장 공간이 가득 차서 녹화는 아직 멈춘 상태예요 (영상을 옮기고 클럽캠을 껐다 켜세요)' : '🔴 ' + (ccOffline() ? '녹화 재개(중계 연결 안 됨)' : '녹화+중계 재개') + ' — 카메라를 다시 열었어요' + (clOn ? ' · 🤖 라이브 판정 계속' : '')); // v1.51e · v1.57b
     ccReacqFail = 0; ccLastChunkAt = Date.now(); ccStallN = 0; ccHardReopenTried = false; // v1.51c 다음 고장 때도 '멈추고 다시 열기'부터
     ccRetryCancel(); if (ccReloadT) { clearTimeout(ccReloadT); ccReloadT = null; ccLog('reload-cancel', '카메라가 살아나 새로고침 취소'); try { sessionStorage.setItem('tm-cc-reloads', String(Math.max(0, (parseInt(sessionStorage.getItem('tm-cc-reloads') || '1', 10) || 1) - 1))); } catch (e) {} } // v1.51e
-    try { const nid = fresh.getVideoTracks()[0].getSettings().deviceId || '', oid = old && old.getVideoTracks()[0] ? (old.getVideoTracks()[0].getSettings().deviceId || '') : ''; if (ccRetryLensFree && nid && !ccLensPref()) { ccLensSessionId = nid; if (oid && nid !== oid) { ccLog('lens-changed', '다시 열 때 다른 렌즈로 열림 → 자동 보정 다시'); try { clAutoSchedule(); } catch (e) {} } } ccRetryLensFree = false; } catch (e) {} // v1.51e
+    try { const nid = fresh.getVideoTracks()[0].getSettings().deviceId || '', oid = old && old.getVideoTracks()[0] ? (old.getVideoTracks()[0].getSettings().deviceId || '') : ''; if (ccRetryLensFree && nid && !ccLensPref()) { ccLensSessionId = nid; if (oid && nid !== oid) { ccLog('lens-changed', '다시 열 때 다른 렌즈로 열림 → 자동 보정 다시'); clCalFresh = false; /* v1.67b 렌즈가 바뀌었으니 지난 보정은 다시 확인(다듬어진 보정 지키기에서 빠지게) */ try { clAutoSchedule(); } catch (e) {} } } ccRetryLensFree = false; } catch (e) {} // v1.51e
     try { const s2 = fresh.getVideoTracks()[0].getSettings(); ccLog('reacq', why + ' · ' + s2.width + 'x' + s2.height + ' ' + (s2.resizeMode || '') + ' · ' + String(s2.deviceId || '').slice(0, 8) + ' · ' + ccOrientStr()); } catch (e) {} // v1.49d
     if (why !== 'lens' && why !== 'orient' && why !== 'fps' && !ccSpaceStopped) clAutoSay('촬영을 다시 시작했어요'); // v1.29 · v1.46 fps · v1.51e 공간 멈춤이면 말하지 않음
   } catch (e) {
@@ -11920,7 +11927,7 @@ async function ccOnCut(p) { // 뷰어의 ✂️ — 직전 ~20초를 잘라 업�
       pay.serve = wantServe; pay.serveB = !!sb; pay.serveHow = sb ? sb.how : null; pay.side = sideSrc && (sideSrc.side === 'deuce' || sideSrc.side === 'ad') ? sideSrc.side : null; pay.sideSet = !!(sideSrc && sideSrc.sideSet);
       pay.serveAgo = sb ? Math.max(0, Math.round((Date.now() - sb.bounceAt) / 1000)) : null; pay.serveHint = !wantServe && !!b && !!p._bServe && b.how === 'score'; pay.serveAlt = !!(sb && sb.altAt && sb.altAt > sb.bounceAt); /* v1.58d */
     }
-    try { const cv0 = $('cc-cam'); if (clH && clCorners && clCorners.length === 4 && cv0 && cv0.videoWidth > cv0.videoHeight) pay.cal = { c: clCorners.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]), m: clCalMode, w: cv0.videoWidth, h: cv0.videoHeight, bw: clBaseW || null, fresh: !!clCalFresh, rf: clRefN > 0 }; } catch (e) {} // v1.58 캠의 코트 보정 · v1.58b 가로 화면일 때만, 이번 세션에 정한 것인지
+    try { Object.assign(pay, clCalPayload($('cc-cam'))); } catch (e) {} /* v1.67 출처·관측 수 추가, 다듬지 못한 자동 보정은 cal 대신 calHold */ // v1.58 캠의 코트 보정 · v1.58b 가로 화면일 때만, 이번 세션에 정한 것인지
     if (ch) { const last = cut[cut.length - 1]; pay.challenge = true; pay.fromEnd = b ? Math.max(0, last.at - b.bounceAt) : CC_CH_FALLBACK_SEEK * 1000; pay.call = b ? b.call : null; pay.distCm = b ? b.distCm : null; pay.close = b ? !!b.close : false; pay.guess = !b; ccLog('challenge', (b ? '바운스 ' + Math.round((Date.now() - b.bounceAt) / 1000) + '초 전' : '바운스 기록 없음') + ' · 청크 ' + cut.length); }
     ccChan.send({ type: 'broadcast', event: 'camclip', payload: pay });
     ccStatus('✂️ 클립 전송 완료 (' + Math.round(blob.size / 1024) + 'KB) — 🔴 녹화+중계 계속');
@@ -12503,7 +12510,7 @@ async function clSampleUpload(pts, bi, tw, th, v, vd, shot, mC) { // 바운스 �
     const st = svClient().storage.from('clips');
     const meta = { v: APP_VERSION, at: ts, cam: ccCode, w: tw, h: th, videoW: v.videoWidth, videoH: v.videoHeight, bounceT: t0,
       call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!aiSingles, court: mC ? { x: mC[0], y: mC[1] } : null,
-      shot: shot || null, corners: clCorners.length === 4 ? clCorners : null, calMode: clCalMode,
+      shot: shot || null, corners: clCorners.length === 4 ? clCorners : null, calMode: clCalMode, calSrc: clCalSrc || null, calN: clRefN | 0, calHold: clCalHeld(), /* v1.67 */
       track: pts.map(p => ({ t: +p.t.toFixed(3), x: +p.x.toFixed(1), y: +p.y.toFixed(1), s: +(p.s || 0).toFixed(2) })), bounceIdx: bi, frames: [] };
     for (let i = 0; i < frames.length; i++) {
       const f = frames[i];
@@ -12525,7 +12532,7 @@ let clOn = false, clH = null, clCorners = [], clPicking = false, clFrames = [], 
 let clLastT = 0, clLastCall = 0, clLastAutoCut = 0, clAutoCut = true, clTick = 0, clLast = null, clTimer = null, clNCalls = 0;
 function clStatus(t) { const el = $('cc-live-status'); if (el) el.textContent = t; const f = $('cc-full-status'); if (f) f.textContent = t; if (typeof ccFullSync === 'function') ccFullSync(); }
 function clUiReset() {
-  clOn = false; clH = null; clCorners = []; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
+  clOn = false; clH = null; clCorners = []; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ clCalSrc = ''; clRefN = 0; clHoldN = 0; /* v1.67 */ clFrames = []; clPrev = clPrev2 = null; clLast = null; clNCalls = 0; clRing = [];
   if (typeof clAutoTimer !== 'undefined' && clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } if (clDriftTimer) { clearInterval(clDriftTimer); clDriftTimer = null; } clDriftFails = 0; /* v1.59 */ clLensSwitches = 0; clUltraAllowed = false; clLensPrevId = ''; // v1.21/v1.23
   const b = $('cl-toggle-btn'); if (b) b.textContent = '🤖 라이브 판정 켜기';
   const c = $('cl-singles'); if (c) c.checked = !!aiSingles;
@@ -12541,20 +12548,25 @@ function clCourtDst(mode) {
 }
 function clCalModeChange(v, quiet) { // v1.59d quiet = 상태 줄 안 바꿈
   clCalMode = v === 'service' ? 'service' : v === 'auto-svc' ? 'auto-svc' : 'corners';
-  const sel = $('cl-calmode'); if (sel && sel.value !== clCalMode) sel.value = clCalMode === 'auto-svc' ? 'corners' : clCalMode;
+  const sel = $('cl-calmode'); if (sel && clCalMode !== 'auto-svc' && sel.value !== clCalMode) sel.value = clCalMode; /* v1.67b 자동('auto-svc')은 선택 상자(= 수동 보정 기준)를 건드리지 않음 */
   if (clCalMode === 'auto-svc' || quiet) return;
   clStatus(clCalMode === 'service' ? '📐 서비스라인 기준 — 수동 보정에서 ① 먼 왼쪽 귀퉁이 ② 먼 오른쪽 귀퉁이 ③ 가까운 서비스라인 오른쪽 끝 ④ 왼쪽 끝을 탭' : '📐 네 귀퉁이 기준 — ✨ 자동 보정 또는 수동 4점 탭');
 }
-function clSaveCal(vw, vh) { try { localStorage.setItem('tm-clcal', JSON.stringify({ vw, vh, corners: clCorners, mode: clCalMode, baseW: clBaseW, src: clCalSrc })); } catch (e) {} } // v1.59d 출처(수동이면 흔들림 추적이 자동으로 덮지 않게)
+function clCalModeSel(v) { /* v1.67b 선택 상자 = 다음 수동 보정의 기준. 지금 보정이 있으면 그 점들의 기준(clCalMode)은 그대로 — 바꾸면 점과 대응점이 어긋남(판정을 쉬는 자동 보정이 '서비스라인 기준'으로 챌린지에 실려 판독 센터가 다듬기 없이 판정하던 것) */
+  if (clH && clCorners && clCorners.length === 4 && !clPicking) { clStatus(v === 'service' ? '서비스라인 기준 — 수동 보정을 누르면 ① 먼 왼쪽 귀퉁이 ② 먼 오른쪽 귀퉁이 ③ 가까운 서비스라인 오른쪽 끝 ④ 왼쪽 끝 순서로 탭해요 (지금 보정은 그대로)' : '네 귀퉁이 기준 — 수동 보정을 누르면 4점을 탭해요 (지금 보정은 그대로)'); return; }
+  clCalModeChange(v);
+}
+function clSaveCal(vw, vh) { try { localStorage.setItem('tm-clcal', JSON.stringify({ vw, vh, corners: clCorners, mode: clCalMode, baseW: clBaseW, src: clCalSrc, n: clRefN | 0 })); } catch (e) {} } /* v1.67 n = 다듬기 관측 수(0 = 다듬지 못한 자동 보정이면 복원해도 판정 쉼) */ // v1.59d 출처(수동이면 흔들림 추적이 자동으로 덮지 않게)
 let clBaseW = null; // v1.55 클럽캠 보정의 잰 베이스라인 폭(m)
 function clRestoreCal() {
   const v = $('cc-cam'); if (!v || !v.videoWidth) return;
   try {
     const d = JSON.parse(localStorage.getItem('tm-clcal') || 'null');
     if (d && d.vw === v.videoWidth && d.vh === v.videoHeight && Array.isArray(d.corners) && d.corners.length === 4) {
-      clCalModeChange(d.mode === 'service' ? 'service' : d.mode === 'auto-svc' ? 'auto-svc' : 'corners');
-      clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst()); clCalFresh = false; clCalSrc = d.src === 'manual' ? 'manual' : 'restore'; clRefN = 0; /* v1.59 · v1.59d 수동은 수동으로 */ clBaseW = d.baseW > 0.02 && d.baseW < 0.12 ? d.baseW : null; // v1.55 · v1.58b 지난 보정
-      if (clH) { clStatus('📐 지난 보정을 복원했어요 (카메라 위치가 바뀌었으면 ✨ 자동 보정 다시) — 🤖 라이브 판정을 켜세요'); clDraw(); clHeightShow(); }
+      const md = d.src === 'manual' && d.mode === 'auto-svc' ? 'corners' : d.mode; /* v1.67b v1.59d~v1.66이 저장한 '수동 + auto-svc'는 네 귀퉁이 안내로 찍은 점(자동 보정 뒤 수동이 기준을 안 바꾸던 버그) — 네 귀퉁이로 풂 */
+      clCalModeChange(md === 'service' ? 'service' : md === 'auto-svc' ? 'auto-svc' : 'corners');
+      clCorners = d.corners; clH = aiHomography(clCorners, clCourtDst()); clCalFresh = false; clCalSrc = d.src === 'manual' ? 'manual' : d.src === 'auto' && !(d.n > 0) ? 'auto' : 'restore'; clRefN = 0; /* v1.67b n이 없는 옛(v1.66 이하) 자동 기록도 다듬어지기 전엔 판정 쉼 */ /* v1.67 다듬지 못했던 자동 보정은 그대로 판정 쉼 — 흔들림 추적이 다듬으면 풀림 */ /* v1.59 · v1.59d 수동은 수동으로 */ clBaseW = d.baseW > 0.02 && d.baseW < 0.12 ? d.baseW : null; // v1.55 · v1.58b 지난 보정
+      if (clH) { clStatus(clCalHeld() ? '지난 보정(흰 라인에 맞춰지지 않았던 자동 보정)을 복원했어요 — IN/OUT 판정은 쉬고 다시 맞춰 볼게요' : '📐 지난 보정을 복원했어요 (카메라 위치가 바뀌었으면 ✨ 자동 보정 다시) — 🤖 라이브 판정을 켜세요'); clDraw(); clHeightShow(); } /* v1.67 */
     }
   } catch (e) {}
 }
@@ -12600,7 +12612,7 @@ function clLensCheck(H, vw, vh) { // 보정에서 초점거리 → 화각. 720p 
 }
 function clLensShow() {
   const el = $('cl-lens'); if (!el) return; const v = $('cc-cam');
-  if (!clH || !v || !v.videoWidth) { el.style.display = 'none'; return; }
+  if (!clH || clCalHeld() || !v || !v.videoWidth) { el.style.display = 'none'; return; } /* v1.67 다듬지 못한 자동 보정으로는 화각을 말하지 않음 */
   let r = null; try { r = clLensCheck(clH, v.videoWidth, v.videoHeight); } catch (e) {}
   if (!r) { el.style.display = 'none'; return; }
   try { ccLog('lens-fov', r.hfov + '° f/w ' + r.ratio.toFixed(2)); } catch (e) {}
@@ -12610,23 +12622,23 @@ function clLensShow() {
 function clHeightShow() { // 보정이 정해질 때마다 호출 — 캠 화면 아래 색 띠 + 이력
   try { clLensShow(); } catch (e) {}
   const el = $('cl-height'); if (!el) return;
-  const v = $('cc-cam'); if (!clH || !v || !v.videoWidth) { el.style.display = 'none'; return; }
+  const v = $('cc-cam'); if (!clH || clCalHeld() || !v || !v.videoWidth) { el.style.display = 'none'; return; } /* v1.67 다듬지 못한 자동 보정으로는 높이를 말하지 않음(틀린 보정이면 거짓말) */
   let r = null; try { r = clHeightCheck(clH, v.videoWidth, v.videoHeight, clRefN >= 300); } catch (e) {}
   if (!r) { el.style.display = 'none'; return; }
   el.style.display = 'block'; el.textContent = r.text + ' (추정치 ±15%)';
   el.style.background = r.level === 'good' ? '#e8f3ec' : r.level === 'mid' ? '#fff4d6' : '#fdeaea'; el.style.color = r.level === 'good' ? '#1b7a43' : r.level === 'mid' ? '#8a5a00' : '#c0392b';
   try { ccLog('height', r.level + ' ' + r.Z.toFixed(1) + 'm 뒤 ' + r.back.toFixed(1) + 'm 가림 ' + r.hidPct + '%'); } catch (e) {}
 }
-function clClearCal() { clCorners = []; clH = null; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
+function clClearCal() { clCorners = []; clH = null; clPicking = false; clBaseW = null; clCalFresh = false; /* v1.55 · v1.58b */ clCalSrc = ''; clRefN = 0; clHoldN = 0; /* v1.67 */ try { clHeightShow(); } catch (e) {} try { localStorage.removeItem('tm-clcal'); } catch (e) {} clStatus('보정을 지웠어요'); clDraw(); }
 let clAutoTimer = null, clAutoTries = 0, clLensSwitches = 0, clAutoSaid = '', clLensPrevId = '', clAutoFailAfterSwitch = 0, clUltraAllowed = false;
 function clAutoSchedule() { // 캠 시작 3초 뒤 자동 보정, 실패하면 15초마다(최대 20회). 렌즈 자동 전환 뒤 재획득에도 다시 잡힘
   if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; }
   clDriftStart(); // v1.59
-  clAutoTries = 0; clAutoSaid = '';
+  clAutoTries = 0; if (!clCalHeld()) clAutoSaid = ''; /* v1.67b 판정을 쉬는 채로 다시 시작해도(렌즈 바뀜·되돌림) 쉼 소리를 되풀이하지 않게 */
   const tick = () => {
     clAutoTimer = null;
     if (!ccStream || !ccChan) return;
-    if (ccTrialOn || ccLensPending) { clAutoTimer = setTimeout(tick, 3000); return; } // v1.50b: 시험 중·렌즈 바꾸기 대기 중엔 보정하지 않음(옛 렌즈 화면으로 세지 않게)
+    if (ccTrialOn || ccLensPending || clPicking) { clAutoTimer = setTimeout(tick, 3000); return; } /* v1.67b 수동 4점 탭 중엔 끼어들지 않음(횟수도 안 셈) */ // v1.50b: 시험 중·렌즈 바꾸기 대기 중엔 보정하지 않음(옛 렌즈 화면으로 세지 않게)
     const v = $('cc-cam'); if (!v || !v.videoWidth) { clAutoTimer = setTimeout(tick, 2000); return; }
     clAutoTries++;
     const ok = clAutoCalib(true); // silent
@@ -12645,6 +12657,7 @@ let clAfterCalWait = false;
 function clAutoAfterCal() { // 보정 직후: 초광각이면 자동으로 다음 렌즈(최대 2회) → 재보정, 아니면 높이를 말로
   if (ccTrialOn) { if (!clAfterCalWait) { clAfterCalWait = true; const w = () => { if (ccTrialOn) { setTimeout(w, 3000); return; } clAfterCalWait = false; if (ccStream) clAutoAfterCal(); }; setTimeout(w, 3000); } return; } // v1.50b 시험이 끝나고
   const v = $('cc-cam'); if (!clH || !v || !v.videoWidth) return;
+  if (clCalHeld()) { if (clHoldN >= 2 && clAutoSaid !== 'hold') { clAutoSaid = 'hold'; clAutoSay(CL_HOLD_SAY); } return; } /* v1.67 다듬지 못한 자동 보정: 렌즈·높이는 말하지 않고(틀린 보정이면 거짓말) 판정 쉼만 한 번 — 두 번 연달아(약 18초) 쉬게 될 때 */
   let lens = null, hc = null; try { lens = clLensCheck(clH, v.videoWidth, v.videoHeight); hc = clHeightCheck(clH, v.videoWidth, v.videoHeight, clRefN >= 300); } catch (e) {}
   if (lens && lens.ultra && clLensSwitches < 2 && ccLensList.length >= 2 && !ccLensPref() && !clUltraAllowed) { // v1.23: 사용자가 고른 렌즈가 있거나 초광각을 허용한 세션이면 안 바꿈
     clLensPrevId = (ccStream && ccStream.getVideoTracks()[0] ? (ccStream.getVideoTracks()[0].getSettings() || {}).deviceId : '') || ''; clAutoFailAfterSwitch = 0;
@@ -12657,6 +12670,7 @@ function clAutoAfterCal() { // 보정 직후: 초광각이면 자동으로 다�
   } else if (clAutoSaid !== 'ok') { clAutoSaid = 'ok'; clAutoSay('코트 보정 됐어요'); }
 }
 function clAutoCalib(silent, quiet) { // v1.59 quiet = 흔들림 다시 보정(상태 줄·음성 없이)
+  if (silent && clPicking) return false; /* v1.67b 수동 4점 탭 중엔 자동이 덮지 않음 */
   const v = $('cc-cam');
   if (!v || !v.videoWidth) { if (!silent) toast('캠이 켜져 있어야 해요'); return false; }
   try {
@@ -12668,22 +12682,32 @@ function clAutoCalib(silent, quiet) { // v1.59 quiet = 흔들림 다시 보정(�
     const pk = aiAutoCalPick(v, data, w2, h2), mode = pk ? pk.mode : null, q = pk ? pk.pts : null; // v1.59b 후보 여럿 → 다듬어 가장 잘 맞는 것 (q = 원래 해상도)
     if ((!q || !pk.rf) && quiet) return false; // v1.59d 말 없는 다시 보정은 다듬어진 결과만
     if (!q) { clStatus('자동 인식 실패 — 가까운 베이스라인·서비스라인·양쪽 사이드라인이 보이게 잡거나, 📐 수동으로 4점을 탭하세요' + (silent ? ' (15초 뒤 다시 시도)' : '')); return false; }
-    clCalModeChange(mode, quiet);
+    if (!pk.rf && !quiet && clH && clCorners && clCorners.length === 4 && !clCalHeld() && !clPicking) { /* v1.67 다듬지 못한 결과로 지금 쓸 수 있는 보정(수동·복원·다듬어진 자동)을 덮지 않음 — 지금 화면에 다듬어지면 그것을 올리고, 수동은 그대로 */
+      let r0 = null; if (clCalMode !== 'service') { try { aiDetectCourtSvc.netY = null; r0 = aiCalRefineV(v, clCorners, clCourtDst(), clCalMode); } catch (e) {} }
+      if (r0 && r0.H) { clCorners = r0.corners; clH = aiHomography(clCorners, clCourtDst()); if (r0.wBase) clBaseW = r0.wBase; clRefN = r0.n; clCalFresh = true; clDriftFails = 0; clHoldN = 0; clSaveCal(v.videoWidth, v.videoHeight); ccLog('cal-keep', '지금 보정을 다듬음 n' + r0.n); clStatus('지금 보정을 이 화면의 흰 라인에 다시 맞췄어요 — IN/OUT 판정 계속'); clDraw(); clHeightShow(); clAutoAfterCal(); return true; }
+      if (clCalSrc === 'manual') { if (!silent) clStatus('자동 보정이 흰 라인에 맞춰지지 않아 수동 보정을 그대로 써요'); return false; }
+      if (silent && clRefN > 0 && clCalFresh) return true; /* v1.67b 이번 세션에 다듬어진 보정은 장면 하나(가림 등)에서 다듬기가 안 됐다고 다듬지 못한 결과로 바꾸지 않음(쉼·풀림 되풀이) — 오래되면 흔들림 추적이 맡음 */
+    }
+    const wasHeld = clCalHeld(); /* v1.67 */
+    clCalMode = mode === 'corners' ? 'corners' : 'auto-svc'; /* v1.67b 선택 상자(수동 보정 기준)는 건드리지 않음 — 쉼 중 15초 재시도가 사용자가 고른 '서비스라인 기준'을 되돌리던 것 */
     clCorners = q.map(c => c.slice());
-    { const rf = pk.rf; clBaseW = rf ? rf.wBase : null; clRefN = rf ? rf.n : 0; if (rf) clCorners = rf.corners; if (!quiet) ccLog('cal-refine', rf ? 'rms ' + rf.rms0 + '→' + rf.rms1 + ' n' + rf.n + (rf.wBase ? ' base ' + Math.round(rf.wBase * 100) + 'cm' : '') : (aiCalRefineV.why || 'skip')); } // v1.55
-    clH = aiHomography(clCorners, clCourtDst()); clCalFresh = !!clH; // v1.58b 이번 세션에 정한 보정
+    { const rf = pk.rf; clBaseW = rf ? rf.wBase : null; clRefN = rf ? rf.n : 0; if (rf) clCorners = rf.corners; if (!quiet && rf) ccLog('cal-refine', 'rms ' + rf.rms0 + '→' + rf.rms1 + ' n' + rf.n + (rf.wBase ? ' base ' + Math.round(rf.wBase * 100) + 'cm' : '')); } /* v1.67 다듬지 못한 것은 아래 cal-hold로 한 번만(15초마다 이력을 밀어내지 않게) */ // v1.55
+    clH = aiHomography(clCorners, clCourtDst()); clCalFresh = !!clH && !!pk.rf; /* v1.67 다듬지 못한 것은 이 화면과 맞는 보정이 아님 */ // v1.58b 이번 세션에 정한 보정
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
     if (clH) clCalSrc = 'auto'; /* v1.59d 저장 전에 */
     if (clH && quiet) { clSaveCal(v.videoWidth, v.videoHeight); clDraw(); return true; } // v1.59d 말 없는 다시 보정: 상태 줄·기록·높이 띠·음성 없이
-    if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus('✨ 자동 보정 완료' + (mode === 'auto-svc' ? ' (베이스라인·서비스라인 기준)' : '') + ' — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
+    const held = clCalHeld(); clHoldN = held ? clHoldN + 1 : 0; /* v1.67 다듬지 못한 자동 보정 = 판정 쉼(오버레이·공 추적은 그대로), 재시도는 계속 */
+    if (held && !wasHeld) ccLog('cal-hold', (aiCalRefineV.why || 'n0').slice(0, 60));
+    if (clH) { clSaveCal(v.videoWidth, v.videoHeight); clStatus(held ? '코트 윤곽은 잡았지만 흰 라인에 맞춰지지 않아 IN/OUT 판정은 쉬어요 — 계속 다시 맞춰 볼게요' + (silent ? '' : ' (윤곽이 코트와 맞으면 수동 4점 보정으로 바로 판정할 수 있어요)') : '✨ 자동 보정 완료' + (mode === 'auto-svc' ? ' (베이스라인·서비스라인 기준)' : '') + ' — 주황 윤곽이 코트와 맞는지 확인하고 🤖 라이브 판정을 켜세요'); }
     else clStatus('보정 계산 실패 — 📐 수동으로 4점을 탭하세요');
     clDraw(); clHeightShow(); // v1.18
-    if (clH) { clAutoAfterCal(); return true; } return false; // v1.21
+    if (clH) { clAutoAfterCal(); return !held; } return false; // v1.21 · v1.67 판정을 쉬는 보정은 성공으로 치지 않음(자동 보정 재시도 계속)
   } catch (e) { if (!quiet) clStatus('자동 보정 오류: ' + (e.message || e)); return false; }
 }
 function clManualStart() {
   const v = $('cc-cam');
   if (!v || !v.videoWidth) { toast('캠이 켜져 있어야 해요'); return; }
+  { const sel = $('cl-calmode'); if (sel) clCalModeChange(sel.value === 'service' ? 'service' : 'corners', true); else if (clCalMode === 'auto-svc') clCalModeChange('corners', true); } /* v1.67b 수동 보정 기준은 늘 선택 상자(선택 상자를 바꿔도 지금 보정의 기준은 그대로 두므로 여기서 정함) */ /* v1.67 자동 보정('auto-svc') 뒤 수동을 누르면 탭한 네 귀퉁이가 자동 대응점으로 풀리던 것 — 고른 기준(선택 상자)으로 */
   clCorners = []; clH = null; clPicking = true; clBaseW = null; // v1.55 수동 보정은 5cm 기본
   const c = $('cc-cam-overlay'); if (c) c.classList.add('picking');
   clStatus(clCalMode === 'service'
@@ -12708,7 +12732,7 @@ function clCanvasClick(ev) {
   if (clCorners.length === 4) {
     clH = aiHomography(clCorners, clCourtDst()); clCalFresh = !!clH; // v1.58b 이번 세션에 정한 보정
     clPicking = false; const c = $('cc-cam-overlay'); if (c) c.classList.remove('picking');
-    if (clH) { clCalSrc = 'manual'; clRefN = 0; clSaveCal(v.videoWidth, v.videoHeight); clStatus('✅ 수동 보정 완료 — 🤖 라이브 판정을 켜세요'); clHeightShow(); }
+    if (clH) { clCalSrc = 'manual'; clRefN = 0; clHoldN = 0; if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } /* v1.67b 사용자가 수동 보정을 마쳤으면 이번 자동 보정 재시도는 끝(다듬어진 자동이 수동을 덮던 것) */ clSaveCal(v.videoWidth, v.videoHeight); clStatus('✅ 수동 보정 완료 — 🤖 라이브 판정을 켜세요'); clHeightShow(); }
     else { clCorners = []; clStatus('보정 실패 — 네 점이 일직선이면 안 돼요. 다시 📐 수동'); }
   } else clStatus('📐 ' + clCorners.length + '/4 — 다음 점을 탭하세요' + (clCalMode === 'service' ? (clCorners.length === 2 ? ' (이제 가까운 서비스라인 오른쪽 끝)' : clCorners.length === 3 ? ' (가까운 서비스라인 왼쪽 끝)' : '') : ''));
   clDraw();
@@ -12726,7 +12750,7 @@ function clHlLogAdd(pts, b) {
 }
 let clHlBandH = null, clHlBandFn = null;
 function clHlBand() { // v1.26: 사이드라인 ±1.5m 띠(화면 px) — 옆 코트 공 제외. 먼 베이스라인 위(로브)는 위로 갈수록 가까운 폭까지 넓힘 (PC판 court_band와 같은 규칙)
-  if (!clH) return null;
+  if (!clCalOk()) return null; /* v1.67 틀릴 수 있는 보정으로 진짜 공을 빼지 않게 */
   if (clHlBandH === clH) return clHlBandFn;
   clHlBandH = clH; clHlBandFn = null;
   const Hi = aiInv3(clH); if (!Hi) return null;
@@ -12753,7 +12777,7 @@ function ccHlPack(cutoff, recAt, vw, vh) { // 클립에 실을 공 자료: s = �
   const pts = clHlLog.filter(p => p.t >= cutoff - 800).map(p => [Math.round((p.t - recAt)) / 1000, Math.round(p.x / vw * 1000) / 1000, Math.round(p.y / vh * 1000) / 1000]);
   const bn = clHlBounces.filter(p => p.t >= cutoff - 800).map(p => ({ s: Math.round(p.t - recAt) / 1000, x: Math.round(p.x / vw * 1000) / 1000, y: Math.round(p.y / vh * 1000) / 1000, cx: p.cx, cy: p.cy, call: p.call, distCm: p.distCm, close: !!p.close }));
   if (!pts.length && !bn.length) return null;
-  return { pts, bn, cal: !!clH };
+  return { pts, bn, cal: clCalOk() }; /* v1.67 판정을 쉬는 보정은 '보정 없음'처럼(미니 코트·라벨 없음, 착지마다 슬로모션) */
 }
 function clShotPanelLines(c) { // 구질 패널 줄들 (캠·뷰어 공용)
   if (!c) return [];
@@ -12793,7 +12817,7 @@ function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스
   const P = pt => [f.fit.x + pt[0] * f.fit.sc, f.fit.y + pt[1] * f.fit.sc];
   if (clCorners.length) {
     g.strokeStyle = '#ff8c1a'; g.lineWidth = 2; g.fillStyle = '#ff8c1a';
-    if (clCorners.length === 4) { g.beginPath(); clCorners.forEach((pt, i) => { const q = P(pt); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); g.stroke(); }
+    if (clCorners.length === 4) { g.setLineDash(clCalHeld() ? [8, 6] : []); g.beginPath(); clCorners.forEach((pt, i) => { const q = P(pt); i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]); }); g.closePath(); g.stroke(); g.setLineDash([]); } /* v1.67 판정을 쉬는 보정은 점선 */
     clCorners.forEach((pt, i) => { const q = P(pt); g.beginPath(); g.arc(q[0], q[1], 4, 0, Math.PI * 2); g.fill(); g.font = 'bold 11px sans-serif'; g.fillText(String(i + 1), q[0] + 6, q[1] - 6); });
   }
   if (clTrail && Date.now() - clTrail.at < 4000) clDrawTrail(g, clTrail.pts, clTrail.bi, P, clTrail.at);
@@ -12820,7 +12844,7 @@ async function clModelStart() {
     if (WASB.model !== mf || !WASB.backend) await WASB.load('', t => clStatus('학습 모델 ' + t), mf, 'auto');
     if (!clOn) return; // 준비 중에 껐으면
     WASB.resetStats(); clModelLive = true; clMK = 0; clMBusy = false; clMN = 0; clMSlow = 0; clFrames = [];
-    clStatus('🤖 라이브 판정 중 (학습 모델 ' + mf.replace('.onnx', '').replace('ball_', '') + ' · ' + WASB.backend + ') — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 내 폰(뷰어)으로 보내요');
+    clStatus('🤖 라이브 판정 중 (학습 모델 ' + mf.replace('.onnx', '').replace('ball_', '') + ' · ' + WASB.backend + ') — 공이 튀면 ' + (clCalOk() ? 'IN/OUT 의견을' : '바운스를') + ' 내 폰(뷰어)으로 보내요'); /* v1.67 */
   } catch (e) {
     clModelLive = false;
     clStatus('학습 모델을 못 열어 프레임 차분으로 판정해요 (' + ((e && e.message) || e) + ')');
@@ -12847,7 +12871,7 @@ function clModelTick(v, now) { // rVFC 틱마다: 3장 모아 추론(비동기).
     res.forEach((r, i) => clFrames.push({ t: ts[i], cands: r && r.cands ? r.cands.map(q => ({ x: q.x, y: q.y, conf: q.conf, n: 4 })) : [] }));
     const nowS = performance.now() / 1000; while (clFrames.length && clFrames[0].t < nowS - CL_WIN) clFrames.shift();
     if (ms > 900) { if (++clMSlow >= 5) { clModelLive = false; clPrev = clPrev2 = null; clFrames = []; clStatus('학습 모델이 이 폰에선 느려요 (' + Math.round(ms) + 'ms/3장) — 프레임 차분으로 전환. WebGPU 되는 폰(폴드3)을 캠으로 쓰면 모델로 돌아요'); return; } } else clMSlow = 0;
-    if (clMN === 6) clStatus('🤖 라이브 판정 중 (학습 모델 · ' + WASB.backend + ' · ' + Math.round(WASB.avgMs) + 'ms/3장 ≈ 초당 ' + Math.round(3000 / Math.max(1, WASB.avgMs + 100)) + '장 표본) — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 뷰어로 보내요');
+    if (clMN === 6) clStatus('🤖 라이브 판정 중 (학습 모델 · ' + WASB.backend + ' · ' + Math.round(WASB.avgMs) + 'ms/3장 ≈ 초당 ' + Math.round(3000 / Math.max(1, WASB.avgMs + 100)) + '장 표본) — 공이 튀면 ' + (clCalOk() ? 'IN/OUT 의견을' : '바운스를') + ' 뷰어로 보내요'); /* v1.67 */
     if (clFrames.length >= 6 && nowS - clLastCall > CL_MIN_GAP) clDetect(tw, th, v);
   }).catch(e => { console.warn('live model', e); }).finally(() => { clMBusy = false; });
 }
@@ -12860,11 +12884,12 @@ function clToggle() {
   const v = $('cc-cam');
   if (!v || !v.videoWidth || !ccStream) { toast('먼저 📡 클럽캠을 켜주세요'); return; }
   if (!clH) { toast('먼저 ✨ 코트 자동 보정을 해주세요 (보정 없이는 바운스만 감지돼요)'); }
+  else if (clCalHeld()) toast('코트 라인에 아직 안 맞아 지금은 바운스만 봐요 — 계속 다시 맞춰 볼게요'); /* v1.67 */
   clOn = true; clFrames = []; clPrev = clPrev2 = null; clTick = 0; clLastT = 0;
   const b = $('cl-toggle-btn'); if (b) b.textContent = '⏹ 라이브 판정 끄기';
   clModelLive = false; clMBusy = false; clMK = 0;
   if (clModel) { clModelStart(); return; } // v1.07: 학습 모델 준비 → 준비되면 clLoop
-  clStatus('🤖 라이브 판정 중 — 공이 튀면 ' + (clH ? 'IN/OUT 의견을' : '바운스를') + ' 내 폰(뷰어)으로 보내요. 폰이 따뜻해질 수 있어요');
+  clStatus('🤖 라이브 판정 중 — 공이 튀면 ' + (clCalOk() ? 'IN/OUT 의견을' : '바운스를') /* v1.67 */ + ' 내 폰(뷰어)으로 보내요. 폰이 따뜻해질 수 있어요');
   clLoop();
 }
 function clStop(silent) {
@@ -12901,11 +12926,31 @@ function clLoop() {
   next();
 }
 let clDriftTimer = null, clDriftFails = 0, clCalSrc = '', clRefN = 0; // v1.59 흔들림 추적 · 보정 출처(auto|manual|restore) · 다듬기 라인 관측 수
+/* v1.67 다듬지 못한 '자동' 보정(검출 4점만, 라인 관측 0) = 판정 쉼: 오버레이·공 추적·바운스 시각은 그대로, IN/OUT·자동 콜·서브 폴트 후보·아슬아슬 클립·두 캠 판정·하이라이트 라벨·높이/화각 안내·챌린지 보정에는 쓰지 않음.
+   수동(서비스라인 기준 포함)·복원·직접 넣은 보정은 막지 않음. 흔들림 추적이나 다음 자동 보정에서 다듬어지면(clRefN > 0) 저절로 풀림 */
+let clHoldN = 0; /* v1.67 다듬지 못한 자동 보정을 연달아 받은 횟수(소리는 두 번째에 한 번) */
+const CL_HOLD_SAY = '코트 라인이 잘 안 맞아서 판정은 잠시 쉬고 다시 맞춰 볼게요';
+const CL_RELEASE_SAY = '코트 라인이 맞아서 판정을 다시 해요'; /* v1.67b 설치 시간이 지난 뒤 쉼이 풀릴 때(쉼을 말했을 때만) */
+function clCalHeld() { try { return !!clH && clCalSrc === 'auto' && !(clRefN > 0); } catch (e) { return false; } }
+function clCalOk() { return !!clH && !clCalHeld(); }
+function clCalPayload(v) { /* v1.67 챌린지 클립과 함께 보낼 캠 보정(가로 화면만) — 쓸 수 있으면 cal(+출처 src·관측 수 n), 판정을 쉬는 보정이면 cal 없이 calHold(v1.66 뷰어는 자기 보정을 씀) */
+  if (!clH || !clCorners || clCorners.length !== 4 || !v || !(v.videoWidth > v.videoHeight)) return {};
+  const c = clCorners.map(q => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]);
+  if (clCalHeld()) return { calHold: { c, m: clCalMode, w: v.videoWidth, h: v.videoHeight, src: 'auto', n: 0 } };
+  return { cal: { c, m: clCalMode, w: v.videoWidth, h: v.videoHeight, bw: clBaseW || null, fresh: !!clCalFresh, rf: clRefN > 0, src: clCalSrc || '', n: clRefN | 0 } };
+}
+function clCalRelease(why) { /* v1.67 판정 쉼이 풀림(흔들림 추적이 다듬음) — 저장·상태 줄·높이 띠·소리(기존 높이 안내 또는 '코트 보정 됐어요') */
+  clHoldN = 0; const v = $('cc-cam'); if (v && v.videoWidth) clSaveCal(v.videoWidth, v.videoHeight);
+  const setup = !!clAutoTimer; if (clAutoTimer) { clearTimeout(clAutoTimer); clAutoTimer = null; } /* v1.67b 다듬어진 보정이 생겼으니 자동 보정 재시도는 끝(남기면 가린 장면 하나로 다시 쉼 → 쉼·풀림 소리 되풀이) */
+  ccLog('cal-release', why || ''); clStatus('코트 라인에 맞췄어요 — IN/OUT 판정을 다시 해요');
+  try { clDraw(); clHeightShow(); if (setup) clAutoAfterCal(); else if (clAutoSaid === 'hold') { clAutoSaid = 'release'; clAutoSay(CL_RELEASE_SAY); } } catch (e) {} /* v1.67b 렌즈·높이 안내는 설치 때(자동 보정 재시도 중)만 — 그 뒤에 풀리면 경기 중일 수 있어 렌즈를 바꾸거나 높이를 말하지 않고(높이 띠는 표시), 쉼을 말했으면 다시 판정한다고만 */
+}
 function clDriftStart() { if (clDriftTimer) clearInterval(clDriftTimer); clDriftFails = 0; clDriftTimer = setInterval(() => { try { clDriftTick(); } catch (e) {} }, 60000); }
 function clDriftTick() { // v1.59: 거치대가 끄덕여도 보정이 화면과 맞게 — 지금 장면으로 다듬기, 안 되면 말 없이 다시 자동 보정(수동 보정이면 다듬기만)
   if (!ccStream || !clH || clPicking || ccTrialOn || ccLensPending || !clCorners || clCorners.length !== 4 || clCalMode === 'service') return; // v1.59d 서비스라인 기준은 가까운 베이스라인이 화면 밖 — 다듬기 불가
   const v = $('cc-cam'); if (!v || !v.videoWidth || v.videoWidth < v.videoHeight) return;
-  let rf = null; try { aiDetectCourtSvc.netY = null; rf = aiCalRefineV(v, clCorners, clCourtDst(), clCalMode); } catch (e) {}
+  const wasHeld = clCalHeld(); /* v1.67 */
+  let rf = null; try { aiDetectCourtSvc.netY = null; rf = wasHeld ? aiCalRefineBest(v, clCorners, clCourtDst(), clCalMode) : aiCalRefineV(v, clCorners, clCourtDst(), clCalMode); } catch (e) {} /* v1.67b 쉬는 보정은 검출 4점 그대로 — 자동 보정처럼 단식/복식 가설 넷으로(기본 가설 하나면 틀린 해로 풀림) */
   if (rf && rf.H && clRefN > 0 && rf.n < clRefN * 0.85) { // v1.59d 라인 관측 수가 크게 줄면 엉뚱한 해(사이드라인 한 칸 밀림) — 자동 보정이 더 많이 맞으면 그쪽
     if (clCalSrc === 'auto') { const keep = [clCorners, clH, clBaseW, clRefN, clCalMode]; const ok = clAutoCalib(true, true); if (ok && clRefN >= rf.n) { ccLog('cal-drift', '다시 보정 n' + clRefN); clDriftFails = 0; return; } if (ok) { clCorners = keep[0]; clH = keep[1]; clBaseW = keep[2]; clRefN = keep[3]; clCalModeChange(keep[4], true); } }
   }
@@ -12913,10 +12958,11 @@ function clDriftTick() { // v1.59: 거치대가 끄덕여도 보정이 화면과
     const moved = Math.max(...rf.corners.map((q, i) => Math.hypot(q[0] - clCorners[i][0], q[1] - clCorners[i][1])));
     clCorners = rf.corners; clH = aiHomography(clCorners, clCourtDst()); if (rf.wBase) clBaseW = rf.wBase; clRefN = rf.n; clDriftFails = 0; clCalFresh = true; // v1.59d 지금 화면과 맞음
     if (moved > 3) { clSaveCal(v.videoWidth, v.videoHeight); if (moved > 20) ccLog('cal-drift', '다듬기 ' + Math.round(moved) + 'px'); try { clDraw(); } catch (e) {} }
+    if (wasHeld) clCalRelease('다듬기 n' + rf.n); /* v1.67 */
     return;
   }
   clDriftFails++;
-  if (clCalSrc === 'auto' && clDriftFails >= 2) { const ok = clAutoCalib(true, true); if (ok || clDriftFails === 2) ccLog('cal-drift', ok ? '다시 보정' : '다시 보정 실패'); if (ok) { clDriftFails = 0; return; } } // v1.59d 두 번 연속 다듬기가 안 될 때만, 자동 보정일 때만
+  if (clCalSrc === 'auto' && (clDriftFails >= 2 || wasHeld)) { const ok = clAutoCalib(true, true); if (ok || clDriftFails === 2) ccLog('cal-drift', ok ? '다시 보정' : '다시 보정 실패'); if (ok) { clDriftFails = 0; if (wasHeld) clCalRelease('다시 보정 n' + clRefN); return; } } /* v1.67 판정을 쉬는 중이면 첫 실패부터 다시 보정 */ // v1.59d 두 번 연속 다듬기가 안 될 때만, 자동 보정일 때만
   if (clDriftFails >= 2 && clCalSrc !== 'manual') clCalFresh = false; // 화면과 안 맞는 보정 — 챌린지 때 판독 센터가 스스로 보정한 것을 먼저
 }
 function clServePick(isServe, mC, sinceScore) { // v1.58b 서브 후보 = 점수판 이벤트 뒤 첫 바운스, 또는 3.5초 넘게 바운스가 없다가 처음 나온 바운스(첫 서브 폴트를 점수판에 안 넣어도 두 번째 서브)
@@ -12944,7 +12990,8 @@ function clDetect(tw, th, v) {
   const px = (rb.x + 0.5) * sx - 0.5, py = (rb.y + 0.5) * sy - 0.5; // v1.60b 줄인 화면 칸 중심 → 원래 영상
   let vd = null;
   let mC = null;
-  if (clH) { mC = aiGroundFix(clH, v.videoWidth, v.videoHeight, aiMapPt(clH, px, py)); vd = aiVerdict(mC[0], mC[1], undefined, clBaseW); } // v1.55 바닥 접점·잰 베이스라인 폭
+  const held = clCalHeld(); /* v1.67 다듬지 못한 자동 보정 = 판정 쉼(바운스·시각·꼬리·하이라이트 공 기록은 그대로) */
+  if (clH && !held) { mC = aiGroundFix(clH, v.videoWidth, v.videoHeight, aiMapPt(clH, px, py)); vd = aiVerdict(mC[0], mC[1], undefined, clBaseW); } // v1.55 바닥 접점·잰 베이스라인 폭
   if (mC && Math.max(-mC[0], mC[0] - AI_COURT_W, -mC[1], mC[1] - AI_COURT_L) > 2.5) { clFrames = clFrames.filter(f => f.t > rb.t + 0.05); return; } // v1.25: 코트 밖 2.5m 넘게 찍히면 공중 타구(발리)의 투영 — 바운스 아님
   clLastCall = performance.now() / 1000; clNCalls++;
   clFrames = clFrames.filter(f => f.t > rb.t + 0.05); // 같은 바운스 재감지 방지
@@ -12964,8 +13011,8 @@ function clDetect(tw, th, v) {
   const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
   const trail = trailN.filter((_, i) => i % trailStep === 0 || i === bi || i === trailN.length - 1);
   clDraw();
-  clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : '🟡 바운스 감지 (보정 없음)') + (isServe ? ' · 서브' : '') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null, cx: mC ? Math.round(mC[0] * 100) / 100 : null, bounceAt: clLast.bounceAt, near: mC ? mC[1] >= AI_COURT_L / 2 : null, dual: clDualOn() } }); // v1.27 cx·bounceAt·near
+  clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : held ? '바운스 감지 (보정 확인 필요 — 판정 쉬는 중)' : '🟡 바운스 감지 (보정 없음)') + (isServe ? ' · 서브' : '') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null, cx: mC ? Math.round(mC[0] * 100) / 100 : null, bounceAt: clLast.bounceAt, near: mC ? mC[1] >= AI_COURT_L / 2 : null, dual: clDualOn(), hold: held ? 'cal' : null } }); /* v1.67 hold 추가만 */ // v1.27 cx·bounceAt·near
   clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
@@ -12977,7 +13024,7 @@ function clShotInfo(pts, bi, sx, sy, px, py) {
   const out = { spin: null, kmh: null, course: null, depth: null };
   try {
     const sp = aiSpin(pts, bi); if (sp) out.spin = sp.label;
-    if (!clH) return out;
+    if (!clCalOk()) return out; /* v1.67 속도·코스·깊이도 판정을 쉬는 보정으로는 안 냄(구질은 화면 기준이라 그대로) */
     // 공이 떠 있는 점을 지면 좌표로 사상하면 거리가 부풀어 200km/h가 나옴 → 지면에 가장 가까운 구간만: 바운스 직전 1구간 + 직후 2구간의 중앙값, 15~170km/h 밖이면 표시 안 함
     const pairKmh = (a, b) => { const dt = b.t - a.t; if (dt < 0.015) return null; const m1 = aiMapPt(clH, a.x * sx, a.y * sy), m2 = aiMapPt(clH, b.x * sx, b.y * sy); return Math.hypot(m2[0] - m1[0], m2[1] - m1[1]) / dt * 3.6; };
     const spd = [pairKmh(pts[bi - 1], pts[bi]), pts[bi + 1] ? pairKmh(pts[bi], pts[bi + 1]) : null, pts[bi + 2] ? pairKmh(pts[bi + 1], pts[bi + 2]) : null].filter(v => v != null && v > 0).sort((a, b) => a - b);
@@ -13048,6 +13095,7 @@ function cvDualSame(a, b) {
   return !(pa && pb && Math.hypot(pa[0] - pb[0], pa[1] - pb[1]) > 3);
 }
 function cvDualPrimary(me, c) { // 가까운 쪽(near) 캠 우선, 정보 없으면 코트 y 큰 쪽, 그것도 없으면 먼저 온 것
+  if (!!me.call !== !!c.call) return me.call ? me : c; /* v1.67 판정이 있는 캠 우선 — 보정이 없거나 판정을 쉬는 캠(hold)이 먼저 와도 다른 캠의 IN/OUT을 가리지 않게 */
   if (me.near != null && c.near != null && me.near !== c.near) return me.near ? me : c;
   if (me.cy != null && c.cy != null) return me.cy > c.cy ? me : c;
   return c;
@@ -13066,7 +13114,7 @@ function cvCall(p, slot) {
     spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh >= 15 && p.kmh <= 170 ? Math.round(p.kmh) : null,
     trail: Array.isArray(p.trail) ? p.trail.slice(0, 40).filter(q => Array.isArray(q) && q.length === 2 && q.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) : [],
     course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
-    slot, cy: Number.isFinite(p.cy) ? p.cy : null, cx: Number.isFinite(p.cx) ? p.cx : null, near: typeof p.near === 'boolean' ? p.near : null, tb: cvBounceT(p, slot), synced: !!cvClock[slot], rx: Date.now(), farOnly: false, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve });
+    slot, cy: Number.isFinite(p.cy) ? p.cy : null, cx: Number.isFinite(p.cx) ? p.cx : null, near: typeof p.near === 'boolean' ? p.near : null, tb: cvBounceT(p, slot), synced: !!cvClock[slot], rx: Date.now(), farOnly: false, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve, hold: p.hold === 'cal' }); /* v1.67 캠이 보정 확인 필요로 판정을 쉼 */
   if (cvCalls[0].auto && Date.now() - cvAutoSaid > 1500) { cvAutoSaid = Date.now(); clCallSay(cvCalls[0].auto === 'OUT' ? '아웃!' : '폴트!'); toast(cvCalls[0].auto === 'OUT' ? '📣 아웃!' : '📣 폴트!'); } // v0.84 본폰도 외침 · v1.27 두 캠이 같은 콜을 보내도 한 번만
   // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
   if (cvChanB || cvCalls.some(c => c.slot === 'B')) { // v1.27: 시계 맞춘 착지 시각 0.5초 안 + 같은 자리(3m) → 같은 바운스, 가까운 캠 우선
@@ -13076,9 +13124,9 @@ function cvCall(p, slot) {
       const c = cvCalls[i];
       if (c.slot === slot || c.alt || !cvDualSame(me, c)) continue;
       const prim = cvDualPrimary(me, c), sec = prim === me ? c : me;
-      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm }; prim.serve = !!(prim.serve || sec.serve); // v1.58c 합쳐도 서브 표시 유지
+      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm, hold: !!sec.hold }; prim.serve = !!(prim.serve || sec.serve); // v1.58c 합쳐도 서브 표시 유지
       prim.conflict = !!(prim.call && sec.call && prim.call !== sec.call);
-      prim.farOnly = prim.near === false && sec.near === false;
+      prim.farOnly = prim.near === false && sec.near !== true; /* v1.67 가까운 캠이 판정을 못 냈으면(보정 없음·쉼) 먼 쪽 캠만 본 것 */
       cvCalls = cvCalls.filter(x => x !== sec);
       if (cvCalls[0] !== prim) { cvCalls = cvCalls.filter(x => x !== prim); cvCalls.unshift(prim); }
       break;
@@ -13098,12 +13146,12 @@ function cvRenderCalls() {
   if (!last || !feed) return;
   if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; const su = $('cc-call-sum'); if (su) su.innerHTML = ''; return; }
   const fmt = at => { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
-  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${(c.close || c.farOnly) ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}${c.farOnly ? ' (먼 쪽 캠만 봄)' : ''}</span>` : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
+  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${(c.close || c.farOnly) ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}${c.farOnly ? ' (먼 쪽 캠만 봄)' : ''}</span>` : c.hold ? '<span class="ai-verdict unsure">보정 확인 필요</span>' : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
   const c0 = cvCalls[0];
   const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
   const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
-  const slotStr = c => (cvChanB || c.slot === 'B') ? '<b>' + c.slot + '캠</b>' + (c.alt ? (c.conflict ? ' <span class="ai-verdict unsure" style="font-size:11px;padding:2px 8px">⚠️ ' + c.alt.slot + '캠은 ' + (c.alt.call || '바운스만') + '</span>' : ' <span class="muted">(' + c.alt.slot + '캠도 같음)</span>') : '') + ' · ' : '';
-  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${slotStr(c0)}${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
+  const slotStr = c => (cvChanB || c.slot === 'B') ? '<b>' + c.slot + '캠</b>' + (c.alt ? (c.conflict ? ' <span class="ai-verdict unsure" style="font-size:11px;padding:2px 8px">⚠️ ' + c.alt.slot + '캠은 ' + (c.alt.call || '바운스만') + '</span>' : ' <span class="muted">(' + c.alt.slot + (c.alt.call || !c.call ? '캠도 같음)' : '캠은 ' + (c.alt.hold ? '보정 확인 필요' : '바운스만') + ')') + '</span>') : '') + ' · ' : ''; /* v1.67 */
+  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${slotStr(c0)}${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : c0.hold ? '캠 보정 확인 필요(판정 쉬는 중)' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
     (shotStr(c0) ? `<div style="font-size:12.5px;margin-top:3px">${shotStr(c0)} <span class="muted" style="font-size:11px">(폰 1대 참고치)</span></div>` : '');
   feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + ((cvChanB || c.slot === 'B') ? c.slot + (c.conflict ? '⚠️' : '') + ' ' : '') + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
   // 누적 요약 (샷 정보 있는 것만)
