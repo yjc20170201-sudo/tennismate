@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1b5e20">
+<title>테니스메이트 계정 삭제</title>
+<meta name="description" content="테니스메이트(개발자: 테니스메이트) 계정과 데이터를 지우는 방법 — 앱에서 바로, 웹에서 로그인해 바로, 또는 카카오톡 채널로 요청. 지워지는 것과 남는 것 안내.">
+<link rel="icon" href="icon-192.png">
+<!-- v1.72: 구글 플레이 '계정 삭제 URL'. 로그인 없이 열리는 정적 페이지 — 외부 스크립트·분석 도구·입력란 없음, 개인정보를 주소에 넣지 않음 -->
+<style>
+  :root {
+    --green: #1b7a43; --green-dark: #145c33; --lime: #d4e94e;
+    --bg: #f4f6f3; --card: #ffffff; --text: #1d2b22; --muted: #6b7a70; --border: #e2e8e0;
+    --warn-bg: #fff4ec; --warn: #b4501f; --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --green: #2f9e5f; --green-dark: #257f4c;
+      --bg: #101612; --card: #1a231d; --text: #e7ede8; --muted: #98a69d; --border: #2b362f;
+      --warn-bg: #33261d; --warn: #ffab7a;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    max-width: 640px; margin: 0 auto; min-height: 100vh; padding-bottom: 40px;
+    word-break: keep-all; overflow-wrap: anywhere;
+  }
+  header {
+    background: linear-gradient(135deg, #1b7a43, #145c33); color: #fff;
+    padding: 18px 20px 16px; border-radius: 0 0 20px 20px; position: relative;
+  }
+  header::after { content: ''; position: absolute; left: 20px; right: 20px; bottom: 0; height: 2px; background: rgba(255,255,255,.35); }
+  header::before { content: ''; position: absolute; left: 20px; bottom: 0; width: 56px; height: 2px; background: var(--lime); z-index: 1; }
+  header h1 { font-size: 20px; }
+  header .sub { font-size: 13px; opacity: .9; margin-top: 4px; }
+  main { padding: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  }
+  h2 { font-size: 16px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  h2 .no {
+    flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--green); color: #fff;
+    font-size: 12px; display: inline-flex; align-items: center; justify-content: center;
+  }
+  h3 { font-size: 14px; margin: 12px 0 4px; }
+  p, li { font-size: 14px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  ul { padding-left: 20px; margin: 4px 0; }
+  li { margin: 3px 0; }
+  .path { display: inline-block; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 1px 8px; font-weight: 700; font-size: 13px; }
+  .btn {
+    display: block; text-align: center; text-decoration: none; margin-top: 10px;
+    background: var(--green); color: #fff; border-radius: 10px; padding: 11px 16px; font-weight: 700; font-size: 14px;
+  }
+  .btn:hover { background: var(--green-dark); }
+  .btn.outline { background: transparent; color: var(--green); border: 1.5px solid var(--green); }
+  .warn { background: var(--warn-bg); color: var(--warn); border-radius: 10px; padding: 8px 12px; font-size: 13px; margin-top: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 6px; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-size: 12px; font-weight: 700; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 700; width: 34%; }
+  footer { padding: 0 16px; }
+  @media (max-width: 420px) { td:first-child { width: 38%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>테니스메이트 계정 삭제</h1>
+  <div class="sub">앱 이름: 테니스메이트 · 개발자: 테니스메이트</div>
+</header>
+<main>
+  <div class="card">
+    <p>테니스메이트 계정과 서버에 저장된 회원님의 정보를 지우는 방법이에요. 앱을 다시 설치하지 않아도 아래 2번(웹)이나 3번(카카오톡)으로 요청할 수 있어요.</p>
+    <p class="muted" style="margin-top:6px">계정을 지우면 되돌릴 수 없어요. 같은 이메일로 다시 가입하면 새 계정으로 시작해요.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="no">1</span>앱에서 바로 지우기</h2>
+    <p>앱에서 <span class="path">더보기 › 설정 › 계정 삭제</span> (또는 <span class="path">내 프로필 › 계정 삭제</span>)를 누르세요.</p>
+    <ul>
+      <li>지워지는 것과 남는 것을 먼저 보여 드려요.</li>
+      <li>확인을 위해 비밀번호를 한 번 더 입력하면 바로 처리돼요.</li>
+      <li>끝나면 이 폰에 저장된 앱 설정과 영상도 지울지 물어봐요.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2><span class="no">2</span>웹에서 로그인해 바로 지우기</h2>
+    <p>앱이 없어도 됩니다. 아래 버튼을 누르면 브라우저에서 테니스메이트가 열리고, 로그인하면 계정 삭제 창이 바로 떠요. 1번과 같은 방법으로 처리돼요.</p>
+    <a class="btn" href="./?open=account-delete">웹에서 로그인해 계정 삭제하기</a>
+    <p class="muted" style="margin-top:8px">비밀번호를 잊으셨다면 로그인 화면의 '비밀번호 찾기'로 재설정한 뒤 진행해 주세요.</p>
+  </div>
+
+  <div class="card">
+    <h2><span class="no">3</span>로그인할 수 없을 때: 카카오톡 채널로 요청</h2>
+    <p>카카오톡 채널 '테니스메이트'에 계정 삭제를 요청해 주세요.</p>
+    <a class="btn outline" href="https://pf.kakao.com/_ypxcmX/chat" target="_blank" rel="noopener">카카오톡 채널로 요청하기</a>
+    <ul style="margin-top:10px">
+      <li>가입할 때 쓴 이메일 주소와 닉네임을 알려 주세요.</li>
+      <li>남의 계정을 지우는 일을 막기 위해, 가입한 이메일로 확인 메일을 보내 드려요. 그 메일에 회신해 주시면 처리해요.</li>
+      <li>본인 확인이 끝난 날부터 10일 안에 처리하고 결과를 알려 드려요. 처리 내용은 1번(앱에서 삭제)과 같아요.</li>
+      <li>보호자가 대신 요청하실 때도 같은 방법으로 해 주세요.</li>
+    </ul>
+    <div class="warn">비밀번호는 절대 보내지 마세요. 운영자는 비밀번호를 묻지 않아요.</div>
+  </div>
+
+  <div class="card" id="delete">
+    <h2>바로 지워지는 것</h2>
+    <table>
+      <tr><th>정보</th><th>처리</th></tr>
+      <tr><td>로그인 계정</td><td>이메일 주소, 비밀번호(암호화된 값), 가입 정보, 로그인 세션, 로그인 기록(서버 업체가 보관하는 부분은 업체가 정한 기간이 지나면 자동으로 지워져요)</td></tr>
+      <tr><td>프로필</td><td>닉네임, NTRP, 지역, 플레이 스타일</td></tr>
+      <tr><td>이용 기록</td><td>접속 기록(날짜·횟수·기기 종류), 촬영·AI 학습 동의 기록, 클럽 가입, 지난 기록 이관 자료</td></tr>
+      <tr><td>서버의 영상·사진</td><td>회원님이 올린 영상 클립(판독·챌린지·하이라이트), 학습용 사진</td></tr>
+      <tr><td>진행 중 대진표</td><td>회원님이 연 클럽 대진표 공유</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>남는 것과 그 이유</h2>
+    <p class="muted">아래 정보는 다른 회원의 기록이기도 해서 남기지만, 회원님과 연결할 수 없게 처리해요.</p>
+    <table>
+      <tr><th>정보</th><th>이유와 처리</th></tr>
+      <tr><td>확정된 경기 결과와 ELO 점수 변동</td><td>함께 경기한 회원의 전적과 랭킹 점수의 근거예요. 회원님 계정과의 연결을 끊고 새 무작위 식별자와 '탈퇴한 회원' 표시만 남겨요. 아직 승인되지 않은 경기는 취소해요.</td></tr>
+      <tr><td>클럽 미니게임(개인전·청백전·단식 대전) 결과</td><td>클럽의 공동 기록이에요. 올린 사람 정보를 지우고, 회원님이 올린 기록과 지금 가입한 클럽의 기록에서 회원님 닉네임(지금 닉네임·가입 때 닉네임)과 똑같이 적힌 이름은 '탈퇴한 회원#…'으로 바꿔요. 실명처럼 다른 표기로 적힌 이름이나 다른 클럽의 기록은 자동으로 찾을 수 없어요 — 요청하시면 운영자가 고쳐 드려요.</td></tr>
+      <tr><td>회원님이 클럽장인 클럽</td><td>클럽과 기록은 지우지 않고 운영자가 맡아 두었다가, 클럽 회원이 요청하면 다른 회원에게 넘겨요.</td></tr>
+      <tr><td>클럽캠 코드</td><td>다른 사람이 같은 코드로 영상을 보지 못하게 코드를 잠가 두어요(코드 문자만 남고 회원님과의 연결은 지워요).</td></tr>
+      <tr><td>다른 회원이 올린 영상</td><td>다른 회원이 찍어 올린 영상에 회원님 모습이 나올 수 있어요. 그 영상은 올린 회원의 자료라서 함께 지우지 않아요.</td></tr>
+      <tr><td>AI 공 인식 학습 자료</td><td>서버의 학습용 사진과, 운영자 PC로 옮긴 학습용 사진 중 회원님 캠으로 올린 것은 지워요. 운영자 PC로 옮긴 경기 원본 영상은 보관 기간(최대 3년)이 지나면 지우고, 요청하시면 그 전에 찾아 지워 드려요. 이미 학습을 마친 모델에서 특정 사진을 꺼내 지울 수는 없어요.</td></tr>
+      <tr><td>삭제 처리 기록</td><td>삭제를 처리했다는 사실(처리 날짜와 건수)만 남겨요. 이메일·닉네임은 들어 있지 않아요.</td></tr>
+      <tr><td>서버 업체의 기록</td><td>서버 업체(Supabase)의 접속 기록과 백업은 업체가 정한 기간이 지나면 자동으로 지워져요.</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>휴대폰에 남는 것</h2>
+    <ul>
+      <li>클럽캠 영상, 앱으로 찍은 영상, 하이라이트 사본, 앱 설정은 운영자 서버가 아니라 회원님 휴대폰에 있어요. 앱에서 계정을 지운 뒤 나오는 '이 폰의 데이터도 지울까요?'에서 고르거나, 앱의 영상 지우기로 직접 지워 주세요.</li>
+      <li>카카오톡 등으로 이미 공유한 파일은 받은 곳에 남아요.</li>
+      <li>다른 회원의 휴대폰에 저장된 이름 목록(고수 표시·실명 통일 설정)은 그 회원이 지워야 해요.</li>
+    </ul>
+  </div>
+</main>
+<footer>
+  <p class="muted">문의: 카카오톡 채널 '테니스메이트' · <a href="./" style="color:var(--green)">테니스메이트 열기</a></p>
+</footer>
+</body>
+</html>

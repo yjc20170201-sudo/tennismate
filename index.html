@@ -770,7 +770,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div class="section-title">시즌 Wrapped</div>
         <div id="home-wrapped"></div>
       </div>
-      <div class="home-sec" id="hs-feed">
+      <div class="home-sec store-hide" id="hs-feed"><!-- v1.72: 활동 피드(이 폰 안 데모) — 스토어 앱에서는 숨김 -->
         <div class="section-title">활동 피드</div>
         <div id="home-feed"></div>
       </div>
@@ -809,7 +809,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   </div>
 
   <!-- ============ 매칭 ============ -->
-  <div class="tab-content" id="tab-match">
+  <div class="tab-content store-hide" id="tab-match"><!-- v1.72: 스토어 앱에서는 숨김(서버와 연결되지 않은 데모 화면) -->
     <div class="section-title">오픈 매치</div>
     <button class="btn full" style="margin:0 0 10px" onclick="openCreateOpen()">+ 오픈 매치 만들기</button>
     <div id="open-list"></div>
@@ -1006,7 +1006,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   </div>
 
   <!-- ============ 대회 ============ -->
-  <div class="tab-content" id="tab-tourney">
+  <div class="tab-content store-hide" id="tab-tourney"><!-- v1.72: 스토어 앱에서는 숨김(서버와 연결되지 않은 데모 화면) -->
     <div class="section-title">시즌 디비전 리그</div>
     <div class="muted" style="margin:-4px 0 10px">실력에 따라 1부·2부로 나뉘어 겨루는 승강제 리그예요. 시즌(월)이 끝나면 상위는 승격, 하위는 강등!</div>
     <div id="div-area"></div>
@@ -1460,18 +1460,18 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-more">
     <div class="section-title">더보기</div>
     <div class="card" style="padding:4px 16px">
-      <div class="more-row" onclick="showTab('match')"><div><b>매칭</b><div class="muted">파트너 찾기 · 오픈 매치 · 신청함</div></div><span class="chev">›</span></div>
+      <div class="more-row store-hide" onclick="showTab('match')"><div><b>매칭</b><div class="muted">파트너 찾기 · 오픈 매치 · 신청함</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="showTab('court')"><div><b>코트</b><div class="muted">제주 공공 테니스장 정보 · 예약처 바로가기</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="showTab('map')"><div><b>지역 정복 지도</b><div class="muted">제주 14구역 동네 1짱</div></div><span class="chev">›</span></div>
-      <div class="more-row" onclick="showTab('tourney')"><div><b>대회</b><div class="muted">디비전 리그 · 플렉스 리그 · 토너먼트</div></div><span class="chev">›</span></div>
+      <div class="more-row store-hide" onclick="showTab('tourney')"><div><b>대회</b><div class="muted">디비전 리그 · 플렉스 리그 · 토너먼트</div></div><span class="chev">›</span></div>
       <div class="more-row store-hide" onclick="showTab('board')"><div><b>커뮤니티</b><div class="muted">소모임 · 번개 · 게시판</div></div><span class="chev">›</span></div>
     </div>
     <div class="section-title" style="margin-top:16px">설정</div>
     <div class="card" style="padding:4px 16px">
       <div class="more-row" id="login-row" style="display:none" onclick="openAuth('login')"><div><b>로그인 / 가입</b><div class="muted">기록·랭킹·클럽을 저장하려면 계정으로 시작해요</div></div><span class="chev">›</span></div>
-      <div class="more-row" onclick="openProfile()"><div><b>내 프로필</b><div class="muted">닉네임 · NTRP · 지역 · 로그아웃</div></div><span class="chev">›</span></div>
+      <div class="more-row" onclick="openProfile()"><div><b>내 프로필</b><div class="muted">닉네임 · NTRP · 지역 · 로그아웃 · 계정 삭제</div></div><span class="chev">›</span></div>
       <label class="more-row" style="cursor:pointer"><div><b>녹화할 때 소리도 녹음</b><div class="muted">랠리 촬영·앱으로 찍기·매치 방 캠 — 기본 꺼짐(영상만).<span class="store-hide"> 클럽캠은 소리를 녹음하지 않아요</span></div></div><input type="checkbox" class="rec-audio-cb" onchange="recAudioSet(this)" style="width:20px;height:20px;flex:0 0 auto;margin:0"></label><!-- v1.71 -->
-      <div class="more-row" onclick="consentOpen()"><div><b>촬영·AI 학습 동의</b><div class="muted">클럽캠 촬영(필수) · AI 학습 이용(선택) — 보기·바꾸기·철회</div></div><span class="chev">›</span></div>
+      <div class="more-row store-hide" onclick="consentOpen()"><div><b>촬영·AI 학습 동의</b><div class="muted">클럽캠 촬영(필수) · AI 학습 이용(선택) — 보기·바꾸기·철회</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="toggleDark()"><div><b>다크 모드</b><div class="muted">화면 밝기 전환</div></div><span class="chev">›</span></div>
       <div class="more-row" id="admin-row" style="display:none" onclick="adminOpen()"><div><b>관리자</b><div class="muted">가입자 전체 · 접속 기록 (관리자 계정만)</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="openHomeEdit()"><div><b>홈 화면 편집</b><div class="muted">홈에 보일 섹션 고르기</div></div><span class="chev">›</span></div>
@@ -1479,6 +1479,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div class="more-row" id="contact-row" style="display:none" onclick="tmOpenUrl(CONTACT_URL)"><div><b>문의하기</b><div class="muted">카카오톡 채널로 물어보세요 · 보통 하루 안에 답해요</div></div><span class="chev">›</span></div>
       <div class="more-row" id="terms-row" style="display:none" onclick="tmOpenUrl(POLICY_URLS.terms)"><div><b>이용약관</b><div class="muted">테니스메이트 서비스 이용 조건</div></div><span class="chev">›</span></div>
       <div class="more-row" id="privacy-row" style="display:none" onclick="tmOpenUrl(POLICY_URLS.privacy)"><div><b>개인정보 처리방침</b><div class="muted">어떤 정보를 왜 모으고 얼마나 보관하는지</div></div><span class="chev">›</span></div>
+      <div class="more-row" id="acctdel-row" style="display:none" onclick="acctDelEntry()"><div><b>계정 삭제</b><div class="muted">계정과 서버에 올린 영상·사진 지우기 · 남는 기록 안내</div></div><span class="chev">›</span></div><!-- v1.72 -->
       <div class="more-row" onclick="openLicenses()"><div><b>오픈소스 라이선스</b><div class="muted">앱에 쓰인 모델·라이브러리의 저작권 고지</div></div><span class="chev">›</span></div>
       <div class="more-row" style="cursor:default"><div><b>버전</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타</div></div></div>
     </div>
@@ -1988,6 +1989,11 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   </div>
 </div>
 
+<!-- v1.72: 계정 삭제(남는 것 안내 → 비밀번호 다시 → 서버 함수 → 이 폰 데이터 지울지) -->
+<div class="modal-bg" id="modal-acctdel" style="z-index:10001" onclick="if(event.target===this&&!(acctDel&&acctDel.busy))acctDelClose()">
+  <div class="modal" id="acctdel-body" style="max-width:520px"></div>
+</div>
+
 <!-- 오픈소스 라이선스 (v1.70) -->
 <div class="modal-bg" id="modal-lic" onclick="if(event.target===this)closeModal('lic')">
   <div class="modal" id="lic-body"></div>
@@ -2187,12 +2193,49 @@ const TMAuth = (() => {
 
   const updateMyProfile = completeOnboarding; // 동일 규칙 (본인 행, 허용 컬럼만)
 
-  /** 탈퇴 — 001의 soft_delete_me() RPC (익명화 + deleted_at) */
-  async function deleteAccount() {
-    requireLogin();
-    const { error } = await requireClient().rpc('soft_delete_me');
+  /** v1.72: 계정 삭제 전 비밀번호 다시 확인 — 지금 이메일 + 입력한 비밀번호로 새 세션(서버 함수가 '5분 안 비밀번호 로그인'을 토큰으로 확인) */
+  async function reauth(password) {
+    const s = requireLogin();
+    const email = s.user && s.user.email;
+    if (!email) throw new Error('이메일로 가입한 계정만 비밀번호로 확인할 수 있어요. 문의하기로 요청해 주세요.');
+    const { data, error } = await requireClient().auth.signInWithPassword({ email, password: String(password || '') });
     if (error) throw new Error(koMessage(error));
-    return signOut();
+    if (!data || !data.session || !data.session.user || data.session.user.id !== s.user.id) throw new Error('다른 계정으로 확인됐어요. 다시 시도해 주세요.');
+    return data.session;
+  }
+  /** v1.72: 진짜 계정 삭제 — Edge Function delete-account(파일 삭제 → auth 계정 삭제 → 015 트리거가 기록 익명화).
+      돌려줌: { ok:true, files } 또는 { ok:false, code, message } (code: reauth·admin·files_more·files_left·failed·no_function·network…) */
+  async function deleteAccount(opt) {
+    opt = opt || {};
+    const s = opt.session || requireLogin();
+    const body = { confirm: '삭제' };
+    if (opt.target) body.target_user_id = String(opt.target);
+    let data = null, error = null;
+    try {
+      const r = await requireClient().functions.invoke('delete-account', { body, headers: { Authorization: 'Bearer ' + s.access_token } });
+      data = r.data; error = r.error;
+    } catch (e) { return { ok: false, code: 'network', message: koMessage(e) }; }
+    if (error) {
+      let j = null;
+      try { const ctx = error.context; if (ctx && typeof ctx.json === 'function') j = await ctx.json(); } catch (e) {}
+      if (j && j.code) return Object.assign({ ok: false }, j);
+      const st = error.context && error.context.status;
+      return { ok: false, code: st === 404 ? 'no_function' : (/fetch|relay/i.test(String(error.name || '')) ? 'network' : 'failed'), message: koMessage(error) };
+    }
+    return (data && typeof data === 'object') ? data : { ok: false, code: 'failed' };
+  }
+  /** v1.72c: 삭제가 끝나지 못했을 때 서버의 '삭제 진행 중' 잠금을 바로 풀기(본인만, 실패해도 30분 뒤 서버가 무시) */
+  async function cancelDelete(s) {
+    try { const ss = s || requireLogin(); await requireClient().functions.invoke('delete-account', { body: { cancel: true }, headers: { Authorization: 'Bearer ' + ss.access_token } }); return true; } catch (e) { return false; }
+  }
+  /** v1.72: 이 폰의 로그인만 지움(삭제된 계정은 서버 세션이 이미 없어 전역 로그아웃이 실패할 수 있음) */
+  async function signOutLocal() {
+    try { await requireClient().auth.signOut({ scope: 'local' }); } catch (e) {}
+    try { for (let i = localStorage.length - 1; i >= 0; i--) { const k = localStorage.key(i); if (/^sb-.+-auth-token/.test(k || '')) localStorage.removeItem(k); } } catch (e) {}
+    currentSession = null;
+    myProfile = null;
+    emit();
+    return true;
   }
 
   /** cb(session, profile) — 등록 즉시 1회 호출. 해제 함수 반환 */
@@ -2218,7 +2261,7 @@ const TMAuth = (() => {
     get ready() { return ready; },
     signUpEmail, signInEmail, resetPassword, updatePassword,
     signInKakao, signInGoogle,
-    signOut, deleteAccount,
+    signOut, deleteAccount, reauth, signOutLocal, cancelDelete, /* v1.72 · v1.72c cancelDelete */
     refreshMyProfile, completeOnboarding, updateMyProfile,
     onChange,
     get session() { return currentSession; },
@@ -2231,7 +2274,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.71';
+const APP_VERSION = 'v1.72';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2769,7 +2812,7 @@ function fmtMD(s) { const d = dateObj(s); return (d.getMonth() + 1) + '월 ' + d
 function tmStoreOn() { try { return !!(window.tmStoreApp && window.tmStoreApp()); } catch (e) { return false; } }
 function tmStoreBlocked(silent) { if (!tmStoreOn()) return false; if (!silent) { try { toast('스토어 앱에서는 아직 준비 중인 기능이에요'); } catch (e) {} } return true; }
 function showTab(name, btn) {
-  if (name === 'board' && tmStoreBlocked()) return; /* v1.71: 커뮤니티 게시판은 스토어 앱에서 막음 */
+  if ((name === 'board' || name === 'match' || name === 'tourney') && tmStoreBlocked()) return; /* v1.71: 커뮤니티 게시판 · v1.72: 매칭·대회(데모 화면)도 스토어 앱에서 막음 */
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(el => el.classList.remove('active'));
   const tc = $('tab-' + name); if (!tc) return;
@@ -3136,6 +3179,14 @@ function enterRealMode(pf) { // 실전 모드: 데모 전적을 서버 실데이
   coaches = []; lessons = []; feed = []; openMatches = []; received = []; sent = [];
   meetings = []; interMatches = []; transfers = []; slotAlerts = []; subRequests = [];
   groups = []; posts = []; socialEvents = []; checkins = []; courtReviews = [];
+  // v1.72: 대회 데모(가상 인물 디비전·플렉스 리그, 지난 시즌·명예의 전당, 데모 클럽 래더)도 비움 — 로그인 실사용자에게 가짜 인물 리그가 보이던 것.
+  //   토너먼트(tourney)는 실제 가입자로 직접 만드는 것이라 그대로. 래더는 데모 클럽 번호(1~8)만 지움(서버 클럽은 2000번대)
+  flexLeague = { name: flexLeague.name, start: flexLeague.start, end: flexLeague.end, players: [], results: [] };
+  divLeague = { season: divLeague.season, start: divLeague.start, end: divLeague.end, promote: divLeague.promote, relegate: divLeague.relegate,
+    divs: [{ name: '1부', players: [], results: [] }, { name: '2부', players: [], results: [] }] };
+  seasonArchive = []; nextArchId = 1; flexOpp = null; divOpp = null;
+  try { Object.keys(ladders).forEach(k => { if (Number(k) < 2000) delete ladders[k]; }); } catch (e) {}
+  try { renderDivLeague(); renderFlex(); renderArchive(); } catch (e) {}
   if (pf) {
     myStats = {
       matches: pf.matches || 0, wins: pf.wins || 0,
@@ -3239,7 +3290,7 @@ function renderAccountBox() { // v0.38: 프로필 모달의 서버 계정 박스
     <div class="muted" style="margin:4px 0 8px">${email}</div>
     <div class="row" style="gap:8px">
       <button class="btn outline" style="flex:1" onclick="authLogout()">로그아웃</button>
-      <button class="btn outline" style="flex:1" onclick="authDeleteAccount()">회원 탈퇴</button>
+      <button class="btn outline" style="flex:1" onclick="acctDelOpen()">계정 삭제</button>
     </div></div>`;
 }
 async function authLogout() {
@@ -3249,14 +3300,268 @@ async function authLogout() {
   catch (e) { toast('⚠️ ' + (e && e.message || e)); }
   finally { ccUserSignOut = false; }
 }
-async function authDeleteAccount() {
-  if (!serverMode()) return;
-  if (!confirm('정말 탈퇴할까요? 서버 프로필이 익명화되며 복구할 수 없어요.')) return;
-  ccUserSignOut = true; try { localStorage.setItem('tm-local-signout', String(Date.now())); } catch (e) {} // v1.57
-  try { await TMAuth.deleteAccount(); closeModal('profile'); toast('탈퇴가 완료되었어요. 그동안 함께해서 즐거웠어요 🎾'); openAuth('login'); }
-  catch (e) { toast('⚠️ ' + (e && e.message || e)); }
-  finally { ccUserSignOut = false; }
+// ===== v1.72 계정 삭제(진짜 삭제) =====
+// 흐름: 남는 것 안내(rpc account_delete_preview, 015) → 비밀번호 다시(TMAuth.reauth) → Edge Function delete-account(TMAuth.deleteAccount)
+//   → 성공: 이 폰 로그인 지움 → 이 폰 설정·기록(tm-*)·영상(IndexedDB tm-clubcam·tm-mhrec, OPFS mh-src) 지울지 묻기(영상은 기본 꺼짐 — 촬영분 보호 규칙)
+//   → 실패: 이유 + 카카오톡 채널 안내. 운영자 경로(acctDelOperator)는 관리자 표의 [삭제 마무리](옛 탈퇴자·카톡 요청)
+// 웹 삭제 안내 페이지 delete-account.html이 ?open=account-delete로 이 창을 엶(로그인 뒤).
+const ACCT_DEL_PAGE = 'delete-account.html';
+let acctDel = null;
+let acctDelWant = false;
+function acctDelCamOn() { try { return !!(ccChan && ccStream); } catch (e) { return false; } }
+function acctDelNum(v) { const n = Number(v); return (v !== null && v !== undefined && v !== '' && Number.isFinite(n)) ? n : null; }
+function acctDelEntry() {
+  if (!serverMode()) { toast('둘러보기(데모)에는 서버 계정이 없어요'); return; }
+  if (!TMAuth.isLoggedIn) { acctDelWant = true; toast('로그인하면 계정 삭제 창이 열려요'); openAuth('login'); return; }
+  acctDelOpen();
 }
+async function authDeleteAccount() { acctDelEntry(); } /* 옛 이름 — 바로 지우지 않고 안내 창부터 */
+function acctDelOpen(opt) {
+  if (!serverMode() || !TMAuth.isLoggedIn) { acctDelEntry(); return; }
+  opt = opt || {};
+  acctDel = { step: opt.target ? 'auth' : 'info', target: opt.target || '', label: opt.label || '', preview: null, pvErr: false, busy: false, res: null, msg: '', note: '' };
+  try { closeModal('profile'); } catch (e) {}
+  acctDelRender();
+  openModal('acctdel');
+  if (!acctDel.target) acctDelPreview();
+}
+function acctDelOperator(uid, btn) {
+  let label = '';
+  try { const td = btn && btn.closest ? btn.closest('td') : null, b = td ? td.querySelector('b') : null; label = b ? b.textContent : ''; } catch (e) {}
+  try { closeModal('admin'); } catch (e) {}
+  acctDelOpen({ target: String(uid || ''), label });
+}
+function acctDelClose() {
+  if (acctDel && acctDel.busy) return;
+  try { closeModal('acctdel'); } catch (e) {}
+  acctDel = null;
+}
+function acctDelStep(step) {
+  if (!acctDel || acctDel.busy) return;
+  acctDel.step = step; acctDel.msg = '';
+  acctDelRender();
+}
+function acctDelForgot() {
+  acctDelClose();
+  try { openAuth('reset'); } catch (e) {}
+}
+async function acctDelPreview() {
+  const d = acctDel; if (!d) return;
+  try {
+    const c = TMAuth.client; if (!c) throw new Error('no client');
+    const { data, error } = await c.rpc('account_delete_preview');
+    if (error) throw error;
+    if (d !== acctDel) return;
+    d.preview = data || {};
+  } catch (e) { if (d !== acctDel) return; d.pvErr = true; }
+  acctDelRender();
+}
+function acctDelFailText(r) {
+  const c = r && r.code;
+  if (c === 'reauth') return '비밀번호 확인 시간이 지났어요. 비밀번호를 다시 입력해 주세요.';
+  if (c === 'admin') return '관리자 계정은 이 화면에서 지울 수 없어요.';
+  if (c === 'forbidden') return '운영자만 할 수 있어요.';
+  if (c === 'files_left') return '서버의 영상·사진을 다 지우지 못했어요. 계정은 아직 그대로예요. 잠시 뒤 다시 시도해 주세요.';
+  if (c === 'files_more') return '파일이 많아 아직 지우는 중이에요. 다시 시도를 누르면 이어서 지워요.';
+  if (c === 'no_function' || c === 'config') return '서버의 계정 삭제 기능이 아직 준비되지 않았어요. 카카오톡 채널로 요청해 주시면 처리해 드려요.';
+  if (c === 'network') return '인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
+  if (c === 'auth') return '로그인이 풀렸어요. 다시 로그인한 뒤 시도해 주세요.';
+  return (r && r.message) ? String(r.message) : '삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+}
+function acctDelRender() {
+  const box = $('acctdel-body'), d = acctDel;
+  if (!box || !d) return;
+  const p = d.preview || {};
+  const cnt = (k, unit) => { const n = acctDelNum(p[k]); return n === null ? '' : ' <b>' + n + unit + '</b>'; };
+  const li = t => '<li style="margin:3px 0">' + t + '</li>';
+  const ul = items => '<ul style="margin:4px 0 10px 18px;padding:0;font-size:13px;line-height:1.55">' + items.join('') + '</ul>';
+  const sub = t => '<div style="font-weight:700;font-size:13px;margin-top:6px">' + t + '</div>';
+  const chk = (id, checked, title, desc, extra) => '<label style="display:flex;gap:8px;align-items:flex-start;margin:8px 0 4px;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="' + id + '"' + (checked ? ' checked' : '') + (extra || '') + ' style="width:auto;flex:none;margin:2px 0 0"> <span>' + title + (desc ? '<br><span class="muted">' + desc + '</span>' : '') + '</span></label>';
+  const contactBtn = tmSafeUrl(CONTACT_URL) ? '<button type="button" class="btn full outline" onclick="tmOpenUrl(CONTACT_URL)">카카오톡 채널로 요청하기</button>' : '';
+  const files = acctDelNum(d.res && d.res.files);
+  let h = '<h3>' + (d.target ? '삭제 마무리 (운영자)' : '계정 삭제') + '</h3>';
+  if (d.step === 'info') {
+    if (p.is_admin) {
+      box.innerHTML = h + '<div class="muted" style="font-size:13px;line-height:1.6">관리자 계정은 이 화면에서 지울 수 없어요. 관리자 목록에서 먼저 빼야 해요.</div><button type="button" class="btn full outline" onclick="acctDelClose()">닫기</button>';
+      return;
+    }
+    if (p.deleting) h += '<div class="card" style="padding:10px 12px;font-size:13px">삭제 신청이 이미 들어가 있어요. 아래에서 이어서 마무리할 수 있어요.</div>';
+    h += sub('바로 지워지는 것') + ul([
+      li('이메일 주소, 비밀번호(암호화된 값), 로그인 세션, 로그인 기록(서버 업체가 보관하는 부분은 업체가 정한 기간 뒤 자동 삭제)'), /* v1.72c */
+      li('프로필(닉네임·NTRP·지역·플레이 스타일)'),
+      li('접속 기록' + cnt('visits', '일') + ', 촬영·AI 학습 동의 기록, 클럽 가입'),
+      li('서버에 올린 영상 클립·학습용 사진' + cnt('files', '개')),
+      li('내가 연 진행 중 대진표' + cnt('boards', '개') + ', 지난 기록 이관 자료')
+    ]);
+    const keep = [
+      li('확정된 경기' + cnt('confirmed_matches', '건') + '와 ELO 점수 변동 — 함께 친 회원의 전적 근거라 남기고, 이름은 \'탈퇴한 회원\'으로 보여요'),
+      li('클럽 미니게임 기록 — 올린 사람 정보를 지우고, 회원님이 올린 기록과 지금 가입한 클럽의 기록에서 닉네임과 똑같은 이름은 \'탈퇴한 회원#…\'으로 바뀌어요' + (acctDelNum(p.kdk_renamed) ? ' (' + acctDelNum(p.kdk_renamed) + '건)' : '') + '. 실명 등 다른 표기는 요청하시면 고쳐 드려요')
+    ];
+    if (acctDelNum(p.pending_matches)) keep.push(li('승인을 기다리는 경기 ' + acctDelNum(p.pending_matches) + '건은 취소돼요'));
+    const owned = Array.isArray(p.clubs_owned) ? p.clubs_owned : [];
+    if (owned.length) keep.push(li('클럽장인 클럽(' + owned.map(x => esc(x)).join(', ') + ') — 클럽과 기록은 지우지 않고 운영자가 맡아 두었다가, 요청하시면 다른 회원에게 넘겨요'));
+    if (acctDelNum(p.cam_codes)) keep.push(li('클럽캠 코드 ' + acctDelNum(p.cam_codes) + '개 — 다른 사람이 쓸 수 없게 잠가요'));
+    h += sub('남는 것(회원님과 연결을 끊고)') + ul(keep);
+    h += sub('이 폰에 있는 것') + ul([
+      li('클럽캠 영상, 앱으로 찍은 영상, 하이라이트 사본, 앱 설정은 서버가 아니라 이 폰에 있어요. 삭제가 끝나면 지울지 물어봐요'),
+      li('이미 카카오톡 등으로 공유한 파일은 받은 곳에 남아요. 다른 회원 폰에 저장된 이름 목록(고수 표시·실명 통일 설정)은 그 회원이 지워야 해요')
+    ]);
+    if (d.pvErr) h += '<div class="muted" style="font-size:12px">건수를 불러오지 못했어요(서버 준비 중일 수 있어요). 지워지는 항목은 위와 같아요.</div>';
+    h += '<div class="muted" style="font-size:12px;margin-top:4px">자세한 내용: <a href="' + ACCT_DEL_PAGE + '" target="_blank" rel="noopener">계정 삭제 안내 페이지</a></div>';
+    const cam = acctDelCamOn();
+    if (cam) h += '<div class="card" style="padding:10px 12px;font-size:13px;margin-top:8px">이 폰에서 클럽캠이 켜져 있어요. 클럽캠을 끈 뒤 진행해 주세요.</div>';
+    h += '<button type="button" class="btn full"' + (cam ? ' disabled' : '') + ' onclick="acctDelStep(\'auth\')">다음 — 비밀번호 확인</button><button type="button" class="btn full outline" onclick="acctDelClose()">취소</button>';
+  } else if (d.step === 'auth') {
+    const email = TMAuth.session && TMAuth.session.user && TMAuth.session.user.email;
+    if (d.target) h += '<div class="muted" style="font-size:13px;line-height:1.6">대상: <b>' + esc(d.label || '회원') + '</b> — 이 회원의 서버 파일과 계정을 지우고 경기 기록은 익명으로 남겨요. 되돌릴 수 없어요. 본인 확인(가입 이메일로 확인 회신)을 마친 요청만 처리하세요.</div>';
+    if (!email) {
+      box.innerHTML = h + '<div class="muted" style="font-size:13px;line-height:1.6">이메일·비밀번호로 가입한 계정만 이 화면에서 바로 지울 수 있어요. 카카오톡 채널로 요청해 주시면 본인 확인 뒤 지워 드려요.</div>' + contactBtn + '<button type="button" class="btn full outline" onclick="acctDelClose()">닫기</button>';
+      return;
+    }
+    h += '<label for="acctdel-pw">확인을 위해 ' + (d.target ? '운영자 계정의 ' : '') + '비밀번호를 다시 입력해 주세요</label>' +
+      '<input type="password" id="acctdel-pw" autocomplete="current-password" style="width:100%;padding:8px 12px;border-radius:10px;border:1.5px solid var(--border);font-size:14px;background:var(--card);color:var(--text)">' +
+      chk('acctdel-ok', false, (d.target ? '이 회원의 계정 삭제' : '계정 삭제') + '는 되돌릴 수 없다는 것을 확인했어요', '') +
+      '<div id="acctdel-msg" style="font-size:12px;min-height:16px;color:#c0392b">' + esc(d.msg || '') + '</div>' +
+      '<button type="button" class="btn full" style="background:#c0392b" onclick="acctDelRun()">' + (d.target ? '삭제 마무리' : '계정 삭제') + '</button>' +
+      '<button type="button" class="btn full outline" onclick="' + (d.target ? 'acctDelClose()' : 'acctDelStep(\'info\')') + '">' + (d.target ? '취소' : '뒤로') + '</button>' +
+      (d.target ? '' : '<div class="muted" style="font-size:12px;text-align:center;margin-top:10px"><a href="#" onclick="acctDelForgot();return false">비밀번호를 잊었어요</a></div>');
+  } else if (d.step === 'run') {
+    h += '<div style="font-size:14px;line-height:1.6">지우는 중이에요. 창을 닫지 말고 잠시만 기다려 주세요.</div><div class="muted" style="font-size:12px;margin-top:6px">' + esc(d.note || '') + '</div>';
+  } else if (d.step === 'fail') {
+    h += '<div style="font-size:14px;line-height:1.6">' + esc(acctDelFailText(d.res || {})) + '</div>' +
+      '<div class="muted" style="font-size:12px;margin-top:6px">계속 안 되면 카카오톡 채널로 알려 주세요. 가입한 이메일과 닉네임만 적어 주시고, 비밀번호는 절대 보내지 마세요.</div>' +
+      contactBtn +
+      '<button type="button" class="btn full" onclick="acctDelStep(\'auth\')">다시 시도</button><button type="button" class="btn full outline" onclick="acctDelClose()">닫기</button>';
+  } else if (d.step === 'done') {
+    if (d.target) {
+      h += '<div style="font-size:14px;line-height:1.6">삭제를 마무리했어요' + (files ? ' (서버 파일 ' + files + '개)' : '') + '.</div><button type="button" class="btn full" onclick="acctDelClose();try{adminOpen()}catch(e){}">닫기</button>';
+    } else {
+      h += '<div style="font-size:14px;line-height:1.6">계정과 서버 데이터를 지웠어요' + (files ? ' (서버 파일 ' + files + '개)' : '') + '. 그동안 함께해 주셔서 고마웠어요.</div>' +
+        sub('이 폰의 데이터도 지울까요?') +
+        chk('acctdel-wipe-set', true, '앱 설정·기록 지우기', '캠 코드, 동의 표시, 고수·실명 설정, 데모 기록 등 이 폰에 저장된 앱 값') +
+        chk('acctdel-wipe-vid', false, '영상도 지우기', '클럽캠 영상, 앱으로 찍은 영상, 하이라이트 사본', ' onchange="var w=$(\'acctdel-vid-warn\');if(w)w.style.display=this.checked?\'\':\'none\'"') +
+        '<div id="acctdel-vid-warn" style="display:none;font-size:12px;color:#c0392b;margin:2px 0 6px 22px">PC로 옮기지 않은 영상은 되돌릴 수 없어요.</div>' +
+        '<button type="button" class="btn full" onclick="acctDelFinish()">완료</button>';
+    }
+  }
+  box.innerHTML = h;
+  if (d.step === 'auth') { const pw = $('acctdel-pw'); if (pw) setTimeout(() => { try { pw.focus(); } catch (e) {} }, 50); }
+}
+async function acctDelRun() {
+  const d = acctDel; if (!d || d.busy) return;
+  const pwEl = $('acctdel-pw'), okEl = $('acctdel-ok');
+  const pw = pwEl ? pwEl.value : '';
+  const setMsg = m => { d.msg = m; const el = $('acctdel-msg'); if (el) el.textContent = m; };
+  if (!okEl || !okEl.checked) { setMsg('되돌릴 수 없다는 확인란을 체크해 주세요'); return; }
+  if (!pw) { setMsg('비밀번호를 입력해 주세요'); return; }
+  if (!d.target && acctDelCamOn()) { setMsg('이 폰의 클럽캠을 먼저 꺼 주세요'); return; }
+  d.busy = true; d.step = 'run'; d.note = '비밀번호 확인 중'; acctDelRender();
+  let fresh = null;
+  try { fresh = await TMAuth.reauth(pw); }
+  catch (e) { d.busy = false; d.step = 'auth'; d.msg = (e && e.message) || '비밀번호를 확인하지 못했어요'; acctDelRender(); return; }
+  d.note = d.target ? '이 회원의 파일과 계정을 지우는 중' : '서버의 영상·사진과 계정을 지우는 중'; acctDelRender();
+  let res = null;
+  try {
+    for (let i = 0; i < 12; i++) {
+      res = await TMAuth.deleteAccount({ session: fresh, target: d.target });
+      if (!res || res.code !== 'files_more') break;
+      d.note = '파일이 많아 나눠서 지우는 중 (' + (i + 2) + '번째)'; acctDelRender();
+    }
+  } catch (e) { res = { ok: false, code: 'network', message: String((e && e.message) || e) }; }
+  d.res = res || { ok: false, code: 'failed' };
+  if (!d.res.ok && !d.target && /^(files_more|reauth)$/.test(d.res.code || '')) { try { await TMAuth.cancelDelete(fresh); } catch (e) {} } /* v1.72c: 다 못 지웠으면 잠금 풀기 — 다시 시도하면 처음부터 */
+  if (d.res.ok) {
+    if (!d.target) await acctDelAfterSelf();
+    d.step = 'done';
+  } else {
+    d.step = d.res.code === 'reauth' ? 'auth' : 'fail';
+    if (d.step === 'auth') d.msg = acctDelFailText(d.res);
+  }
+  d.busy = false; acctDelRender();
+}
+async function acctDelAfterSelf() { /* 서버 계정은 지워짐 → 이 폰 로그인만 지움(클럽캠도 이 폰 로그아웃처럼 끔) */
+  ccUserSignOut = true;
+  try { localStorage.setItem('tm-local-signout', String(Date.now())); } catch (e) {}
+  try { await TMAuth.signOutLocal(); } catch (e) {}
+  finally { ccUserSignOut = false; }
+  try { sessionStorage.removeItem('tm-cc-running'); sessionStorage.removeItem('tm-cc-running-uid'); } catch (e) {}
+  try { if (window.caches && caches.delete) await caches.delete('tm-v1'); } catch (e) {} /* 서비스 워커가 서버 응답을 담아 둔 캐시 */
+}
+function acctIdbDelete(name) {
+  return new Promise(res => {
+    let done = false; const fin = v => { if (!done) { done = true; res(v); } };
+    try {
+      const rq = indexedDB.deleteDatabase(name);
+      rq.onsuccess = () => fin('ok'); rq.onerror = () => fin('error'); rq.onblocked = () => setTimeout(() => fin('blocked'), 3000);
+    } catch (e) { fin('error'); }
+    setTimeout(() => fin('timeout'), 8000);
+  });
+}
+async function acctLocalWipe(o) {
+  o = o || {};
+  const out = { settings: 0, videos: [], videosLeft: false };
+  if (o.settings) {
+    try {
+      const ks = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('tm-') === 0) ks.push(k); }
+      ks.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+      out.settings = ks.length;
+    } catch (e) {}
+  }
+  if (o.videos) {
+    if (acctDelCamOn()) { out.videosLeft = true; return out; }
+    try { if (ccDb) { ccDb.close(); ccDb = null; } } catch (e) {}
+    for (const name of ['tm-clubcam', 'tm-mhrec']) {
+      const r = await acctIdbDelete(name);
+      out.videos.push(name + ':' + r);
+      if (r !== 'ok') out.videosLeft = true;
+    }
+    try {
+      if (navigator.storage && navigator.storage.getDirectory) {
+        const root = await navigator.storage.getDirectory();
+        try { await root.removeEntry('mh-src', { recursive: true }); out.videos.push('mh-src:ok'); }
+        catch (e) { const nm = (e && e.name) || 'error'; out.videos.push('mh-src:' + nm); if (nm !== 'NotFoundError') out.videosLeft = true; }
+      }
+    } catch (e) {}
+  }
+  return out;
+}
+async function acctDelFinish() {
+  const d = acctDel; if (!d || d.busy) return;
+  const wipeSet = !!($('acctdel-wipe-set') && $('acctdel-wipe-set').checked);
+  const wipeVid = !!($('acctdel-wipe-vid') && $('acctdel-wipe-vid').checked);
+  d.busy = true;
+  let out = { videosLeft: false };
+  try { out = await acctLocalWipe({ settings: wipeSet, videos: wipeVid }); } catch (e) {}
+  d.busy = false;
+  acctDelClose();
+  acctDelFinish._last = out;
+  toast(out.videosLeft ? '일부 영상을 지우지 못했어요 — 앱을 다시 연 뒤 판독 탭에서 지워 주세요'
+    : (wipeSet || wipeVid) ? '이 폰의 데이터도 지웠어요' : '계정을 지웠어요');
+  if (wipeSet || wipeVid) setTimeout(() => { try { location.replace(location.pathname); } catch (e) {} }, 1200);
+  else { try { openAuth('login'); } catch (e) {} }
+}
+// 더보기 › 설정의 '계정 삭제' 줄은 서버 모드에서만
+try { const r = $('acctdel-row'); if (r && serverMode()) r.style.display = ''; } catch (e) {}
+// 웹 삭제 안내 페이지 → ?open=account-delete : 로그인하면 이 창을 엶(주소의 표시는 지움 — 앱 변수 history와 겹치지 않게 window.history)
+try {
+  if (/(^|[?&])open=account-delete(&|$)/.test(location.search)) {
+    acctDelWant = true;
+    const q = location.search.replace(/^\?/, '').split('&').filter(x => x && x !== 'open=account-delete');
+    try { window.history.replaceState(window.history.state, '', location.pathname + (q.length ? '?' + q.join('&') : '') + location.hash); } catch (e) {}
+  }
+} catch (e) {}
+function acctDelWatch() {
+  if (acctDelWatch._on || !window.TMAuth) return;
+  acctDelWatch._on = true;
+  TMAuth.onChange(s => { if (s && acctDelWant) { acctDelWant = false; setTimeout(() => { try { acctDelOpen(); } catch (e) {} }, 700); } });
+  try {
+    TMAuth.ready.then(() => {
+      if (acctDelWant && !TMAuth.isLoggedIn && serverMode()) setTimeout(() => { try { if (!$('modal-auth').classList.contains('open')) openAuth('login'); toast('로그인하면 계정 삭제 창이 열려요'); } catch (e) {} }, 900);
+    });
+  } catch (e) {}
+}
+try { acctDelWatch(); } catch (e) {}
 async function initServerAuth(retry) { // v1.57d: 한 번에 하나만(30초 타이머·online이 겹쳐도), 이미 붙었으면 안 함
   if (initServerAuth._busy || (retry && TMAuth.client)) return;
   initServerAuth._busy = true;
@@ -4005,7 +4310,7 @@ function renderHomeEdit() {
   normalizeLayout();
   $('homeedit-list').innerHTML = homeLayout.map((l, i) => {
     const s = HOME_SECTIONS.find(x => x.key === l.key);
-    return `<div class="sec-row">
+    return `<div class="sec-row${l.key === 'feed' ? ' store-hide' : ''}">
       <button class="mv" onclick="moveSection(${i}, -1)" ${i === 0 ? 'disabled' : ''}>▲</button>
       <button class="mv" onclick="moveSection(${i}, 1)" ${i === homeLayout.length - 1 ? 'disabled' : ''}>▼</button>
       <span style="flex:1;font-size:13px;${l.on ? '' : 'opacity:.45'}">${s.label}</span>
@@ -4159,7 +4464,7 @@ function renderRecap() {
   const topType = Object.entries(tc).sort((a, b) => b[1] - a[1])[0];
   const fav = favoriteCourt(); // v0.23
   $('home-recap').innerHTML = `<div class="card">
-    <div class="row"><b style="font-size:14px">📈 ${r.mon}월 리캡</b><button class="btn small outline" onclick="shareRecap()">피드에 공유</button></div>
+    <div class="row"><b style="font-size:14px">📈 ${r.mon}월 리캡</b><button class="btn small outline store-hide" onclick="shareRecap()">피드에 공유</button></div>
     <div class="recap-grid">
       <div class="recap-cell"><div class="rv">${r.ms.length}</div><div class="rl">경기</div></div>
       <div class="recap-cell"><div class="rv">${wr}%</div><div class="rl">승률 (${r.wins}승)</div></div>
@@ -4204,7 +4509,7 @@ function renderWrapped() {
     <div style="font-size:13px;margin-top:4px;opacity:.92">올해 경기 ${s.ms.length}회 · ${s.wins}승 (승률 ${s.wr}%) · 연습 ${s.prs.length}회 ${s.minSum}분 · 🎖️ 뱃지 ${s.badges}개</div>
     <div class="row" style="gap:8px;margin-top:10px">
       <button class="btn wrap-light" style="flex:1" onclick="openWrapped()">총결산 카드 열기</button>
-      <button class="btn wrap-ghost" style="flex:1" onclick="shareWrapped()">피드에 공유</button>
+      <button class="btn wrap-ghost store-hide" style="flex:1" onclick="shareWrapped()">피드에 공유</button>
     </div>
   </div>`;
 }
@@ -4235,7 +4540,7 @@ function openWrapped() {
         ${s.lives ? `<div class="wrap-line"><span>🎾 라이브 스코어 경기</span><b>${s.lives}회</b></div>` : ''}
       </div>`}
     </div>
-    <button class="btn full" onclick="shareWrapped()">피드에 공유하기</button>
+    <button class="btn full store-hide" onclick="shareWrapped()">피드에 공유하기</button>
     <button class="btn full outline" onclick="closeModal('wrapped')">닫기</button>`;
   openModal('wrapped');
 }
@@ -4273,7 +4578,7 @@ function renderPCard() {
     <div style="font-size:12px;margin-top:8px;opacity:.92">🎖️ 뱃지 ${d.badges.length}개${d.rival ? ` · 🤜🤛 최고 라이벌 ${d.rival.name} (${d.rival.w}-${d.rival.l})` : ''}</div>
     <div class="row" style="gap:8px;margin-top:10px">
       <button class="btn wrap-light" style="flex:1" onclick="openMyCard()">명함 크게 보기</button>
-      <button class="btn wrap-ghost" style="flex:1" onclick="shareMyCard()">피드에 공유</button>
+      <button class="btn wrap-ghost store-hide" style="flex:1" onclick="shareMyCard()">피드에 공유</button>
     </div>
   </div>`;
 }
@@ -4299,7 +4604,7 @@ function openMyCard() {
       </div>
       ${d.badges.length ? `<div class="pcard-badges">${d.badges.map(b => `<span class="pb">${b.emoji} ${b.name}</span>`).join('')}</div>` : ''}
     </div>
-    <button class="btn full" onclick="shareMyCard()">피드에 공유하기</button>
+    <button class="btn full store-hide" onclick="shareMyCard()">피드에 공유하기</button>
     <button class="btn full outline" onclick="closeModal('pcard')">닫기</button>`;
   openModal('pcard');
 }
@@ -4408,7 +4713,7 @@ function renderChallenges() {
         <div class="muted" style="margin-top:3px">${m.desc}</div>
       </div>`;
     }).join('')}
-    ${allDone ? '<button class="btn full outline" onclick="shareChallenges()">피드에 자랑하기</button>' : ''}
+    ${allDone ? '<button class="btn full outline store-hide" onclick="shareChallenges()">피드에 자랑하기</button>' : ''}
   </div>`;
 }
 function shareChallenges() {
@@ -4420,6 +4725,8 @@ function shareChallenges() {
 // ===== 플렉스 리그 (v0.17) =====
 function monthFirstStr() { const d = new Date(); return fmtDateObj(new Date(d.getFullYear(), d.getMonth(), 1)); }
 function monthLastStr() { const d = new Date(); return fmtDateObj(new Date(d.getFullYear(), d.getMonth() + 1, 0)); }
+function tmLeagueEmpty() { return !flexLeague.players.length && !divLeague.divs.some(d => d.players.length); } /* v1.72: 실전 모드에선 데모 리그를 비움 */
+function tmLeagueEmptyHtml() { return '<div class="empty">로그인 계정의 리그는 아직 준비 중이에요 — 지금은 토너먼트를 직접 만들어 쓸 수 있어요</div>'; }
 function flexResult(a, b) {
   return flexLeague.results.find(r => (r.a === a && r.b === b) || (r.a === b && r.b === a));
 }
@@ -4440,6 +4747,7 @@ function flexDday() {
   return Math.max(0, Math.round(ms / 86400000));
 }
 function renderFlex() {
+  if (!flexLeague.players.length) { $('flex-area').innerHTML = tmLeagueEmptyHtml(); return; } /* v1.72 */
   const st = flexStandings();
   const total = flexLeague.players.length - 1;
   const myRemain = flexLeague.players.filter(n => n !== ME.name && !flexResult(ME.name, n));
@@ -4539,6 +4847,7 @@ function divMyMatchesHtml(di) {
   </div>`;
 }
 function renderDivLeague() {
+  if (!divLeague.divs.some(d => d.players.length)) { $('div-area').innerHTML = tmLeagueEmptyHtml(); return; } /* v1.72 */
   const dd = divDday();
   const myDi = myDivIndex();
   $('div-area').innerHTML = `<div class="card">
@@ -4583,6 +4892,13 @@ function nextSeasonRange() {
   return { start: s, end: fmtDateObj(new Date(d.getFullYear(), d.getMonth() + 1, 0)), mon: d.getMonth() + 1 };
 }
 function finalizeSeason(auto) {
+  if (tmLeagueEmpty()) { /* v1.72: 빈 리그(실전 모드)는 기록 없이 날짜만 다음 시즌으로 — 혼자 '우승'하는 가짜 기록 방지 */
+    const nx = nextSeasonRange();
+    divLeague = { season: nx.mon + '월 시즌', start: nx.start, end: nx.end, promote: 2, relegate: 2, divs: [{ name: '1부', players: [], results: [] }, { name: '2부', players: [], results: [] }] };
+    flexLeague = { name: nx.mon + '월 플렉스 리그', start: nx.start, end: nx.end, players: [], results: [] };
+    try { renderDivLeague(); renderFlex(); renderArchive(); } catch (e) {}
+    return;
+  }
   const div1St = divStandings(divLeague.divs[0]);
   const div2St = divStandings(divLeague.divs[1]);
   const flexSt = flexStandings();
@@ -4658,7 +4974,7 @@ function renderArchive() {
       <span class="badge ${a.myDivRank === 1 || a.myFlexRank === 1 ? '' : 'gray'}">나: ${a.myDivName || '리그'} ${a.myDivRank}위</span>
     </div>`).join('') : '<div class="empty">시즌을 마감하면 이곳에 기록이 쌓여요.</div>'}
     <div class="muted" style="margin-top:8px">시즌(월)이 끝나면 자동으로 정산돼요 — 2부 상위 ${divLeague.promote}명 승격 ▲ · 1부 하위 ${divLeague.relegate}명 강등 ▼. 아래 버튼으로 지금 바로 마감해볼 수도 있어요.</div>
-    <button class="btn full outline" onclick="finalizeSeason(false)">${divLeague.season} 지금 마감 & 정산하기</button>
+    ${tmLeagueEmpty() ? '' : `<button class="btn full outline" onclick="finalizeSeason(false)">${divLeague.season} 지금 마감 & 정산하기</button>`}
   </div>`;
 }
 function archTable(title, rows, marks) {
@@ -5198,14 +5514,14 @@ function renderLive() {
     </div>
     <div class="row" style="gap:6px;margin-top:8px">
       <button class="btn small ${lvVoiceOn ? '' : 'outline'}" style="flex:1" onclick="lvVoiceToggle()">${lvVoiceOn ? '🔊 콜 소리 켬' : '🔇 콜 소리 끔'}</button>
-      <button class="btn small ${lvMicOn ? '' : 'outline'}" style="flex:1" onclick="lvMicToggle()">${lvMicOn ? '🎤 듣는 중' : '🎤 음성 입력'}</button>
+      <button class="btn small store-hide ${lvMicOn ? '' : 'outline'}" style="flex:1" onclick="lvMicToggle()">${lvMicOn ? '🎤 듣는 중' : '🎤 음성 입력'}</button>
       <button class="btn small outline" style="flex:1" onclick="lvServeFlip()">서브: ${live.srv === 1 ? '상대' : lvSideName(0)}</button>
     </div>
     <div class="row" style="gap:6px;margin-top:6px">
       <button class="btn small outline" style="flex:1" onclick="lvFault()">폴트${live.fault ? ' (첫 폴트 ✓)' : ''}</button>
       <button class="btn small outline" style="flex:1" onclick="lvLet()">렛</button>
     </div>
-    <div class="muted" id="lv-mic-status" style="font-size:11.5px;margin-top:4px">${lvMicOn ? '🎤 듣는 중 — "우리" "상대" "폴트" "렛" "취소"' : '🔊 콜 소리는 본폰과 공기계(클럽캠 연결 시) 둘 다 · 🎤 갤럭시 크롬에서 음성 입력'}</div>
+    <div class="muted" id="lv-mic-status" style="font-size:11.5px;margin-top:4px">${lvMicOn ? '🎤 듣는 중 — "우리" "상대" "폴트" "렛" "취소"' : (tmStoreOn() ? '콜 소리는 이 폰에서 나와요' : '🔊 콜 소리는 본폰과 공기계(클럽캠 연결 시) 둘 다 · 🎤 갤럭시 크롬에서 음성 입력') /* v1.72c */}</div>
     ${lvTagRowHtml()}
     <div class="dline">총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]}</div>`;
   lvRCPushState(); // 리모컨에 현재 점수 중계
@@ -5313,6 +5629,7 @@ function lvBeep() {
 }
 function lvMicToggle() {
   if (lvMicOn) { lvMicStop(); toast('🎤 음성 입력 껐어요'); return; }
+  if (tmStoreBlocked()) return; /* v1.72: 크롬 음성 인식은 소리를 구글 서버로 보냄 — 안내 전까지 스토어 앱에서는 막음(끄기는 됨) */
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { toast('이 브라우저는 음성 인식을 지원하지 않아요 — 갤럭시 크롬에서 써주세요'); return; }
   try { lvBeep(); } catch (e) {} // 오디오 컨텍스트를 제스처 안에서 열어둠
@@ -6100,6 +6417,7 @@ function aiGoDrill(cat) {
   toast(cat ? `📚 ${cat} 드릴로 이동했어요` : '📚 드릴 라이브러리로 이동했어요');
 }
 function aiGoOpen() {
+  if (tmStoreBlocked()) return; /* v1.72: 오픈 매치(데모)는 스토어 앱에서 막음 */
   showTab('match', document.querySelectorAll('nav button')[1]);
   toast('⚡ 오픈 매치에서 도전 상대를 찾아보세요!');
 }
@@ -7278,7 +7596,7 @@ function renderKdkHistory() {
       <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>` +
       rows.map(r => `<tr style="${kdkHistIsMe(r.name) ? 'background:rgba(47,158,95,.12)' : ''}">
         <td class="${r.rank === 1 ? 'rank-1' : r.rank === 2 ? 'rank-2' : ''}">${r.rank}</td>
-        <td style="text-align:left">${esc(r.name)}${r.rank === 1 ? ' 🏆' : ''}</td><td>${Number(r.w) || 0}</td><td>${Number(r.l) || 0}</td></tr>`).join('') +
+        <td style="text-align:left">${kdkGoneName(r.name) ? '<span class="muted">탈퇴한 회원</span>' : esc(r.name)}${r.rank === 1 ? ' 🏆' : ''}</td><td>${Number(r.w) || 0}</td><td>${Number(r.l) || 0}</td></tr>`).join('') +
       `</tbody></table></div>`;
   }).join('');
 }
@@ -7306,12 +7624,13 @@ function clubRankEvents(kind, period) {
 }
 function setClubRankKind(k) { clubRankKind = k; renderClubRank(); }
 function setClubRankPeriod(p) { clubRankPeriod = p; renderClubRank(); }
+function kdkGoneName(nm) { return /^탈퇴한 회원#/.test(String(nm == null ? '' : nm)); } /* v1.72: 계정 삭제로 바뀐 이름(015) — 랭킹·시상에서 빼고 기록에는 '탈퇴한 회원'으로 */
 function clubRankData(kind, period) {
   if (kind === undefined) kind = clubRankKind;
   const events = clubRankEvents(kind, period);
   const agg = {};
   events.forEach(ev => (ev.results || []).forEach(r => {
-    if (!r || !r.name) return;
+    if (!r || !r.name || kdkGoneName(r.name)) return; /* v1.72: 탈퇴한 회원은 집계·순위에서 뺌 */
     const a = agg[r.name] || (agg[r.name] = { name: r.name, pts: 0, w: 0, l: 0, gd: 0, ev: 0 });
     a.ev++;
     a.w += r.w || 0;
@@ -7322,6 +7641,7 @@ function clubRankData(kind, period) {
   return Object.values(agg).sort((x, y) => y.pts - x.pts || y.w - x.w || y.gd - x.gd);
 }
 function clubAwards(list) { // 시상: 1~3위 + 특별상 (v0.73)
+  list = (list || []).filter(r => r && !kdkGoneName(r.name)); /* v1.72: 탈퇴한 회원은 시상 후보에서 뺌 */
   if (!list.length) return null;
   const by = (k) => [...list].sort((x, y) => y[k] - x[k] || y.pts - x.pts)[0];
   return { top: list.slice(0, 3), mostEv: by('ev'), mostW: by('w'), bestGd: by('gd') };
@@ -7585,13 +7905,13 @@ function renderHome() {
     const c = coaches.find(x => x.id === l.coachId);
     if (c) items.push(`<div class="card row"><div><h3>${c.name} 코치 레슨</h3><div class="muted">${l.date} · ${l.slot} ${wxMini(l.date)}</div></div><div style="text-align:right"><span class="badge">레슨 확정</span><div style="margin-top:6px">${prepBtn('l:' + l.coachId + ':' + l.date + ':' + l.slot)}</div></div></div>`);
   });
-  received.filter(r => r.status === 'accepted').forEach(r => {
+  if (!tmStoreOn()) received.filter(r => r.status === 'accepted').forEach(r => { /* v1.72c: 스토어판엔 매칭 없음 */
     items.push(`<div class="card row"><div><h3>${r.from} 님과 매칭</h3><div class="muted">${r.date} · ${r.msg}</div></div><div style="text-align:right"><span class="badge">매칭 확정</span><div style="margin-top:6px">${prepBtn('m:' + r.id)}</div></div></div>`);
   });
-  sent.forEach(r => {
+  if (!tmStoreOn()) sent.forEach(r => { /* v1.72c */
     items.push(`<div class="card row"><div><h3>${r.name} 님과 매칭</h3><div class="muted">${r.date} · ${r.msg}</div></div><span class="badge orange">수락 대기중</span></div>`);
   });
-  openMatches.filter(m => m.joined.includes(ME.name)).forEach(m => {
+  if (!tmStoreOn()) openMatches.filter(m => m.joined.includes(ME.name)).forEach(m => { /* v1.72c */
     const c = courts.find(c => c.id === m.courtId);
     const full = m.joined.length >= m.need;
     items.push(`<div class="card row"><div><h3>오픈 매치 (${c.name})</h3><div class="muted">${m.date} · ${m.slot} · 참가 ${m.joined.length}/${m.need}명</div></div><span class="badge ${full ? '' : 'orange'}">${full ? '인원 확정' : '모집중'}</span></div>`);
@@ -7625,7 +7945,7 @@ function renderHome() {
       items.push(`<div class="card row"><div><h3>대항전 vs ${other.name}</h3><div class="muted">${v.date} · ${v.place}</div></div><span class="badge orange">예정</span></div>`);
     });
   }
-  $('home-upcoming').innerHTML = items.length ? items.join('') : '<div class="empty">아직 일정이 없어요. 코트를 예약하거나 매칭을 신청해보세요!</div>';
+  $('home-upcoming').innerHTML = items.length ? items.join('') : '<div class="empty">' + (tmStoreOn() ? '아직 일정이 없어요.' : '아직 일정이 없어요. 코트를 예약하거나 매칭을 신청해보세요!') + '</div>' /* v1.72c */;
 
   // v0.12: 추천 파트너 — 매칭률 상위 3명
   const rec = players.slice().sort((a, b) => matchScore(b) - matchScore(a)).slice(0, 3);
@@ -7796,7 +8116,7 @@ function vjRenderCalls() {
   el.innerHTML = vjCalls.length ? vjCalls.map((c, i) => `<div class="row" style="align-items:center;gap:8px;margin-top:4px">
     <span class="vj-verdict ${c.in ? 'in' : 'out'}">${c.in ? 'IN' : 'OUT'}</span>
     <span class="muted" style="flex:1">${vjFmtT(c.t)} 지점</span>
-    ${i === 0 ? `<button type="button" class="tag-btn" onclick="vjShareCall()">피드에 공유</button>` : ''}
+    ${i === 0 ? `<button type="button" class="tag-btn store-hide" onclick="vjShareCall()">피드에 공유</button>` : ''}
   </div>`).join('') : '';
 }
 function vjShareCall() {
@@ -7843,7 +8163,7 @@ function vjRenderSpeed() {
   const warn = kmh > 300 ? '<div style="font-size:12px;opacity:.9;margin-top:4px">⚠️ 값이 너무 커요 — 두 지점을 다시 확인해보세요</div>' : '';
   el.innerHTML = `<div class="vj-res"><div class="big">⚡ ${kmh.toFixed(1)} km/h</div>
     <div style="font-size:12px;opacity:.9">${dist}m 구간 · ${dt.toFixed(3)}초</div>${warn}
-    <button type="button" class="btn small" style="margin-top:8px;background:rgba(255,255,255,.2)" onclick="vjShareSpeed()">피드에 공유</button></div>`;
+    <button type="button" class="btn small store-hide" style="margin-top:8px;background:rgba(255,255,255,.2)" onclick="vjShareSpeed()">피드에 공유</button></div>`;
 }
 function vjShareSpeed() {
   const kmh = vjCalcSpeed(vjT1, vjT2, vjGetDist());
@@ -7976,6 +8296,27 @@ async function adminTouch() {
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) adminTouch(); });
 function adminOpen() { if (!adminIs) { toast('관리자 계정이 아니에요'); return; } openModal('admin'); adminLoad(); }
+// v1.72: 관리자 표 [계정 삭제(요청 처리)] — 카톡 등으로 삭제를 요청한 회원. 탈퇴 표시가 없는 회원은 닉네임을 그대로 다시 입력해야 진행(오삭제 방지).
+//   처리는 운영자 삭제(acctDelOperator → 운영자 비밀번호 → delete-account target_user_id). 관리자 계정은 서버가 거절('admin')
+let adminUsersById = {};
+function adminDelBtn(x) {
+  if (!x || !x.id || x.id === svMyId() || x.is_admin === true || x.admin === true) return ''; /* 내 줄·관리자 줄은 없음 */
+  return ' <button type="button" class="tag-btn" onclick="adminDelReq(\'' + esc(x.id) + '\', this)">계정 삭제(요청 처리)</button>';
+}
+function adminDelReq(uid, btn) {
+  const x = adminUsersById[uid];
+  if (!x) { toast('목록을 다시 불러온 뒤 눌러 주세요'); return; }
+  if (x.id === svMyId()) { toast('내 계정은 설정 › 계정 삭제에서 지울 수 있어요'); return; }
+  if (!x.deleted) {
+    const want = String(x.nickname || '').trim();
+    if (!want) { toast('닉네임이 없는 회원이에요 — 대시보드에서 확인 후 처리해 주세요'); return; }
+    let typed = null;
+    try { typed = window.prompt('삭제를 요청한 회원이 맞는지 확인해요.\n지울 회원의 닉네임을 그대로 입력하세요: ' + want + '\n(계정과 서버 데이터가 지워지고 되돌릴 수 없어요)', ''); } catch (e) { typed = null; }
+    if (typed === null) return;
+    if (String(typed).trim() !== want) { toast('닉네임이 달라요 — 지우지 않았어요'); return; }
+  }
+  acctDelOperator(uid, btn);
+}
 const adminFmt = t => { if (!t) return '—'; const d = new Date(t); const p = n => String(n).padStart(2, '0'); return d.getMonth() + 1 + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 const adminAgo = t => { if (!t) return ''; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
 async function adminLoad() {
@@ -7985,9 +8326,10 @@ async function adminLoad() {
     const [u, v] = await Promise.all([svClient().rpc('admin_users'), svClient().rpc('admin_visits', { p_days: days })]);
     if (u.error) throw u.error; if (v.error) throw v.error;
     const users = u.data || [], visits = v.data || [];
+    adminUsersById = {}; users.forEach(x => { if (x && x.id) adminUsersById[x.id] = x; }); /* v1.72 */
     $('admin-n').textContent = users.length + '명' + (users.filter(x => x.deleted).length ? ' (탈퇴 ' + users.filter(x => x.deleted).length + ')' : '');
     $('admin-users').innerHTML = '<tr><th>#</th><th>닉네임</th><th>이메일</th><th>가입</th><th>최근 로그인</th><th>접속</th><th>마지막 접속</th><th>NTRP</th><th>지역</th><th>클럽</th></tr>' +
-      users.map((x, i) => '<tr' + (x.deleted ? ' style="opacity:.5"' : '') + '><td class="dim">' + (i + 1) + '</td><td><b>' + esc(x.nickname) + '</b>' + (x.deleted ? ' <span class="badge">탈퇴</span>' : '') + '</td><td>' + esc(x.email) + '</td><td class="dim">' + adminFmt(x.created_at) + '</td><td class="dim">' + adminFmt(x.last_sign_in_at) + '</td><td>' + (x.visit_days ? x.visit_days + '일 · ' + x.visit_n + '회' : '<span class="dim">—</span>') + '</td><td class="dim">' + (x.last_visit ? adminFmt(x.last_visit) + ' (' + adminAgo(x.last_visit) + ')' : '—') + '</td><td class="dim">' + esc(x.ntrp) + '</td><td class="dim">' + esc(x.region) + '</td><td class="dim">' + esc(x.clubs) + '</td></tr>').join('');
+      users.map((x, i) => '<tr' + (x.deleted ? ' style="opacity:.5"' : '') + '><td class="dim">' + (i + 1) + '</td><td><b>' + esc(x.nickname) + '</b>' + (x.deleted ? ' <span class="badge">탈퇴</span> <button type="button" class="tag-btn" onclick="acctDelOperator(\'' + esc(x.id) + '\', this)">삭제 마무리</button>' : adminDelBtn(x)) + '</td><td>' + esc(x.email) + '</td><td class="dim">' + adminFmt(x.created_at) + '</td><td class="dim">' + adminFmt(x.last_sign_in_at) + '</td><td>' + (x.visit_days ? x.visit_days + '일 · ' + x.visit_n + '회' : '<span class="dim">—</span>') + '</td><td class="dim">' + (x.last_visit ? adminFmt(x.last_visit) + ' (' + adminAgo(x.last_visit) + ')' : '—') + '</td><td class="dim">' + esc(x.ntrp) + '</td><td class="dim">' + esc(x.region) + '</td><td class="dim">' + esc(x.clubs) + '</td></tr>').join('');
     $('admin-visits').innerHTML = '<tr><th>닉네임</th><th>날짜</th><th>처음</th><th>마지막</th><th>횟수</th><th>버전</th><th>기기</th></tr>' +
       (visits.length ? visits.map(x => '<tr><td><b>' + esc(x.nickname) + '</b></td><td class="dim">' + esc(x.seen_on) + '</td><td class="dim">' + adminFmt(x.first_at).slice(-5) + '</td><td class="dim">' + adminFmt(x.last_at).slice(-5) + '</td><td>' + x.n + '</td><td class="dim">' + esc(x.app_ver) + '</td><td class="dim">' + esc(adminUa(x.ua)) + '</td></tr>').join('') : '<tr><td colspan="7" class="dim">아직 기록이 없어요 — v1.19 이후 접속부터 쌓여요</td></tr>');
     if (st) st.textContent = adminFmt(Date.now()) + ' 기준';
@@ -8090,7 +8432,7 @@ async function svRefresh() {
     const me = svMyId();
     box.innerHTML = data.map(m => {
       const mine = m.reporter_id === me;
-      const nick = p => (p && p.profiles && p.profiles.nickname) || '?';
+      const nick = p => esc((p && p.profiles && p.profiles.nickname) || '탈퇴한 회원'); /* v1.72: 탈퇴(묘비) 프로필은 안 보임 */
       const t1 = (m.match_players || []).filter(p => p.team === 1).map(nick).join('·');
       const t2 = (m.match_players || []).filter(p => p.team === 2).map(nick).join('·');
       const oppName = `${m.kind === 'doubles' ? '👥 ' : ''}${t1} vs ${t2}`;
@@ -10138,7 +10480,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     res.innerHTML = ''; aiDraw(); return;
   }
   const bi = aiBounceIdxT(aiTraj, anchor); // v1.55 챌린지면 캠이 잰 바운스 시각 근처
-  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + String(WASB.model || 'wasb').replace('.onnx', '') + ' · ' + WASB.backend + (WASB.batchOK ? '(배치)' : '') + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs || 0) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
+  let html = `<div class="muted" style="font-size:12px">궤적 ${aiTraj.length}점 (${t0.toFixed(1)}~${t1.toFixed(1)}초 구간) · 평균 신뢰도 ${(aiTraj.reduce((a, p) => a + p.s, 0) / aiTraj.length * 100).toFixed(0)}%(참고)${(typeof aiFarPass !== 'undefined' && aiFarPass) ? ' · 🔭 먼 코트 확대 분석' : ''}${(window.WASB && WASB.backend) ? ' · ' + String(WASB.model || 'wasb').replace('.onnx', '') + ' · ' + WASB.backend + (WASB.batchOK ? '(배치)' : '') + ' ' + (aiDeepMs / 1000).toFixed(1) + '초 (추론 ' + Math.round(WASB.avgMs || 0) + 'ms/3장 · 프레임 ' + aiDeepFrames + '장)' : ''}</div>`;
   let say = '';
   if (aiNativeInfo && (aiNativeInfo.n + aiNativeInfo.add)) html += '<div class="muted" style="font-size:11px">바운스 주변 ' + (aiNativeInfo.n + aiNativeInfo.add) + '점을 원래 해상도(' + aiNativeInfo.z.toFixed(1) + '배 확대)로 다시 봐서 착지점을 다듬었어요</div>'; // v1.33
   if (bi < 0) {
@@ -10160,7 +10502,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     aiCardInfo = { rb }; // v1.14 결과 카드
     const refined = rb !== b;
     const v = $('vj-video'); v.currentTime = rb.t; // 바운스 순간으로 이동
-    html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} (신뢰도 ${(b.s * 100).toFixed(0)}%)</div>`;
+    html += `<div class="muted" style="font-size:12px;margin-top:4px">🟡 바운스: ${rb.t.toFixed(2)}초${refined ? ' <span class="badge">✨ 보간 정밀화</span>' : ''} <span style="font-size:11px;opacity:.75">(신뢰도 ${(b.s * 100).toFixed(0)}% · 참고)</span></div>`;
     if (aiH && !aiCalUnref) { /* v1.66 */
       const vv0 = $('vj-video'); const [cx, cy] = aiGroundFix(aiH, vv0.videoWidth, vv0.videoHeight, aiMapPt(aiH, rb.x, rb.y)); // v1.55 공 중심 → 바닥 접점
       const vd = aiJudgeVerdict(cx, cy); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14 · v1.55 잰 베이스라인 폭 · v1.58 판정 기준(코트 라인/서브)
@@ -10191,7 +10533,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
   const spBi = bi; // v1.55 판정한 바운스와 같은 점
   if (spBi >= 0) {
     const sp = aiSpin(aiTraj, spBi);
-    if (sp) html += `<div style="margin-top:6px"><span class="badge orange">🌀 ${sp.label} 추정</span> <span class="muted" style="font-size:12px">낙하각 ${sp.angleIn}° · 바운스 반발 ${sp.rebound}% — ${sp.why} <b>(1대 카메라 참고치)</b></span></div>`;
+    if (sp) html += `<div class="muted" style="font-size:11px;margin-top:6px">참고 · 구질 ${sp.label} 추정 — 화면 각도로만 본 값이라 정확하지 않아요 (낙하각 ${sp.angleIn}° · 바운스 반발 ${sp.rebound}%)</div>`; /* v1.72: 구질 분류는 신뢰 불가(9/22 검증) — 작게, '참고' */
   }
   res.innerHTML = html;
   if (aiCardInfo) { try { aiResultCard(aiCardInfo); } catch (e) {} } // v1.14 바운스 확대 + 미니 코트
@@ -10405,7 +10747,7 @@ const TAG_LABEL = { ace: '🎯 에이스', winner: '💥 위너', net: '🥅 네
 function lvTagRowHtml() {
   if (!live || !live.tags || !live.tags.length) return '';
   const last = live.tags[live.tags.length - 1];
-  return '<div class="muted" style="font-size:12px;margin-top:8px">🏷️ 방금 포인트는 어떻게 끝났나요? (선택 — 상대 분석 데이터로 쌓여요)</div><div style="margin-top:4px">' +
+  return '<div class="muted" style="font-size:12px;margin-top:8px">🏷️ 방금 포인트는 어떻게 끝났나요? (선택 — 이 경기 동안 폰에만 남아요)</div><div style="margin-top:4px">' +
     Object.keys(TAG_LABEL).map(t => '<button type="button" class="tag-btn ' + (last.tag === t ? 'sel' : '') + '" onclick="lvTag(\'' + t + '\')">' + TAG_LABEL[t] + '</button>').join(' ') + '</div>';
 }
 function lvTag(t) {
@@ -11164,6 +11506,7 @@ function ccUid() { try { return (TMAuth.session && TMAuth.session.user && TMAuth
 function ccAuthOk() { try { return !!(serverMode() && (TMAuth.isLoggedIn || (TMAuth.storedUid && TMAuth.storedUid()))); } catch (e) { return false; } } // v1.57: 클럽캠 녹화는 저장된 로그인 계정이면 됨(서버 일은 로그인이 살아나면)
 function ccConsentOk() { const c = consentGet(); return !!(c && c.film && c.ver === CONSENT_VER && c.uid && c.uid === ccUid()); } // v1.52c 이 계정의 동의만
 function consentOpen(from) {
+  if (tmStoreBlocked()) return; /* v1.72c: 스토어판엔 클럽캠이 없음 */
   const c = consentGet(), cur = c && c.ver === CONSENT_VER && c.uid && c.uid === ccUid() ? c : null;
   ['cs-film-y', 'cs-film-n', 'cs-train-y', 'cs-train-n'].forEach(id => { const e = $(id); if (e) e.checked = false; });
   if (cur) { const a = $(cur.film ? 'cs-film-y' : 'cs-film-n'), b = $(cur.train ? 'cs-train-y' : 'cs-train-n'); if (a) a.checked = true; if (b) b.checked = true; }
