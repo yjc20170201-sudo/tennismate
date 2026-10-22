@@ -6,7 +6,22 @@
 <meta name="theme-color" content="#1b5e20">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
-<title>테니스메이트 🎾</title>
+<title>테니스메이트 — 클럽 대진표·랭킹·경기 하이라이트</title>
+<!-- v1.70: 검색 결과 설명 · 공유 카드(카톡은 og 태그만 읽음, 주소는 절대 주소) · 지금 주소는 옮길 예정이라 검색 제외(noindex) — 새 도메인에서는 noindex를 빼고 og:url·og:image도 새 주소로 -->
+<meta name="description" content="테니스 클럽 미니게임(개인전·청백전·단식) 대진표와 점수, 클럽 랭킹, 라이브 점수판, 폰으로 찍은 경기 영상 하이라이트 자동 편집과 AI 인아웃 판독(베타). 제주 테니스 클럽 베타.">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-title" content="테니스메이트">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="테니스메이트">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:title" content="테니스메이트 — 클럽 대진표·랭킹·경기 하이라이트">
+<meta property="og:description" content="클럽 미니게임 대진표와 점수, 클럽 랭킹, 폰으로 찍은 경기 영상 하이라이트 자동 편집, AI 인아웃 판독(베타). 제주 테니스 클럽 베타.">
+<meta property="og:url" content="https://yjc20170201-sudo.github.io/tennismate/">
+<meta property="og:image" content="https://yjc20170201-sudo.github.io/tennismate/og-image.png?v=1">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="테니스메이트 — 초록 코트와 테니스공, 클럽 대진표·랭킹·경기 하이라이트·AI 인아웃 판독">
+<meta name="twitter:card" content="summary_large_image">
 <script>
 // PWA: 설치형 웹앱 등록 (크롬 메뉴에 "앱 설치"가 뜨게 함). 실패해도 앱 동작엔 무관.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
@@ -60,6 +75,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   setInterval(tmCheckVer, 4 * 60 * 1000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tmCheckVer(); });
   window.__tmCheckVer = tmCheckVer; window.__tmBusy = tmBusy; // 테스트 훅
+  try { if (/^\?u=\d+$/.test(location.search) && history.replaceState) history.replaceState(history.state, '', location.pathname + location.hash); } catch (e) {} // v1.70: 자동 새로고침이 붙인 ?u= 지우기
 })();
 </script>
 <style>
@@ -96,6 +112,8 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     float: right; background: rgba(255,255,255,.18); border-radius: 20px;
     padding: 5px 12px; font-size: 12px; margin-top: -2px;
   }
+  .profile-chip.login { background: var(--lime); color: #10231a; font-weight: 800; } /* v1.70: 로그인 전 = 로그인 / 가입 버튼 */
+  .profile-chip:empty { visibility: hidden; } /* v1.70b: 글자가 정해지기 전 빈 알약 숨김 */
   main { padding: 16px; }
   .tab-content { display: none; animation: fade .25s ease; }
   .tab-content.active { display: block; }
@@ -655,7 +673,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
 </script>
 
 <header>
-  <span class="profile-chip" id="profile-chip" onclick="openProfile()" style="cursor:pointer">나: 정철 (NTRP 3.5)</span>
+  <span class="profile-chip" id="profile-chip" role="button" onclick="chipTap()" style="cursor:pointer"></span>
   <span class="notif-bell" id="notif-bell" onclick="openNotifs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg><span class="notif-badge" id="notif-badge" style="display:none">0</span></span>
   <span class="notif-bell" id="theme-btn" onclick="toggleDark()" title="다크모드 전환"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg></span>
   <h1>테니스메이트</h1>
@@ -1167,7 +1185,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div class="row" style="gap:6px;align-items:center;margin-top:8px"><span class="muted" style="font-size:12px">판정 기준</span><select id="ai-judge" style="flex:1" onchange="aiJudgeSet(this.value)"><option value="court">코트 라인 (랠리 공)</option><option value="serve">서브 — 공이 떨어진 쪽 서비스 박스</option><option value="serve-deuce">서브 — 듀스 쪽에서 넣은 서브</option><option value="serve-ad">서브 — 애드 쪽에서 넣은 서브</option></select></div>
         <button type="button" class="btn full outline" style="margin-top:6px" id="ai-deep-btn" onclick="aiAnalyzeDeep()">정밀 추적 — 딥러닝 공 탐지 (기본 소형 v16 · 첫 실행 0.8MB)</button>
         <div class="row" style="gap:6px;align-items:center;margin-top:6px"><span class="muted" style="font-size:12px">모델</span><select id="ai-model" style="flex:1" onchange="aiModelSet(this.value)"><option value="ball_tiny_xl_v16.onnx">소형 v16 — 빠름 (0.8MB, 9/9~9/28 학습·실내 체육관 포함, 기본)</option><option value="ball_tiny_xl_v15.onnx">소형 v15 — 이전 (9/28 체육관 없음)</option><option value="wasb_tennis.onnx">WASB 테니스 — 원본 (5MB, 느림)</option><option value="ball_tiny_xl_v16.onnx|wasm">소형 v16 — CPU(wasm) 강제 (속도 비교용)</option></select></div>
-        <div class="muted" style="font-size:11px;margin-top:3px">소형 v16 = WASB를 선생님으로 우리 코트 영상(9/9~9/28, 야간·파란 하드코트·두 캠 동시·초광각 폴드3·실내 체육관 포함) 학습, 멈춘 물체는 학습에서 뺌(0.8MB, 검증 영상 17개 재현율 90%·정밀도 92%·바운스 144/169, 새 체육관 바운스 8/8, 2026-09-29). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확. 실패 시 TrackNet으로 대체</div>
+        <div class="muted" style="font-size:11px;margin-top:3px">소형 v16 = WASB를 선생님으로 우리 코트 영상(9/9~9/28, 야간·파란 하드코트·두 캠 동시·초광각 폴드3·실내 체육관 포함) 학습, 멈춘 물체는 학습에서 뺌(0.8MB, 검증 영상 17개 재현율 90%·정밀도 92%·바운스 144/169, 새 체육관 바운스 8/8, 2026-09-29). WASB-SBDT(NTT, MIT)는 5MB 원본으로 느리지만 가장 정확.</div>
         <details style="margin-top:6px">
           <summary class="muted" style="font-size:12px;cursor:pointer">고급 (인아웃 자동 판정용 코트 보정)</summary>
           <div class="muted" style="font-size:11.5px;margin:6px 0">복식 코트 네 귀퉁이를 순서대로 탭하면, 공 위치를 실제 코트 좌표로 바꿔 인아웃 의견까지 나와요.</div>
@@ -1428,11 +1446,13 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     </div>
     <div class="section-title" style="margin-top:16px">설정</div>
     <div class="card" style="padding:4px 16px">
+      <div class="more-row" id="login-row" style="display:none" onclick="openAuth('login')"><div><b>로그인 / 가입</b><div class="muted">기록·랭킹·클럽을 저장하려면 계정으로 시작해요</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="openProfile()"><div><b>내 프로필</b><div class="muted">닉네임 · NTRP · 지역 · 로그아웃</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="consentOpen()"><div><b>촬영·AI 학습 동의</b><div class="muted">클럽캠 촬영(필수) · AI 학습 이용(선택) — 보기·바꾸기·철회</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="toggleDark()"><div><b>다크 모드</b><div class="muted">화면 밝기 전환</div></div><span class="chev">›</span></div>
       <div class="more-row" id="admin-row" style="display:none" onclick="adminOpen()"><div><b>관리자</b><div class="muted">가입자 전체 · 접속 기록 (관리자 계정만)</div></div><span class="chev">›</span></div>
       <div class="more-row" onclick="openHomeEdit()"><div><b>홈 화면 편집</b><div class="muted">홈에 보일 섹션 고르기</div></div><span class="chev">›</span></div>
+      <div class="more-row" onclick="openLicenses()"><div><b>오픈소스 라이선스</b><div class="muted">앱에 쓰인 모델·라이브러리의 저작권 고지</div></div><span class="chev">›</span></div>
       <div class="more-row" style="cursor:default"><div><b>버전</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타</div></div></div>
     </div>
   </div>
@@ -1940,6 +1960,11 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   </div>
 </div>
 
+<!-- 오픈소스 라이선스 (v1.70) -->
+<div class="modal-bg" id="modal-lic" onclick="if(event.target===this)closeModal('lic')">
+  <div class="modal" id="lic-body"></div>
+</div>
+
 <!-- 서버 로그인 모달 (v0.38, B1 준비 — TM_CONFIG가 없으면 절대 열리지 않아요) -->
 <div class="modal-bg" id="modal-auth">
   <div class="modal" id="auth-body"></div>
@@ -2178,7 +2203,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.69';
+const APP_VERSION = 'v1.70';
 const ME = { name: '정철', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 };
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2856,7 +2881,7 @@ function finishOnboard(skipped) {
     addNotif(`👋 ${ME.name} 님, 환영해요! 프로필 설정이 끝났어요 — 이제 파트너를 찾아 첫 경기를 잡아보세요`);
     toast(`🎾 환영해요, ${ME.name} 님! 좋은 매치 되세요`);
   } else {
-    toast('온보딩을 건너뛰었어요. 프로필은 상단 이름표에서 언제든 수정할 수 있어요');
+    toast(tmNeedLogin() ? '온보딩을 건너뛰었어요. 프로필은 더보기 › 내 프로필에서 바꿀 수 있어요' : '온보딩을 건너뛰었어요. 프로필은 상단 이름표에서 언제든 수정할 수 있어요'); // v1.70b: 로그인 전 이름표는 로그인 입구
   }
   // v0.38: 서버 모드면 온보딩 결과를 서버 프로필에도 저장 (B0 완료 후에만 동작)
   if (!skipped && serverMode() && TMAuth.isLoggedIn) {
@@ -2874,7 +2899,8 @@ let authBusy = false;
 function skipAuth() { // 둘러보기: 이번 방문 동안 로그인 창 자동 오픈 중지
   try { sessionStorage.setItem('tmSkipAuth', '1'); } catch (e) {}
   closeModal('auth');
-  toast('👀 둘러보는 중이에요 — 기록·랭킹을 저장하려면 상단에서 로그인하세요');
+  toast('둘러보는 중이에요 — 기록·랭킹을 저장하려면 위쪽 [로그인 / 가입]을 누르세요');
+  try { updateHeader(); } catch (e) {} // v1.70
 }
 function openAuth(view) {
   if (!serverMode()) return; // 데모 모드에서는 절대 열리지 않음
@@ -2912,8 +2938,8 @@ function renderAuth(view) {
       <label>비밀번호</label>
       <input type="password" id="au-pw">
       <button class="btn full" onclick="authDo('login')">로그인</button>
-      <button class="btn full outline" onclick="authDo('kakao')">카카오로 계속하기</button>
-      <button class="btn full outline" onclick="authDo('google')">구글로 계속하기</button>
+      ${(window.TM_CONFIG && TM_CONFIG.socialLogin) ? `<button class="btn full outline" onclick="authDo('kakao')">카카오로 계속하기</button>
+      <button class="btn full outline" onclick="authDo('google')">구글로 계속하기</button>` : ''}<!-- v1.70: 소셜 로그인은 서버(Supabase)에서 켠 뒤 TM_CONFIG.socialLogin = true -->
       <button class="btn full outline" onclick="skipAuth()">일단 둘러보기</button>
       <div class="row" style="gap:8px;margin-top:8px">
         <button class="btn outline" style="flex:1" onclick="renderAuth('signup')">회원가입</button>
@@ -2924,6 +2950,7 @@ function renderAuth(view) {
 }
 async function authDo(action) {
   if (!serverMode() || authBusy) return;
+  if (!TMAuth.client) { toast('서버에 아직 연결되지 않았어요 — 인터넷을 확인하고 잠시 뒤 다시 눌러 주세요 (계속 안 되면 앱을 새로고침)'); return; } // v1.70b: 연결 전·실패 때 개발자용 오류 대신
   authBusy = true;
   try {
     if (action === 'login') {
@@ -2951,6 +2978,8 @@ async function authDo(action) {
 function needsServerOnboard(p) { return !p || p.ntrp == null || !p.region; }
 function onAuthChange(session, profile) {
   renderAccountBox();
+  if (!session) tmProfReady = false; // v1.70b: 로그아웃·만료 — 다음 계정 프로필이 오기 전엔 이전 이름을 쓰지 않음
+  try { updateHeader(); } catch (e) {} // v1.70: 로그인 / 가입 ↔ 내 이름
   mrRenderGate(); // v0.40: 로그인 상태에 따라 매치 룸 열기/닫기
   svRenderGate(); // v0.43: 서버 경기 카드
   if (!session && mrChan) mrLeave(true); // 로그아웃 시 방 정리
@@ -3092,13 +3121,48 @@ async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선�
 function applyServerProfile(p) { // 서버 프로필 → ME 동기화 + 전체 화면 갱신
   if (!p || !p.nickname) return;
   const changed = ME.name !== p.nickname || ME.region !== (p.region || ME.region);
-  ME.name = p.nickname;
+  ME.name = p.nickname; tmProfReady = true; // v1.70b
   const n = parseFloat(p.ntrp);
   if (!isNaN(n) && n !== ME.ntrp) { ME.ntrp = n; ME.cal = n; ME.calDelta = 0; }
   if (p.region) ME.region = p.region;
   if (p.play_style) ME.style = p.play_style;
   updateHeader();
   if (changed) { try { renderAll(); } catch (e) { console.warn('프로필 반영 후 재렌더 실패', e); } }
+}
+// v1.70: 오픈소스 라이선스 고지 — MIT는 저작권 고지와 허가 문구를 사본에 함께 넣어야 함(WASB 공 탐지 모델 파일을 이 사이트가 배포)
+const LIC_MIT_WASB = `MIT License
+
+Copyright (c) 2023 NTT Communications Corporation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.`;
+function openLicenses() {
+  const it = (name, what, lic) => `<div style="padding:8px 0;border-bottom:1px solid var(--border)"><b>${name}</b><div class="muted" style="font-size:12px">${what} · ${lic}</div></div>`;
+  $('lic-body').innerHTML = `<h3>오픈소스 라이선스</h3>
+    <div class="muted" style="font-size:12px;margin-bottom:6px">테니스메이트가 쓰는 모델·라이브러리와 그 라이선스예요. 공 탐지 소형 모델(ball_tiny_xl)은 테니스메이트가 직접 학습한 모델이에요.</div>
+    ${it('WASB-SBDT 테니스 공 탐지 모델 (NTT Communications)', '판독 센터 정밀 추적', 'MIT License')}
+    ${it('ONNX Runtime Web (Microsoft)', '공 탐지 모델 실행', 'MIT License')}
+    ${it('TensorFlow.js · Pose Detection / MoveNet (Google)', '자세 분석', 'Apache License 2.0')}
+    ${it('supabase-js (Supabase)', '로그인 · 서버 연결', 'MIT License')}
+    <div style="margin-top:10px;font-weight:700;font-size:13px">WASB-SBDT 라이선스 전문</div>
+    <pre style="white-space:pre-wrap;font-size:11px;line-height:1.45;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:40vh;overflow:auto">${LIC_MIT_WASB}</pre>
+    <button class="btn full" onclick="closeModal('lic')">닫기</button>`;
+  openModal('lic');
 }
 function renderAccountBox() { // v0.38: 프로필 모달의 서버 계정 박스 (서버 모드 + 로그인 시에만)
   const box = $('pf-account');
@@ -3152,8 +3216,9 @@ async function initServerAuthRun(retry) {
   }
   clearTimeout(initServerAuth._t);
   TMAuth.onChange(onAuthChange);
+  try { updateHeader(); } catch (e) {} // v1.70
   // 둘러보기를 누른 방문자에게는 이번 방문 동안 로그인 창을 다시 들이밀지 않는다
-  if (!TMAuth.isLoggedIn && !sessionStorage.getItem('tmSkipAuth') && !(ccChan && ccStream) && !(TMAuth.storedUid && TMAuth.storedUid())) openAuth('login'); /* v1.57: 녹화 중이거나 이 폰에 로그인했던 계정(인터넷이 없어 확인만 못 함)이면 띄우지 않음 */
+  if (!TMAuth.isLoggedIn && !sessionStorage.getItem('tmSkipAuth') && !(ccChan && ccStream) && !(TMAuth.storedUid && TMAuth.storedUid()) && !$('modal-auth').classList.contains('open')) openAuth('login'); /* v1.70b: 이미 열어 입력 중이면 다시 그리지 않음 */ /* v1.57: 녹화 중이거나 이 폰에 로그인했던 계정(인터넷이 없어 확인만 못 함)이면 띄우지 않음 */
   else if ((TMAuth.isLoggedIn || sessionStorage.getItem('tmSkipAuth')) && !(ccChan && ccStream) && needsServerOnboard(TMAuth.profile)) openOnboard(); // v1.57d: 로그인했거나 둘러보기일 때만(인터넷이 없어 로그인 확인만 못 한 캠 폰엔 안 띄움)
 }
 
@@ -9849,7 +9914,7 @@ async function aiNativeRefine(v, seekTo, anchor) { // v1.33: 바운스 ±0.25초
   aiTraj.sort((p, q) => p.t - q.t);
   aiNativeInfo = { z, n: nRep, add: nAdd, crop: [Math.round(x0), Math.round(y0), Math.round(cw), Math.round(ch)] };
 }
-async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운스 시각 // 🎯 딥러닝 추적: WASB(v0.79) 우선, 실패 시 TrackNet. more=true면 직전 분석에 이어서 2초 더 (v0.83)
+async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운스 시각 // 🎯 딥러닝 추적: WASB 경로(우리 소형 모델·WASB). v1.70b: TrackNet 대체 경로 제거(NCTU 가중치). more=true면 직전 분석에 이어서 2초 더 (v0.83)
   const v = $('vj-video');
   if (!v || !v.videoWidth) { toast('먼저 영상을 불러와 주세요'); return; }
   if (aiBusy) return; aiBusy = true;
@@ -9860,7 +9925,7 @@ async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운�
     aiTrailStop();
     aiStatus('🎯 공 탐지 모델 준비 중… (첫 실행은 모델 파일을 내려받아요)');
     let wasbOk = false;
-    try { wasbOk = await aiLoadWasb(); } catch (e) { aiStatus('WASB 모델 로드 실패(' + (e.message || e) + ') — TrackNet으로 진행'); }
+    let wasbErr = ''; try { wasbOk = await aiLoadWasb(); } catch (e) { wasbErr = (e && e.message) || String(e); }
     if (wasbOk) {
       const { t0, t1 } = await aiAnalyzeDeepWasb(v, { more: !!more, anchor: more ? null : anchor });
       aiFinish(t0, t1, more ? null : anchor);
@@ -9876,37 +9941,8 @@ async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운�
       }
       return;
     }
-    aiStatus('🎯 딥러닝 모델 준비 중… (첫 실행은 10MB 내려받아요)');
-    if (!window.TrackNet) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'tracknet.js';
-        s.onload = res; s.onerror = () => rej(new Error('tracknet.js 로드 실패'));
-        document.head.appendChild(s);
-      });
-    }
-    await TrackNet.load('');
-    const t0 = Math.max(0, v.currentTime - 1.2);
-    const t1 = Math.min(v.duration || v.currentTime + 0.8, v.currentTime + 0.8);
-    aiTraj = [];
-    const seekTo = t => new Promise(res => { const h = () => { v.removeEventListener('seeked', h); res(); }; v.addEventListener('seeked', h); v.currentTime = t; });
-    const total = Math.max(2, Math.round((t1 - t0) / 0.1));
-    const tStart = performance.now();
-    for (let k = 0; k <= total; k++) {
-      const t = t0 + k * 0.1;
-      await seekTo(t);
-      const d = await TrackNet.detect(v);
-      if (d) aiTraj.push({ t, x: d.x, y: d.y, s: d.conf });
-      aiStatus('🎯 딥러닝 추적 ' + (k + 1) + '/' + (total + 1) + ' · 공 발견 ' + aiTraj.length + '회 · ' + Math.round((performance.now() - tStart) / 1000) + '초 경과');
-      aiSyncCanvas(); aiDraw();
-    }
-    aiFinish(t0, t1);
-    if (aiTraj.length >= 4) {
-      v.currentTime = Math.max(t0, aiTraj[0].t - 0.2);
-      v.playbackRate = 0.25;
-      document.querySelectorAll('.vj-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '0.25'));
-      v.play();
-    }
+    // v1.70b: 예전엔 여기서 TrackNet(tracknet.js·tn-weights.bin)으로 대신 돌렸으나, 그 가중치가 라이선스 없는 NCTU 원본으로 확인돼 뺌
+    aiStatus('공 탐지 모델을 불러오지 못했어요' + (wasbErr ? ' (' + wasbErr + ')' : '') + ' — 인터넷을 확인하고 다시 눌러 주세요. 계속 안 되면 앱을 새로고침해 주세요.');
   } catch (e) {
     aiStatus('정밀 추적 실패: ' + (e.message || e));
   } finally {
@@ -13814,8 +13850,27 @@ function saveProfile() {
       .catch(e => toast('⚠️ 서버 저장 실패: ' + (e && e.message || e)));
   }
 }
+function tmNeedLogin() { // v1.70: 서버 모드인데 로그인 안 함(이 폰에 저장된 로그인도 없음) = 로그인 입구를 보여 줄 때
+  try { return !!(serverMode() && !TMAuth.isLoggedIn && !(TMAuth.storedUid && TMAuth.storedUid())); } catch (e) { return false; }
+}
+function chipTap() { if (tmNeedLogin()) openAuth('login'); else openProfile(); } // v1.70
+var tmProfReady = false; // v1.70b: 서버 프로필이 ME에 입혀졌는지 — 그 전엔 ME가 데모 기본값(실명)이라 쓰지 않음
+function tmMyUid() { try { return (TMAuth.session && TMAuth.session.user && TMAuth.session.user.id) || (TMAuth.storedUid ? TMAuth.storedUid() : '') || ''; } catch (e) { return ''; } }
+function tmChipName() {
+  const mine = `나: ${ME.name} (NTRP ${ME.ntrp.toFixed(1)})`;
+  if (!serverMode() || tmProfReady) return mine; // 데모 모드(서버 없음)는 예전 그대로
+  try { // 이 폰에 기억해 둔 내 이름(같은 계정일 때만) — 프로필이 오기 전·인터넷 없는 캠 폰
+    const m = JSON.parse(localStorage.getItem('tm-my-chip') || 'null'), uid = tmMyUid();
+    if (m && uid && m.uid === uid && m.name) return `나: ${m.name}` + (m.ntrp ? ` (NTRP ${Number(m.ntrp).toFixed(1)})` : '');
+  } catch (e) {}
+  return '내 계정';
+}
 function updateHeader() {
-  $('profile-chip').textContent = `나: ${ME.name} (NTRP ${ME.ntrp.toFixed(1)})`;
+  const need = tmNeedLogin(), chip = $('profile-chip');
+  chip.textContent = need ? '로그인 / 가입' : tmChipName();
+  chip.classList.toggle('login', need);
+  const row = $('login-row'); if (row) row.style.display = need ? '' : 'none';
+  try { if (serverMode() && tmProfReady && TMAuth.isLoggedIn) { const uid = tmMyUid(); if (uid) localStorage.setItem('tm-my-chip', JSON.stringify({ uid, name: ME.name, ntrp: ME.ntrp })); } } catch (e) {}
 }
 
 // ===== 토너먼트 =====

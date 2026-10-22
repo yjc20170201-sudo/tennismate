@@ -1,7 +1,7 @@
 {
   "name": "테니스메이트",
   "short_name": "테니스메이트",
-  "description": "파트너 매칭 · 경기 기록 · ELO 랭킹 — 제주 테니스 앱",
+  "description": "클럽 대진표 · 랭킹 · 라이브 점수판 · 경기 영상 하이라이트 · AI 인아웃 판독(베타) — 제주 테니스 클럽 앱",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
