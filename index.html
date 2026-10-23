@@ -43,6 +43,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
     try { if (typeof cw !== 'undefined' && cw && cw.stage === 'play') return true; } catch (e) {}
     try { if (typeof ss !== 'undefined' && ss) return true; } catch (e) {}
     try { if (typeof mrWakeLock !== 'undefined' && mrWakeLock) return true; } catch (e) {}
+    try { if (typeof cvPull !== 'undefined' && cvPull && !cvPull.done && (cvPull.opened || (typeof cvPullArm !== 'undefined' && cvPullArm))) return true; } catch (e) {} // v1.73: PC가 캠 영상을 받는 중
     return false;
   }
   function tmHardReload() { // 주소에 시각을 붙여 HTTP 캐시를 건너뛰고 다시 연다 (앱은 쿼리 문자열을 쓰지 않음)
@@ -1147,6 +1148,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <video id="mh-out" controls playsinline style="width:100%;max-height:70vh;background:#000;border-radius:10px"></video>
         <div class="row" style="gap:6px;margin-top:8px">
           <button type="button" class="btn" style="flex:1" onclick="mhShare()">저장 · 공유</button>
+          <button type="button" id="mh-save" class="btn outline" style="flex:1;display:none" onclick="mhSave()">폰에 저장</button>
           <button type="button" class="btn outline" style="flex:1" onclick="mhEdShow()">랠리 다시 고르기</button>
         </div>
         <div id="mh-list" class="muted" style="font-size:12px;margin-top:6px"></div>
@@ -2274,7 +2276,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.72';
+const APP_VERSION = 'v1.73';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2796,9 +2798,14 @@ function goSection(tab, id) { // 홈 바로가기: 탭 전환 후 해당 섹션�
   showTab(tab, btn || document.createElement('button'));
   setTimeout(() => { const el = $(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
 }
-function toast(msg) {
+function toastVis(msg, ms) { // v1.73: 화면이 가려져 있으면(전화·다른 앱) 다시 볼 때 알림
+  if (document.visibilityState === 'visible') return toast(msg, ms);
+  const f = () => { if (document.visibilityState !== 'visible') return; document.removeEventListener('visibilitychange', f); setTimeout(() => toast(msg, ms), 600); };
+  document.addEventListener('visibilitychange', f);
+}
+function toast(msg, ms) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), ms || 2200); // v1.73: 긴 안내는 오래, 앞 알림 타이머가 새 알림을 일찍 지우지 않게
 }
 function todayStr(offset = 0) {
   const d = new Date(); d.setDate(d.getDate() + offset);
@@ -9507,6 +9514,9 @@ let mhFiles = [], mhUrls = [], mhBusy = false, mhStop = false, mhAn = null, mhOu
 function mhStatus(t, pct) { const el = $('mh-status'); if (el) el.textContent = t; const w = $('mh-barw'), b = $('mh-bar'); if (w) w.style.display = pct == null ? 'none' : 'block'; if (b && pct != null) b.style.width = Math.max(0, Math.min(100, pct)).toFixed(1) + '%'; }
 function mhOpt() { const nv = parseInt(($('mh-n') || {}).value || '10', 10), fm = ($('mh-fmt') || {}).value || 'v', mn = parseInt(($('mh-min') || {}).value || '0', 10); return { n: isFinite(nv) ? nv : 10, vert: fm === 'v', zoom: fm !== 'h', minShots: isFinite(mn) ? mn : 0, audio: !!($('mh-audio') || {}).checked }; }
 function mhFmtT(sec) { sec = Math.max(0, Math.round(sec)); return sec >= 60 ? Math.floor(sec / 60) + '분 ' + (sec % 60) + '초' : sec + '초'; }
+function mhPickWarn(files) { // v1.73: 이미 만든 하이라이트·카톡으로 받은 영상을 다시 고르면 한 번 더 압축돼 흐려짐 — 안내만(막지 않음)
+  try { if ([...(files || [])].some(f => { const n = String(f.name || '').normalize('NFC'); return /^(테니스_)?하이라이트_/.test(n) || /^KakaoTalk_/i.test(n); })) toast('이미 만든 하이라이트나 카톡으로 받은 영상 같아요 — 폰 카메라로 찍은 원본을 고르면 더 선명해요'); } catch (e) {}
+}
 function mhPick(ev) {
   const fl = Array.from((ev && ev.target && ev.target.files) || []).filter(f => /^video\//.test(f.type || '') || /\.(mp4|mov|m4v|webm|mkv|3gp)$/i.test(f.name || ''));
   if (mhBusy) { toast('만드는 중이에요 — 멈춘 뒤 다시 골라 주세요'); return; }
@@ -9516,6 +9526,7 @@ function mhPick(ev) {
   const go = $('mh-go'); if (go) go.disabled = !fl.length; const r = $('mh-result'); if (r) r.style.display = 'none';
   mhStatus(fl.length ? '[하이라이트 만들기]를 누르면 분석을 시작해요 — 분석은 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 두세요' : '', null);
   try { if (ev && ev.target) ev.target.value = ''; } catch (e) {}
+  if (fl.length) mhPickWarn(fl); // v1.73
   if (fl.length) { const g2 = $('mh-go'); if (g2) g2.disabled = true; mhStaging = mhStage(fl).then(out => { if (mhFiles === fl) { mhFiles = out; mhUrls = []; } }).catch(e => { mhStatus('영상을 읽지 못했어요 (' + ((e && (e.name + ' ' + e.message)) || e) + ') — 영상을 다시 골라 주세요', null); if (mhFiles === fl) mhFiles = []; }).finally(() => { mhStaging = null; const g3 = $('mh-go'); if (g3) g3.disabled = !mhFiles.length; }); }
 }
 let mhStaging = null;
@@ -9621,7 +9632,7 @@ const mhRput = (store, v) => mhRtx(store, 'readwrite', st => st.put(v));
 const mhRsessAll = () => mhRtx('sess', 'readonly', st => st.getAll()).then(a => a || []);
 const mhRchunks = sess => mhRtx('chunks', 'readonly', st => st.getAll(IDBKeyRange.bound([sess, 0], [sess, Infinity]))).then(a => (a || []).sort((p, q) => p.i - q.i));
 async function mhRdel(sess) { await mhRtx('chunks', 'readwrite', st => st.delete(IDBKeyRange.bound([sess, 0], [sess, Infinity]))); await mhRtx('sess', 'readwrite', st => st.delete(sess)); }
-function mhRecLabel(m) { const d = new Date(m.t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' (' + mhFmtT(m.dur || 0) + (m.saved ? ', 저장함' : '') + ')'; }
+function mhRecLabel(m) { const d = new Date(m.t); return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' (' + mhFmtT(m.dur || 0) + (m.saved === 'dl' ? ', 다운로드함' : m.saved ? ', 저장함' : '') + ')'; }
 async function mhRecCheck() { // 지난 녹화 목록(앱이 꺼졌어도 남은 것)
   try { mhRecOld = (await mhRsessAll()).sort((a, b) => a.t - b.t); } catch (e) { mhRecOld = []; }
   const el = $('mh-recover'); if (!el) return; if (!mhRecOld.length) { el.style.display = 'none'; el.innerHTML = ''; return; }
@@ -9643,14 +9654,16 @@ async function mhRecOpen(m, file) { // 찍으면서 모은 표본으로 바로 �
   await mhGo(); // 분석은 이미 됨 → 편집 화면만
 }
 async function mhRecOpenSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; mhStatus('지난 녹화 여는 중…', null); try { await mhRecOpen(m, await mhRecFile(m)); } catch (e) { mhStatus('열지 못했어요: ' + ((e && e.message) || e), null); } }
-async function mhRecSaveSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; try { const fl = await mhRecFile(m); const r = await ccExportFiles([fl], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { m.saved = true; await mhRput('sess', m); await mhRecCheck(); } } catch (e) { toast('저장하지 못했어요: ' + ((e && e.message) || e)); } }
-async function mhRecSaveCur() { if (!mhRecCur) return; const r = await ccExportFiles([mhRecCur.file], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { mhRecCur.m.saved = true; try { await mhRput('sess', mhRecCur.m); } catch (e) {} await mhRecCheck(); } }
-async function mhRecDelSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; if (!confirm(mhRecLabel(m) + ' 녹화를 폰의 앱 저장 공간에서 지울까요?' + (m.saved ? '' : ' 아직 사진첩에 저장하지 않았어요 — 지우면 되돌릴 수 없어요.'))) return; try { await mhRdel(sess); } catch (e) {} await mhRecCheck(); }
+async function mhRecSaveSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; try { const fl = await mhRecFile(m); const r = await ccExportFiles([fl], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { m.saved = r === 'shared' ? true : 'dl'; await mhRput('sess', m); await mhRecCheck(); } } catch (e) { toast('저장하지 못했어요: ' + ((e && e.message) || e)); } }
+async function mhRecSaveCur() { if (!mhRecCur) return; const r = await ccExportFiles([mhRecCur.file], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { mhRecCur.m.saved = r === 'shared' ? true : 'dl'; try { await mhRput('sess', mhRecCur.m); } catch (e) {} await mhRecCheck(); } }
+async function mhRecDelSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; if (!confirm(mhRecLabel(m) + ' 녹화를 폰의 앱 저장 공간에서 지울까요?' + (m.saved === 'dl' ? ' 다운로드 폴더(내 파일 › 다운로드)에 파일이 있는지 먼저 확인해 주세요 — 지우면 되돌릴 수 없어요.' : m.saved ? '' : ' 아직 사진첩에 저장하지 않았어요 — 지우면 되돌릴 수 없어요.'))) return; try { await mhRdel(sess); } catch (e) {} await mhRecCheck(); }
 function mhRecInfo(t) { const el = $('mh-rinfo'); if (el) el.textContent = t; }
+function mhRecVideoC() { let big = /Android/i.test(navigator.userAgent) && !/iP(hone|ad|od)/.test(navigator.userAgent); try { if (big && !(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/mp4'))) big = false; if (big && typeof ccResPref === 'function' && ccResPref() === '720') big = false; } catch (e) { big = false; } /* v1.73b: MP4 녹화를 지원(크롬 126+)하고 클럽캠 화질이 720p(설정·자동 낮춤)가 아닐 때만 */ return { facingMode: { ideal: 'environment' }, width: { ideal: big ? 1920 : 1280 }, height: { ideal: big ? 1080 : 720 }, frameRate: { ideal: 60 } }; } // v1.73: 안드로이드는 1080p(720p는 세로 하이라이트에 실제 화소가 405px뿐), 아이폰은 그대로
 function mhRecStart() {
   if (mhBusy || mhRec) return;
   const au = recAudioOn(); /* v1.71: 녹화 소리는 켰을 때만(기본 끔) — 동기로 읽으니 아래 요청은 여전히 탭 직후 첫 요청 */
-  let camP; try { camP = navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: au }); } catch (e) { camP = Promise.reject(e); } // iOS: 탭 직후 첫 줄
+  const vc = mhRecVideoC(); /* v1.73: 동기 — 아래 요청은 여전히 탭 직후 첫 요청 */
+  let camP; try { camP = navigator.mediaDevices.getUserMedia({ video: vc, audio: au }); } catch (e) { camP = Promise.reject(e); } // iOS: 탭 직후 첫 줄
   try { ccLandscapeLock(); } catch (e) {}
   mhRecGo(camP, au);
 }
@@ -9658,21 +9671,23 @@ async function mhRecGo(camP, au) {
   const ov = $('mh-rec'), v = $('mh-rv');
   let stream; try { stream = await camP; } catch (e) {
     let e2 = e; /* v1.71: 소리를 켰는데 마이크가 안 되면 영상만(랠리 촬영과 같은 대체 경로) */
-    if (au) { try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 60 } }, audio: false }); toast('마이크를 쓸 수 없어 영상만 찍어요'); } catch (x) { e2 = x; } }
+    if (au) { try { stream = await navigator.mediaDevices.getUserMedia({ video: mhRecVideoC(), audio: false }); toast('마이크를 쓸 수 없어 영상만 찍어요'); } catch (x) { e2 = x; } }
     if (!stream) { try { ccLandscapeUnlock(); } catch (x) {} mhStatus('카메라를 열지 못했어요: ' + ((e2 && (e2.name + ' ' + e2.message)) || e2) + ' — 브라우저 카메라' + (au ? '·마이크' : '') + ' 권한을 확인해 주세요', null); return; }
   }
   ov.style.display = 'block'; v.muted = true; v.playsInline = true; v.srcObject = stream; try { await v.play(); } catch (e) {}
   await new Promise(r => { if (v.videoWidth) r(); else { v.onloadedmetadata = r; setTimeout(r, 3000); } });
   const fmt = recPickShare(stream.getAudioTracks().length > 0), sess = Date.now(); /* v1.71: 소리 트랙이 없으면 mp4a/opus 없는 형식 */
-  let rec; try { rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: 5000000 } : undefined); } catch (e) { rec = new MediaRecorder(stream); }
+  const rbps = Math.min(v.videoWidth || 1280, v.videoHeight || 720) >= 1000 ? 8000000 : 5000000; // v1.73: 1080p면 8Mbps(약 60MB/분 ≈ 3.6GB/시간)
+  let rec; try { rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: rbps } : undefined); } catch (e) { rec = new MediaRecorder(stream); }
   if (rec.mimeType) { fmt.type = rec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'; fmt.ext = fmt.type === 'video/mp4' ? 'mp4' : 'webm'; }
   const m = { sess, t: sess, type: fmt.type, ext: fmt.ext, vw: v.videoWidth || 1280, vh: v.videoHeight || 720, samples: [], dur: 0, H: null, saved: false };
   const R = mhRec = { stream, rec, m, i: 0, q: Promise.resolve(), t0p: performance.now(), busy: false, k: 0, lastMt: 0, ts: [0, 0, 0], band: null, ready: false, failN: 0, stopping: false, wake: null, timer: null };
   R.pool = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = 512; c.height = 288; return c; });
   try { await mhRput('sess', m); } catch (e) { mhStatus('앱 저장 공간을 열지 못해 녹화할 수 없어요: ' + ((e && e.message) || e), null); mhRecCleanup(); return; }
   rec.ondataavailable = e => { if (!e.data || !e.data.size) return; const i = R.i++, blob = e.data; R.q = R.q.then(() => mhRput('chunks', { sess, i, blob })).catch(err => { R.failN++; mhRecInfo('영상 조각 저장 실패 — 폰 저장 공간을 확인해 주세요 (' + ((err && err.message) || err) + ')'); toast('녹화 저장이 안 되고 있어요 — 저장 공간을 확인해 주세요'); }); };
-  stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => { if (mhRec === R && !R.stopping) { toast('카메라가 끊겨서 여기까지 저장했어요'); mhRecStop(); } }));
+  stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => { if (mhRec === R && !R.stopping) { mhRecStop('카메라가 끊겨서 여기까지 저장해요…').then(() => toastVis('카메라가 끊겨서 여기까지 저장했어요', 8000)); /* v1.73: 이유는 녹화 화면 줄에, 알림은 화면이 닫히고 폰을 다시 볼 때 */ } }));
   rec.start(5000);
+  if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { if (!e || !e.quota) return; R.leftMin = Math.max(0, Math.floor((e.quota * 0.8 - (e.usage || 0)) / (rbps / 8 * 60 * 1.3))); }).catch(() => {}); // v1.73: 남은 녹화 시간 — 녹화 화면 위 줄에(알림은 녹화 화면에 가려 안 보임)
   try { if (navigator.wakeLock) R.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
   mhLoadModel().then(() => { R.ready = true; }).catch(e => mhRecInfo('공 인식 모델을 못 불러와 녹화만 해요 (' + ((e && e.message) || e) + ')'));
   const vw = m.vw, vh = m.vh;
@@ -9690,17 +9705,20 @@ async function mhRecGo(camP, au) {
   if (typeof v.requestVideoFrameCallback === 'function') v.requestVideoFrameCallback(step); else mhRecInfo('이 브라우저는 찍으면서 공 인식을 못 해요 — 녹화만 하고 끝난 뒤 분석해요');
   let tick = 0;
   R.timer = setInterval(async () => {
-    if (mhRec !== R) return; tick++; const t = (performance.now() - R.t0p) / 1000; m.dur = t;
+    if (mhRec !== R || R.stopping) return; tick++; const t = (performance.now() - R.t0p) / 1000; m.dur = t; /* v1.73: 멈추는 중엔 줄을 덮지 않음 */
     if (!m.H && tick % 5 === 1) { try { const H = mhCalib(v, true); if (H) { m.H = Array.from(H); R.band = mhBandFor(H, vh); } } catch (e) {} }
     let nr = 0; if (tick % 3 === 0) { try { nr = mhRallies(mhDropStatic(m.samples, vw), t, vw, vh).length; R.nr = nr; } catch (e) {} }
-    mhRecInfo('녹화 중 ' + mhFmtT(t) + ' · 공 ' + m.samples.length + '번 · 랠리 ' + (R.nr || 0) + '개' + (m.H ? ' · 코트 인식됨' : ' · 코트 찾는 중') + (R.ready ? '' : ' · 모델 준비 중') + (R.failN ? ' · 저장 실패 ' + R.failN : ''));
+    mhRecInfo('녹화 중 ' + mhFmtT(t) + ' · 공 ' + m.samples.length + '번 · 랠리 ' + (R.nr || 0) + '개' + (m.H ? ' · 코트 인식됨' : ' · 코트 찾는 중') + (R.ready ? '' : ' · 모델 준비 중') + (R.failN ? ' · 저장 실패 ' + R.failN : '') + (R.leftMin != null && R.leftMin - t / 60 < 40 ? ' · 저장 공간 약 ' + Math.max(0, Math.round(R.leftMin - t / 60)) + '분 남음' : ''));
     if (tick % 10 === 0) { try { await mhRput('sess', m); } catch (e) {} } // 앱이 꺼져도 표본·길이 남김
-    if (tick % 30 === 0 && navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); if (e.quota && e.usage > e.quota * 0.8) { toast('저장 공간이 부족해서 녹화를 멈췄어요 — 찍힌 영상은 안전해요'); mhRecStop(); } } catch (x) {} }
+    if (tick % 30 === 0 && navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); if (!R.stopping && e.quota && e.usage > e.quota * 0.8) { mhRecStop('저장 공간이 부족해서 녹화를 멈춰요…').then(() => toastVis('저장 공간이 부족해서 녹화를 멈췄어요 — 찍힌 영상은 안전해요', 8000)); } /* v1.73 */ } catch (x) {} }
   }, 1000);
 }
 function mhRecCleanup() { const R = mhRec; if (!R) return; clearInterval(R.timer); try { R.stream.getTracks().forEach(t => t.stop()); } catch (e) {} try { if (R.wake) R.wake.release(); } catch (e) {} const ov = $('mh-rec'), v = $('mh-rv'); if (v) v.srcObject = null; if (ov) ov.style.display = 'none'; try { ccLandscapeUnlock(); } catch (e) {} mhRec = null; }
-async function mhRecStop() {
-  const R = mhRec; if (!R || R.stopping) return; R.stopping = true; mhRecInfo('저장 중…');
+async function mhRecStop(why) { // v1.73: 멈춘 이유를 녹화 화면 줄에(예전엔 '저장 중…'으로 바로 덮음), 두 번 불러도 같은 멈춤을 기다림
+  const R = mhRec; if (!R) return; if (R.stopP) return R.stopP; R.stopping = true; mhRecInfo(why || '저장 중…');
+  return (R.stopP = mhRecStop2(R));
+}
+async function mhRecStop2(R) {
   await new Promise(res => { if (R.rec.state === 'inactive') return res(); R.rec.onstop = () => setTimeout(res, 50); try { R.rec.stop(); } catch (e) { res(); } setTimeout(res, 4000); });
   try { await R.q; } catch (e) {}
   const m = R.m; m.dur = (performance.now() - R.t0p) / 1000; try { await mhRput('sess', m); } catch (e) {}
@@ -9718,6 +9736,7 @@ async function mhLoadModel() {
 function mhSeek(v, t) { return new Promise(res => { let done = false; const fin = () => { if (!done) { done = true; res(); } }; v.addEventListener('seeked', fin, { once: true }); setTimeout(fin, 5000); try { v.currentTime = Math.max(0, t); } catch (e) { fin(); } }); }
 function mhFree(keep, all) { // v1.43: 안 쓰는 영상 요소가 쥔 재생기를 놓게(폰은 동시에 열 수 있는 영상 수가 적음)
   [mhVid, mhRVid, $('mh-pv'), all ? $('mh-out') : null].forEach(e => { if (!e || e === keep || !e.getAttribute('src')) return; try { e.pause(); } catch (x) {} e.removeAttribute('src'); try { e.load(); } catch (x) {} });
+  if (all && mhOutUrl && keep !== $('mh-out')) { try { URL.revokeObjectURL(mhOutUrl); } catch (x) {} mhOutUrl = null; } // v1.73: 결과 재생기를 비우면 옛 결과 주소도(저장·공유는 mhOut.blob을 씀)
 }
 async function mhOpenFile(v, fi, all) { // v1.43: 열기 전 비우고, 실패하면 새 주소로 한 번 더
   mhFree(v, all); const f = mhFiles[fi]; if (!mhUrls[fi]) mhUrls[fi] = URL.createObjectURL(f);
@@ -9996,24 +10015,58 @@ async function mhAnalyzeAll() {
   }
   return an;
 }
-let mhRendN = 0, mhRendSec = 0, mhRendErr = '';
+let mhRendN = 0, mhRendSec = 0, mhRendErr = '', mhRendDraws = 0;
+function mhCpuCanvas() { try { const v = localStorage.getItem('tm-mh-cpu'); return v === '1' || v === APP_VERSION; } catch (e) { return false; } } // v1.73: 예전 CPU 캔버스('1' = 손으로, 버전 = 결과가 검어서 자동 — 업데이트되면 GPU를 다시 시도)
+let mhOutUrl = null, mhChecking = false;
+function mhOutSet(ov, blob) { if (mhOutUrl) { try { URL.revokeObjectURL(mhOutUrl); } catch (e) {} } mhOutUrl = URL.createObjectURL(blob); ov.src = mhOutUrl; } // v1.73: 영상 재생기를 비워도(mhFree) 옛 결과 주소를 놓침 없이 해제
+function mhBps(sel, opt, hiSrc) { // v1.73: 프레임이 다 들어가면서(GPU 캔버스) 파일이 1.5~2배 → 길면 낮춰 카톡 300MB 안으로(폰 녹화기는 요청보다 최대 약 1.6배)
+  const base = opt.n === 0 ? (hiSrc ? 8000000 : 5000000) : (hiSrc ? 12000000 : 8000000);
+  const est = sel.reduce((a, q) => a + Math.max(0, (q.r.t1 || 0) - (q.r.t0 || 0)), 0) + (opt.single ? 1.8 : 3.4) + 0.3 * sel.length;
+  const cap = Math.floor(240 * 8e6 / (Math.max(10, est) * 1.6));
+  return Math.max(hiSrc ? 6000000 : 4000000, Math.min(base, cap));
+}
+function mhKakaoTip(size, cc) { // v1.73: 카톡은 동영상으로 보내면 다시 압축 — 대화방 + → 파일로 보내면 원본(300MB까지). 공유 시트에서 카톡을 고르는 것도 '동영상'
+  if (size > 285 * 1048576) return ' · 카톡 파일 한도(300MB)를 넘을 수 있어요 — 보내려면 랠리 수를 줄여 다시 만들어 주세요';
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+  if (cc) return ' · 카톡에 선명하게 보내려면 저장된 파일을 카톡 대화방 + → 파일로(원본 그대로) — 그냥 동영상으로 보내면 카톡이 화질을 낮춰요';
+  return ios ? ' · 카톡에 선명하게 보내려면 [저장 · 공유] → 파일에 저장 뒤 카톡 대화방 + → 파일로(원본 그대로) — 공유에서 바로 카톡을 고르면 카톡이 화질을 낮춰요'
+    : ' · 카톡에 선명하게 보내려면 [폰에 저장] 뒤 카톡 대화방 + → 파일로 보내세요(원본 그대로) — 동영상으로 보내면 카톡이 화질을 낮춰요';
+}
+async function mhOutBlack(ov) { // v1.73: 결과 영상의 제목(0.4초)·끝 카드(끝 0.5초 전) — 캔버스만 그린 장면이 둘 다 검으면 이 폰은 캔버스 녹화가 검게 나옴(원본이 검게 그려지는 v1.29c 문제와 헷갈리지 않음). 못 그리면 모름 = null
+  try {
+    if (!(ov.readyState >= 1)) await new Promise((res, rej) => { ov.addEventListener('loadedmetadata', res, { once: true }); ov.addEventListener('error', () => rej(new Error('load')), { once: true }); setTimeout(() => rej(new Error('timeout')), 6000); });
+    const d = ov.duration, ts = [0.4]; if (isFinite(d) && d > 2) ts.push(d - 0.5);
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32; const g = c.getContext('2d', { willReadFrequently: true });
+    let black = 0;
+    for (const t of ts) {
+      await new Promise(res => { ov.addEventListener('seeked', res, { once: true }); try { ov.currentTime = t; } catch (e) { res(); } setTimeout(res, 4000); });
+      if (!ov.videoWidth || ov.readyState < 2) return null;
+      g.fillStyle = '#ff00ff'; g.fillRect(0, 0, 32, 32); g.drawImage(ov, 0, 0, 32, 32);
+      const px = g.getImageData(0, 0, 32, 32).data; let a = 0, mag = 0;
+      for (let q = 0; q < px.length; q += 4) { a += px[q] + px[q + 1] + px[q + 2]; if (px[q] > 200 && px[q + 1] < 60 && px[q + 2] > 200) mag++; }
+      if (mag > 512) return null; // 그려지지 않음 = 모름
+      if (a / (px.length / 4) / 3 < 6) black++;
+    }
+    return black === ts.length;
+  } catch (e) { return null; } finally { try { ov.currentTime = 0; } catch (e) {} } // v1.73: 참 = 검음, 거짓 = 정상, null = 모름
+}
 async function mhRender(sel, opt) {
   const hiSrc = sel.some(q => Math.min(q.F.vw || 0, q.F.vh || 0) >= 1000); // v1.32: 원본이 1080p 이상이면 결과도 1080p급
   const vert = opt.vert, OW = vert ? (hiSrc ? 1080 : 720) : (hiSrc ? 1920 : 1280), OH = vert ? (hiSrc ? 1920 : 1280) : (hiSrc ? 1080 : 720), v = mhRVid || mhVid;
-  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d', { willReadFrequently: true });
+  const cv = document.createElement('canvas'); cv.width = OW; cv.height = OH; const g = cv.getContext('2d', { willReadFrequently: !!(opt.cpu || mhCpuCanvas()) }); /* v1.73: 명시적 false = GPU 캔버스(옵션을 빼면 검은 화면 검사 읽기 뒤 크롬이 CPU로 바꿈) */
   { const lv = $('mh-live'); if (lv) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 260 : 420) + 'px;display:block;margin:0 auto;border-radius:10px;background:#000'; g.imageSmoothingQuality = 'high'; lv.innerHTML = ''; lv.appendChild(cv); lv.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지) + 만드는 중 미리보기
   { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; } v.style.display = 'block'; mhSrcMode = 'el'; mhBlackN = 0; mhVfUsed = false;
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') throw new Error('이 폰 브라우저는 영상 만들기를 지원하지 않아요 (크롬·사파리 최신 버전에서 해 주세요)');
   const cs = cv.captureStream(30); let tracks = cs.getVideoTracks().slice(), dest = null;
   if (opt.audio && mhActx && mhSrcNode) { try { dest = mhActx.createMediaStreamDestination(); mhSrcNode.connect(dest); tracks = tracks.concat(dest.stream.getAudioTracks()); } catch (e) { dest = null; } }
-  const fmt = recPickShare(!!dest), bps = opt.n === 0 ? (hiSrc ? 8000000 : 5000000) : (hiSrc ? 12000000 : 8000000); // v1.32
+  const fmt = recPickShare(!!dest), bps = mhBps(sel, opt, hiSrc); // v1.32 → v1.73 길이에 맞춘 상한
   let rec; try { rec = new MediaRecorder(new MediaStream(tracks), fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: bps, videoKeyFrameIntervalDuration: 1000 } : { videoBitsPerSecond: bps }); } catch (e) { rec = new MediaRecorder(new MediaStream(tracks)); }
   if (rec.mimeType) { fmt.type = rec.mimeType.startsWith('video/mp4') ? 'video/mp4' : 'video/webm'; fmt.ext = fmt.type === 'video/mp4' ? 'mp4' : 'webm'; }
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const longest = Math.max(...sel.map(q => q.r.dur)), day = new Date(sel[0].F.date || Date.now()), ds = day.getFullYear() + '.' + String(day.getMonth() + 1).padStart(2, '0') + '.' + String(day.getDate()).padStart(2, '0');
   const card = async (lines, sec) => { const t0 = performance.now(); while (!mhStop) { const p = (performance.now() - t0) / (sec * 1000); if (p >= 1) break; mhCard(g, OW, OH, lines, p); await new Promise(r => requestAnimationFrame(r)); } };
   mhCard(g, OW, OH, [['오늘의 랠리', 64, '#d4e94e']], 0);
-  mhRendN = 0; mhRendSec = 0; mhRendErr = '';
+  mhRendN = 0; mhRendSec = 0; mhRendErr = ''; mhRendDraws = 0;
   rec.start(1000);
   if (opt.single) await card([['RALLY ' + (sel[0].r.no || 1), 64, '#d4e94e'], [ds, 30, '#ffffff'], [(sel[0].r.shots != null ? sel[0].r.shots + '타 · ' : '') + Math.round(sel[0].r.dur) + '초', 26, '#cfe3d6']], 0.8); // v1.41 한 포인트
   else await card([['오늘의 랠리', 64, '#d4e94e'], [ds, 30, '#ffffff'], ['랠리 ' + sel.length + '개 · 가장 긴 랠리 ' + Math.round(longest) + '초', 26, '#cfe3d6']], 1.6);
@@ -10029,8 +10082,8 @@ async function mhRender(sel, opt) {
     await v.play().catch(() => {}); if (rec.state === 'paused') rec.resume();
     await new Promise(res => {
       let done = false; const fin = () => { if (!done) { done = true; clearTimeout(tm); try { v.pause(); } catch (e) {} res(); } };
-      let k = 0;
-      const step = (now, md) => { if (done) return; const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime; mhDraw(g, v, OW, OH, vert, t, path, S, i, sel.length, r);
+      let k = 0, lastDraw = -1e9, nextT = -1e9, gap = 0, gapN = 0;
+      const step = (now, md) => { if (done) return; const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime; if (t < lastDraw) { nextT = -1e9; gap = 0; gapN = 0; } else if (t - lastDraw > 0 && t - lastDraw < 0.1) { gap = gap ? gap * 0.8 + (t - lastDraw) * 0.2 : t - lastDraw; gapN++; } const thin = gapN >= 3 && gap < 0.0175; if (!thin || t >= nextT - 0.008) { mhDraw(g, v, OW, OH, vert, t, path, S, i, sel.length, r); mhRendDraws++; nextT = thin ? Math.max(nextT + 1 / 30, t + 1 / 30 - 0.008) : t + 1 / 30 - 0.008; } lastDraw = t; /* v1.73f: 거르지 않는 동안 시계를 앞질러 키우면 다시 거를 때 멈춤 */ /* v1.73: 57장 이상 원본만 영상 시각 1/30초 간격으로 거름(60장 → 30장, 발열 줄임) — 그 아래(25·30·50장)는 전부 그림: 고르지 않은 간격은 녹화(30장)에서 장면을 잃음 */
         if (++k % 30 === 0 && mhSrcMode === 'el') { try { const d = g.getImageData((OW >> 1) - 16, (OH >> 1) - 16, 32, 32).data; let a = 0; for (let q = 0; q < d.length; q += 4) a += d[q] + d[q + 1] + d[q + 2]; if (a / (d.length / 4) / 3 < 6) { if (++mhBlackN >= 2 && window.VideoFrame) { mhSrcMode = 'vf'; console.warn('mh black → VideoFrame'); } } else mhBlackN = 0; } catch (e) {} } // v1.29c 검은 화면 감지
         if (t >= r.t1 || v.ended || mhStop) return fin(); v.requestVideoFrameCallback(step); };
       const tm = setTimeout(fin, (r.t1 - r.t0 + 8) * 1000);
@@ -10047,7 +10100,7 @@ async function mhRender(sel, opt) {
   if (mhStop) return null;
   let blob = new Blob(parts, { type: fmt.type }); const raw0 = blob.size; mp4Defrag.info = null; if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
   const di = mp4Defrag.info, mp4d = di ? (di.err ? 'MP4 정리 안 함(' + di.err + ')' : 'MP4 ' + di.tracks.join(', ')) : '';
-  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, OW + '×' + OH + ' · 랠리 초당 ' + Math.min(30, mhRendDraws / Math.max(1, mhRendSec)).toFixed(1) + '장 · ' + (bps / 1e6).toFixed(0) + 'Mbps' + (opt.cpu || mhCpuCanvas() ? ' (CPU)' : ''), '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
 }
 async function mhGo(onlyIdx) {
   if (mhBusy) return;
@@ -10080,20 +10133,45 @@ async function mhGo(onlyIdx) {
     const out = await mhRender(sel, opt);
     if (!out) { mhStatus('멈췄어요 — [하이라이트 만들기]를 다시 누르면 분석 결과로 바로 만들어요', null); return; }
     mhOut = out;
-    const ov = $('mh-out'); if (ov) { try { if (ov.src) URL.revokeObjectURL(ov.src); } catch (e) {} ov.src = URL.createObjectURL(out.blob); }
+    const ov = $('mh-out'); if (ov) mhOutSet(ov, out.blob);
     if (res) res.style.display = 'block';
+    { const sv = $('mh-save'); if (sv) sv.style.display = /iP(hone|ad|od)/.test(navigator.userAgent) ? 'none' : ''; } // v1.73
+    mhChecking = true; // v1.73: 결과 확인이 끝날 때까지 저장·공유를 잠깐 막음(검은 결과를 저장하지 않게)
+    if (ov && !mhStop && await mhOutBlack(ov) === true) { // v1.73: 결과가 검으면(캔버스 녹화가 검게 나오는 폰) 예전 CPU 방식으로 한 번 다시 — 정상으로 확인될 때만 기억
+      if (mhCpuCanvas()) out.black = true;
+      else {
+        if (res) res.style.display = 'none'; // 다시 만드는 동안 결과(검은 영상)를 숨김 — 저장하지 않게
+        mhStatus('결과 화면이 검게 나와서 예전 방식으로 다시 만드는 중이에요…', null);
+        const out2 = await mhRender(sel, Object.assign({}, opt, { cpu: true }));
+        if (!out2) { mhOut = null; mhStatus('멈췄어요 — 결과 화면이 검게 나왔어요. [하이라이트 만들기]를 다시 눌러 주세요', null); return; }
+        Object.assign(out, { blob: out2.blob, ext: out2.ext, type: out2.type, diag: '다시 만듦(검은 화면 → 예전 방식) · ' + out2.diag });
+        mhOutSet(ov, out2.blob);
+        if (res) res.style.display = 'block'; // 두 번째 확인은 결과 영역이 보이는 채로
+        const b2 = await mhOutBlack(ov); // 결과 영역이 보이는 채로 확인(안 보이는 영상은 안드로이드가 검게 그릴 수 있음)
+        if (b2 === true) out.black = true; else if (b2 === false) { try { localStorage.setItem('tm-mh-cpu', APP_VERSION); } catch (e) {} }
+      }
+    }
+    mhChecking = false;
     const lst = $('mh-list'); if (lst) lst.textContent = '찾은 랠리 ' + all.length + '개 중 ' + sel.length + '개 · 서브 ' + sel.filter(q => q.r.serve).length + '번 찾음 · ' + sel.map(q => (mhFiles.length > 1 ? (q.F.fi + 1) + '번 ' : '') + mhFmtT(q.r.t0) + ' (' + (q.r.shots != null ? q.r.shots + '타 ' : '') + Math.round(q.r.dur) + '초)').join(', ') + (mhAn.files.some(F => F.H) ? '' : ' · 코트 자동 인식이 안 돼 옆 코트 공도 섞일 수 있어요');
-    mhStatus('완성 — ' + Math.round(out.blob.size / 1048576) + 'MB · [저장 · 공유]로 사진첩이나 카톡에 보내세요' + (errs.length ? ' (' + errs.join(' / ') + ')' : '') + (out.diag ? ' · ' + out.diag : ''), null);
+    mhStatus((out.black ? '결과 화면이 검게 나왔어요 — 화면을 켜 둔 채 다시 만들어 보세요 · ' : '') + '완성 — ' + Math.round(out.blob.size / 1048576) + 'MB' + mhKakaoTip(out.blob.size) + (errs.length ? ' (' + errs.join(' / ') + ')' : '') + (out.diag ? ' · ' + out.diag : ''), null);
   } catch (e) {
-    console.warn('mh', e); mhStatus('실패: ' + ((e && e.message) || e), null);
+    console.warn('mh', e); mhStatus('실패: ' + ((e && e.message) || e), null); { const rr = $('mh-result'); if (rr && rr.style.display === 'none') mhOut = null; } /* v1.73: 다시 만들다 실패하면 숨긴 검은 결과를 남기지 않음 */
   } finally {
-    mhBusy = false; mhPlaying = false; try { mhVid.pause(); mhVid.style.display = 'none'; } catch (e) {} try { mhRVid.pause(); mhRVid.style.display = 'none'; } catch (e) {} { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } } { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; }
+    mhBusy = false; mhPlaying = false; mhChecking = false; { const o = $('mh-out'), rr = $('mh-result'); if (o && rr && rr.style.display !== 'none' && !o.getAttribute('src')) { rr.style.display = 'none'; mhOut = null; } } /* v1.73: 다시 만들다 실패해 재생기가 비었으면 검은 결과를 남기지 않음 */ try { mhVid.pause(); mhVid.style.display = 'none'; } catch (e) {} try { mhRVid.pause(); mhRVid.style.display = 'none'; } catch (e) {} { const lv = $('mh-live'); if (lv) { lv.style.display = 'none'; lv.innerHTML = ''; } } { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; }
     try { if (mhWake) { mhWake.release(); mhWake = null; } } catch (e) {}
     if (go) go.disabled = !mhFiles.length; if (st) st.style.display = 'none';
   }
 }
+async function mhSave() { // v1.73: 공유 시트 없이 폰에 바로 저장(안드로이드 다운로드 폴더 → 갤러리 Download) — 카톡 + → 파일로 원본 화질 보내기용
+  if (!mhOut) return;
+  if (mhChecking) { toast('결과를 확인하는 중이에요 — 잠시만요'); return; }
+  const name = '테니스_하이라이트_' + todayStr() + '.' + mhOut.ext;
+  await ccExportFiles([new File([mhOut.blob], name, { type: mhOut.type })], '테니스 하이라이트', { download: true });
+  toast(/Android/i.test(navigator.userAgent) ? '폰에 저장했어요 — 내 파일 › 다운로드(갤러리 Download)에 있어요. 카톡 대화방 + → 파일로 보내면 원본 화질 그대로예요' : '저장했어요 — 다운로드 폴더에 있어요', 7000);
+}
 async function mhShare() {
   if (!mhOut) return;
+  if (mhChecking) { toast('결과를 확인하는 중이에요 — 잠시만요'); return; } // v1.73
   const name = '테니스_하이라이트_' + todayStr() + '.' + mhOut.ext;
   await ccExportFiles([new File([mhOut.blob], name, { type: mhOut.type })], '테니스 하이라이트');
 }
@@ -12004,15 +12082,23 @@ async function ccRtcSend(dc) { // 캠: 세그먼트 전부를 순서대로 (meta
   const waitLow = () => new Promise(res => { if (dc.bufferedAmount < 1024 * 1024) return res(); const h = () => { dc.removeEventListener('bufferedamountlow', h); res(); }; dc.addEventListener('bufferedamountlow', h); });
   for (let i = 0; i < segs.length; i++) {
     const seg = segs[i]; if (!seg || !seg.blob) continue;
-    dc.send(JSON.stringify({ t: 'meta', name: ccSegName(seg), size: seg.blob.size, type: seg.blob.type || 'video/mp4', i, n: segs.length }));
+    dc.send(JSON.stringify({ t: 'meta', name: ccSegName(seg), at: seg.at, size: seg.blob.size, type: seg.blob.type || 'video/mp4', i, n: segs.length })); // v1.73: at = 조각 키(PC가 이걸로 답함)
     const buf = await seg.blob.arrayBuffer();
     for (let o = 0; o < buf.byteLength; o += CH) { if (dc.readyState !== 'open') return; await waitLow(); dc.send(buf.slice(o, o + CH)); }
     dc.send(JSON.stringify({ t: 'end', i }));
     ccStatus('📥 PC로 보내는 중 ' + (i + 1) + '/' + segs.length + ' · ' + Math.round(seg.blob.size / 1048576) + 'MB');
   }
-  await waitLow(); dc.send(JSON.stringify({ t: 'done', n: segs.length }));
+  await waitLow(); dc.send(JSON.stringify({ t: 'done', n: segs.length, ack: 1 })); // v1.73: ack 1 = 이 캠은 PC 확인(ack) 뒤에만 지움
   ccStatus('📥 PC로 ' + segs.length + '개 보냈어요');
-  if (ccRtc && ccRtc.clear && segs.length) { try { await ccClearSegs(); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); ccLog('clear-pc', segs.length + '개'); ccStatus('📥 PC로 ' + segs.length + '개 보내고 폰에서 지웠어요'); } catch (e) {} }
+  if (segs.length) { // v1.73: 지우기 요청은 PC의 ack로만(offer의 clear는 무시 — 옛 캠은 그걸로 확인 없이 전부 지웠음). PC가 폴더에 다 썼다고 답한 조각(at)만 지움
+    const ack = await new Promise(res => { let fin = false; const end = v => { if (!fin) { fin = true; clearTimeout(tm); res(v); } }; const tm = setTimeout(() => end(null), 180000); dc.addEventListener('message', ev => { if (typeof ev.data !== 'string') return; try { const m = JSON.parse(ev.data); if (m && m.t === 'ack') end(m); } catch (e) {} }); dc.addEventListener('close', () => end(null)); });
+    if (ack && ack.del) {
+      const ats = Array.isArray(ack.ats) ? ack.ats.map(Number) : [], ok = segs.filter(x => ats.includes(x.at));
+      if (!ack.dir) ccStatus('📥 PC로 ' + segs.length + '개 보냈어요 — PC가 폴더 없이 받아서 폰에서는 지우지 않았어요');
+      else if (!ok.length) ccStatus('📥 PC로 ' + segs.length + '개 보냈어요 — PC 저장 확인이 없어 폰에서는 지우지 않았어요' + (ack.fail ? ' (PC 저장 실패 ' + ack.fail + '개)' : ''));
+      else { try { await ccDelSegs(ok.map(x => x.at)); await ccSegCount(); ccLog('clear-pc', ok.length + '개'); ccStatus('📥 PC가 받은 ' + ok.length + '개를 폰에서 지웠어요' + (ok.length < segs.length ? ' — ' + (segs.length - ok.length) + '개는 PC 저장 확인이 없어 남겼어요' : '')); } catch (e) { ccLog('clear-pc-fail', String((e && e.name) || e)); ccStatus('📥 PC는 받았지만 폰에서 지우지 못했어요 — 다시 해 보세요'); } }
+    }
+  }
 }
 let cvPull = null;
 function cvPullStatus(t) { const el = $('cv-pull-status'); if (el) el.textContent = t; }
@@ -12032,14 +12118,14 @@ async function cvPullOffer() {
   const sid = mrGenCode();
   const pc = new RTCPeerConnection(RTC_CFG);
   const dc = pc.createDataChannel('segs', { ordered: true }); dc.binaryType = 'arraybuffer';
-  const P = cvPull = { sid, pc, dc, dir, cur: null, writer: null, chunks: [], got: 0, files: 0, bytes: 0, q: Promise.resolve(), done: false, opened: false };
+  const P = cvPull = { sid, pc, dc, dir, cur: null, writer: null, chunks: [], got: 0, files: 0, bytes: 0, q: Promise.resolve(), done: false, opened: false, okAts: [], errN: 0, seen: new Set(), wantClear: !!($('cv-pull-clear') && $('cv-pull-clear').checked) }; // v1.73: okAts = 폴더에 끝까지 쓴 조각 키(캠에 답), wantClear = '받은 뒤 캠에서 지우기'
   pc.onicecandidate = e => { if (e.candidate && cvChan) { try { cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, ice: e.candidate.toJSON ? e.candidate.toJSON() : e.candidate } }); } catch (x) {} } };
   pc.onconnectionstatechange = () => { if (cvPull === P && !P.opened && (pc.connectionState === 'failed' || pc.connectionState === 'disconnected')) { cvPullStatus('연결 실패 — 캠 화면이 오면 다시 시도해요 (' + A.tries + '회)'); A.at = Date.now() - 20000; } };
   dc.onopen = () => { P.opened = true; cvPullStatus('연결됨 — 캠이 보내기 시작해요'); };
   dc.onclose = () => { if (cvPull === P && !P.done) cvPullStatus('연결이 끊겼어요 (' + P.files + '개 받음)' + (P.opened ? '' : ' — 캠 화면이 오면 다시 시도해요')); };
   dc.onmessage = ev => cvPullMsg(ev.data);
   const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-  cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, offer: { type: offer.type, sdp: offer.sdp }, clear: !!($('cv-pull-clear') && $('cv-pull-clear').checked) } });
+  cvChan.send({ type: 'broadcast', event: 'rtc', payload: { sid, offer: { type: offer.type, sdp: offer.sdp }, clear: false } }); // v1.73: 지우기 요청은 받은 뒤 ack로(옛 캠은 offer의 clear를 보면 확인 없이 전부 지움)
   cvPullStatus('캠 응답 기다리는 중… (캠 폰과 같은 와이파이여야 해요. 캠이 아직 안 켜졌으면 켜질 때 자동으로 이어져요' + (A.tries > 1 ? ', ' + A.tries + '번째 시도' : '') + ')' + (dir ? '' : ' — 폴더 선택을 지원하지 않는 브라우저라 파일마다 다운로드돼요'));
 }
 function cvPullTick() { // 캠 화면이 올 때마다: 받기 대기 중인데 아직 연결 안 됐고 마지막 offer가 8초 넘었으면 다시 offer
@@ -12061,24 +12147,44 @@ function cvPullMsg(data) {
     let m; try { m = JSON.parse(data); } catch (e) { return; }
     if (m.t === 'meta') {
       const name = String(m.name || ('seg' + m.i + '.mp4')).replace(/[\\/:*?"<>|]/g, '_');
-      P.cur = { name, size: Number(m.size) || 0, type: String(m.type || 'video/mp4'), i: m.i, n: m.n }; P.got = 0; P.chunks = [];
-      if (P.dir) P.q = P.q.then(async () => { const fh = await P.dir.getFileHandle(name, { create: true }); P.writer = await fh.createWritable(); });
+      const cur = P.cur = { name, orig: String(m.name || ''), at: m.at != null && isFinite(Number(m.at)) ? Number(m.at) : null, size: Number(m.size) || 0, type: String(m.type || 'video/mp4'), i: m.i, n: m.n, got: 0, bad: false, skip: false }; P.got = 0; P.chunks = [];
+      if (P.dir) P.q = P.q.then(async () => { // v1.73: 같은 이름 — 크기가 같으면 이미 받은 것(다시 쓰지 않음), 다르면 새 이름(덮어쓰지 않음). 실패해도 다음 파일은 계속
+        P.writer = null; let nm = name, free = false;
+        for (let k = 2; k <= 61; k++) {
+          let fh0 = null, other = false; try { fh0 = await P.dir.getFileHandle(nm); } catch (e) { if (!e || e.name !== 'NotFoundError') other = true; }
+          if (!fh0 && !other && !P.seen.has(nm)) { free = true; break; }
+          if (fh0 && !P.seen.has(nm)) { try { const f0 = await fh0.getFile(); if (cur.size > 0 && f0.size === cur.size) { cur.skip = true; cur.f0 = f0; cur.off = 0; free = true; break; } if (cur.size > 0 && f0.size === 0) { free = true; break; } } catch (e) {} } // 같은 크기 = 들어오는 조각과 바이트 비교, 0바이트 = 끊긴 받기가 남긴 빈 파일(덮어씀)
+          const dot = name.lastIndexOf('.'); nm = dot > 0 ? name.slice(0, dot) + '_' + k + name.slice(dot) : name + '_' + k;
+        }
+        if (!free) throw new Error('빈 파일 이름 없음'); // 덮어쓰지 않음 — 이 파일은 캠에서 안 지움
+        P.seen.add(nm); cur.saved = nm;
+        if (!cur.skip) { const fh = await P.dir.getFileHandle(nm, { create: true }); P.writer = await fh.createWritable(); }
+      }).catch(() => { cur.bad = true; });
       cvPullStatus('받는 중 ' + (m.i + 1) + '/' + m.n + ' — ' + name);
     } else if (m.t === 'end') {
-      const cur = P.cur;
+      const cur = P.cur, chunks = P.chunks; P.chunks = []; // v1.73: 이 파일 조각을 지금 붙잡음(줄 선 저장이 늦어도 다음 파일과 섞이지 않게)
       P.q = P.q.then(async () => {
-        if (P.writer) { await P.writer.close(); P.writer = null; }
-        else { const blob = new Blob(P.chunks, { type: cur ? cur.type : 'video/mp4' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cur ? cur.name : 'seg.mp4'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
-        P.chunks = []; P.files++; P.bytes += P.got;
-        cvPullStatus('받음 ' + P.files + (cur ? '/' + cur.n : '') + ' · ' + Math.round(P.bytes / 1048576) + 'MB');
-      });
+        if (P.dir) { if (!(cur && cur.skip)) { if (!P.writer) throw new Error('no writer'); await P.writer.close(); P.writer = null; } }
+        else { const blob = new Blob(chunks, { type: cur ? cur.type : 'video/mp4' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = cur ? cur.name : 'seg.mp4'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+        P.files++; P.bytes += cur ? cur.got : 0;
+        if (P.dir && cur && !cur.bad && cur.got === cur.size && cur.at != null) P.okAts.push(cur.at); // 폴더에 끝까지 쓴(또는 같은 크기로 이미 있는) 조각만 캠에 "받음"으로 답함 — 조각 키(at)로
+        cvPullStatus('받음 ' + P.files + (cur ? '/' + cur.n : '') + ' · ' + Math.round(P.bytes / 1048576) + 'MB' + (P.errN ? ' · 저장 실패 ' + P.errN + '개' : ''));
+      }).catch(() => { if (cur) cur.bad = true; P.writer = null; P.errN++; cvPullStatus('저장 실패 ' + P.errN + '개 — PC 저장 공간·폴더 권한을 확인해 주세요(실패한 파일은 캠에서 지우지 않아요)'); });
     } else if (m.t === 'done') {
-      P.q = P.q.then(() => { P.done = true; cvPullArm = null; cvPullStatus('완료 — ' + P.files + '개 ' + Math.round(P.bytes / 1048576) + 'MB' + (P.dir ? ' (선택한 폴더에 저장)' : ' (다운로드 폴더)')); try { P.pc.close(); } catch (e) {} });
+      P.q = P.q.then(() => { P.done = true; cvPullArm = null; P.wantClear = !!($('cv-pull-clear') && $('cv-pull-clear').checked); /* v1.73: 다 받았을 때의 체크 상태로 */ cvPullStatus('완료 — ' + P.files + '개 ' + Math.round(P.bytes / 1048576) + 'MB' + (P.dir ? ' (선택한 폴더에 저장)' : ' (다운로드 폴더)') + (P.errN ? ' · 저장 실패 ' + P.errN + '개(캠에서 안 지움)' : '') + (P.wantClear && !P.dir ? ' · 폴더 없이 받아서 캠에서는 지우지 않아요' : '') + (P.wantClear && P.dir && !m.ack ? ' · 캠 앱이 옛 버전이라 캠에서는 지우지 않아요(캠 폰에서 클럽캠을 끄고 새 버전으로 바뀐 뒤 다시 받으면 지워져요)' : '')); try { P.dc.send(JSON.stringify({ t: 'ack', ats: P.okAts, del: !!P.wantClear, dir: !!P.dir, fail: P.errN })); } catch (e) {} setTimeout(() => { try { P.pc.close(); } catch (e) {} }, 3000); }); // v1.73: 캠에 받은 파일 이름을 답한 뒤 닫음
     }
     return;
   }
-  P.got += data.byteLength;
-  if (P.dir) P.q = P.q.then(() => P.writer ? P.writer.write(data) : null);
+  P.got += data.byteLength; const cur = P.cur; if (cur) cur.got += data.byteLength;
+  if (P.dir) P.q = P.q.then(async () => {
+    if (cur && cur.skip) { // v1.73: 이미 있는 같은 크기 파일 — 바이트가 모두 같아야 '받음'(다르면 캠은 지우지 않음)
+      if (cur.bad || !cur.f0) return; const o = cur.off; cur.off += data.byteLength;
+      const b = new Uint8Array(await cur.f0.slice(o, o + data.byteLength).arrayBuffer()), a = new Uint8Array(data);
+      if (b.length !== a.length) cur.bad = true; else for (let q = 0; q < a.length; q++) if (a[q] !== b[q]) { cur.bad = true; break; }
+      return;
+    }
+    return P.writer ? P.writer.write(data) : null;
+  }).catch(() => { if (cur) cur.bad = true; }); // v1.73: 쓰기 실패는 그 파일만 표시
   else P.chunks.push(data);
 }
 function ccAllSegs() {
@@ -12088,6 +12194,14 @@ function ccAllSegs() {
     rq.onerror = () => rej(rq.error);
   });
 }
+function ccDelSegs(keys) { // v1.73: 내보낸 조각만 지움(그사이 새로 녹화된 조각은 남김) — 키 = at
+  return new Promise((res, rej) => {
+    const tx = ccDb.transaction('segs', 'readwrite'), st = tx.objectStore('segs');
+    (keys || []).forEach(k => { if (k != null) st.delete(k); });
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  });
+}
+async function ccSegCount() { try { const segs = await ccAllSegs(); ccSegN = segs.length; ccSegBytes = segs.reduce((a, x) => a + ((x.blob && x.blob.size) || 0), 0); } catch (e) {} ccRenderSegInfo(); } // v1.73: 지운 뒤 개수만 다시(앱 시작 기록·persist 요청 없이)
 function ccClearSegs() {
   return new Promise((res, rej) => {
     const tx = ccDb.transaction('segs', 'readwrite');
@@ -12714,16 +12828,19 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
   const clips = await ccHlAll().catch(() => []);
   if (!clips.length) { toast('하이라이트 클립이 아직 없어요 — 본폰 점수판에서 포인트를 넣으면 쌓여요'); return; }
   const vert = ccHlVert(); // v1.25 세로(쇼츠) 모드
-  const cv = document.createElement('canvas'); cv.width = vert ? 540 : 640; cv.height = vert ? 960 : 360;
+  const LW = vert ? 540 : 640, LH = vert ? 960 : 360; // v1.73: 그리기 좌표(예전 크기)
+  const hiCC = clips.some(c => Math.min(c.vw || 0, c.vh || 0) >= 1000); // v1.73b: 세로는 원본이 1080p급일 때만 키움
+  const cv = document.createElement('canvas'); cv.width = vert ? (hiCC ? 720 : 540) : 1280; cv.height = vert ? (hiCC ? 1280 : 960) : 720; // v1.73: 결과 크기(예전 540×960·640×360 — 가로는 360p였음)
   if (!cv.captureStream || typeof MediaRecorder === 'undefined') { toast('이 폰은 영상 합치기를 지원하지 않아요 — 클립을 낱개로 저장할게요'); for (const c of clips) { const a = document.createElement('a'); a.href = URL.createObjectURL(c.blob); a.download = '하이라이트_' + c.at + '.' + ccFmt.ext; document.body.appendChild(a); a.click(); a.remove(); await new Promise(r => setTimeout(r, 500)); } return; }
-  const g = cv.getContext('2d');
+  const g = cv.getContext('2d'); g.setTransform(cv.width / LW, 0, 0, cv.height / LH, 0, 0); // v1.73: 영상은 한 번만 최종 크기로 샘플링
   { const hl = $('cc-hl-live'); if (hl) { cv.style.cssText = 'width:100%;max-width:' + (vert ? 220 : 360) + 'px;display:block;margin:0 auto;border-radius:8px;background:#000'; hl.innerHTML = ''; hl.appendChild(cv); hl.style.display = 'block'; } } // v1.29c: 화면에 붙인 캔버스로 녹화(안드로이드 검은 프레임 방지)
   const stream = cv.captureStream(30);
   const fmt = recPickShare(false); // v1.31 카톡용 MP4
-  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: vert ? 7000000 : 5000000 } : undefined); // v1.32 화질
+  const rec = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime, videoBitsPerSecond: 7000000 } : undefined); // v1.32 화질 · v1.73 가로도 7Mbps(1280×720)
   const parts = []; rec.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   const status = t => { const el = $('cc-hl-status'); if (el) el.textContent = t; };
   rec.start(1000);
+  let srcH = 0;
   const v = document.createElement('video'); v.muted = true; v.playsInline = true; Object.assign(v.style, { position: 'fixed', right: '10px', bottom: '84px', width: '128px', height: '72px', objectFit: 'contain', zIndex: '10050', borderRadius: '8px', background: '#000', pointerEvents: 'none' }); document.body.appendChild(v); // v1.29c: 보이게(2px·투명이면 안드로이드가 그리기를 멈출 수 있음)
   try {
     for (let i = 0; i < clips.length; i++) {
@@ -12731,11 +12848,12 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       status('하이라이트 만드는 중 ' + (i + 1) + '/' + clips.length + ' — 화면을 끄지 마세요');
       const url = URL.createObjectURL(c.blob); v.src = url;
       await new Promise((res) => { v.onloadedmetadata = res; v.onerror = res; setTimeout(res, 3000); });
+      srcH = Math.max(srcH, Math.min(v.videoWidth || 0, v.videoHeight || 0)); // v1.73 완성 줄 표시용(짧은 변)
       const s0 = ccHlStart(c); // v1.26: 이어 붙인 클립은 빈 구간까지 원래 시각대로 재생됨 → 남긴 부분 시작으로 이동
       if (s0 > 0.3) await new Promise(res => { v.onseeked = res; try { v.currentTime = s0 + 1; } catch (e) { res(); } setTimeout(res, 3000); }); // +1초: 이동 직후 첫 키프레임 전은 화면이 멈춤
       const seekOk = s0 <= 0.3 || v.currentTime >= s0 - 1;
       try { await v.play(); } catch (e) {}
-      const vs = vert ? ccHlVertState(c, cv) : null; // v1.25
+      const vs = vert ? ccHlVertState(c, { width: LW, height: LH }) : null; // v1.25 · v1.73 그리기 좌표 크기
       await new Promise((res) => {
         const t0 = performance.now(), lim = (CC_HL_SEC + 3) * (seekOk && vs ? 2 : 1) * 1000; // 슬로모션만큼 여유
         const draw = () => {
@@ -12765,7 +12883,8 @@ async function ccBuildHighlight() { // 보관한 클립을 순서대로 재생�
       if (!error) { ccChan.send({ type: 'broadcast', event: 'camclip', payload: { path, at: Date.now(), hl: true } }); status('하이라이트를 본폰으로 보냈어요 (' + clips.length + '개 장면)'); }
       else status('저장은 됐고 본폰 전송은 실패: ' + error.message);
     } catch (e) { status('저장은 됐고 본폰 전송은 실패'); }
-  } else status('하이라이트 저장 완료 (' + clips.length + '개 장면)');
+  } else status('하이라이트 저장 완료 (' + clips.length + '개 장면)' + (ccChan && !ccOffline() && out.size >= 45 * 1048576 ? ' — 45MB가 넘어 본폰으로는 안 보냈어요' : ''));
+  { const el = $('cc-hl-status'); if (el) el.textContent += ' · ' + cv.width + '×' + cv.height + (srcH ? ' · 원본 ' + srcH + 'p' : '') + (srcH && srcH < 1000 && ccResLowered() ? ' (클럽캠이 자동으로 720p로 낮춤 — 설정 녹화 화질에서 1080p를 고르면 다시 1080p)' : '') + mhKakaoTip(out.size, true); } // v1.73
 }
 // ── v1.25 세로 하이라이트 그리기 ──
 function ccHlVert() { try { return localStorage.getItem('tm-cc-hl-vert') !== '0'; } catch (e) { return true; } }
@@ -12835,11 +12954,14 @@ function ccHlVertFrame(g, v, vs, c, i, total) {
   g.fillStyle = '#fff'; g.font = '15px sans-serif'; g.textAlign = 'right'; g.fillText((i + 1) + ' / ' + total, W - 14, H - 20); g.textAlign = 'left';
 }
 async function ccHlClearAll() { if (!ccDb) return; if (!confirm('하이라이트 클립 ' + ccHlN + '개를 지울까요?')) return; await ccHlClear().catch(() => {}); ccHlN = 0; ccHlRender(); toast('하이라이트 클립을 지웠어요'); }
-async function ccExportFiles(files, title) { // 공유 시트 우선 (아이폰: 비디오 저장→사진 앨범 / 드라이브), 안 되면 다운로드 (v0.74)
+async function ccExportFiles(files, title, opt) { // 공유 시트 우선 (아이폰: 비디오 저장→사진 앨범 / 드라이브), 안 되면 다운로드 (v0.74)
   if (!files.length) return 'none';
-  try {
+  const big = /Android/i.test(navigator.userAgent) && files.some(f => (f.size || 0) > 48 * 1048576); // v1.73: 안드로이드 크롬은 50MB 넘는 파일을 공유 못 함
+  const dl = !!(opt && opt.download) || big;
+  if (!dl) try {
     if (navigator.share && navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, title: title || '테니스메이트' }); return 'shared'; }
-  } catch (e) { if (e && e.name === 'AbortError') return 'cancel'; }
+  } catch (e) { if (e && e.name === 'AbortError' && !/fail/i.test(e.message || '')) return 'cancel'; } // v1.73: 'Share failed'(크기 초과 등)는 취소가 아님 → 다운로드
+  if (big && !(opt && opt.download)) toast('50MB가 넘어 공유 대신 폰에 저장해요 — 내 파일 › 다운로드(갤러리 Download)에서 찾을 수 있어요', 6000);
   for (const f of files) {
     const a = document.createElement('a'); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove();
     await new Promise(r => setTimeout(r, 600)); URL.revokeObjectURL(a.href);
@@ -12858,12 +12980,13 @@ async function ccShareAll() { // 💾 캠 영상 내보내기 — 5개씩 공유
   let BATCH = 10; try { BATCH = parseInt(localStorage.getItem('tm-cc-batch') || '10', 10) || 10; } catch (e) {} // v0.95: 묶음 크기 선택 (0 = 전부)
   if (BATCH <= 0 || BATCH > files.length) BATCH = files.length;
   toast('📤 ' + files.length + '개를 ' + Math.ceil(files.length / BATCH) + '번에 나눠 공유해요 — "비디오 저장"(사진 앨범) 또는 드라이브를 고르세요' + (BATCH >= 20 ? ' (한 번에 많이 보내면 아이폰이 실패할 수 있어요 — 실패하면 묶음을 줄이세요)' : ''));
+  let dlN = 0;
   for (let i = 0; i < files.length; i += BATCH) {
     const r = await ccExportFiles(files.slice(i, i + BATCH), '클럽캠 영상 ' + (i / BATCH + 1) + '/' + Math.ceil(files.length / BATCH));
     if (r === 'cancel') { toast('공유를 중단했어요 (' + i + '개까지 보냄)'); return; }
-    if (r === 'download') break;
+    if (r === 'download') dlN += Math.min(BATCH, files.length - i); // v1.73: 50MB 넘는 묶음은 다운로드로 — 멈추지 말고 남은 묶음도(예전엔 여기서 멈추고 전부 지울지 물었음)
   }
-  if (confirm('폰 안의 캠 영상 ' + files.length + '개를 지울까요?\n\n사진 앨범이나 드라이브에 저장된 걸 확인한 뒤에만 "확인"을 누르세요. 되돌릴 수 없어요. (나중에 🗑️ 버튼으로 지워도 돼요)')) { ccLog('clear-export', files.length + '개'); await ccClearSegs().catch(() => {}); ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo(); toast('정리 완료'); }
+  if (confirm('폰 안의 캠 영상 ' + files.length + '개를 지울까요?' + (dlN ? ' (그중 ' + dlN + '개는 다운로드 폴더로 저장 — 여러 파일 다운로드를 허용했는지, 내 파일 › 다운로드에 다 있는지 먼저 확인해 주세요)' : '') + '\n\n사진 앨범이나 드라이브에 저장된 걸 확인한 뒤에만 "확인"을 누르세요. 되돌릴 수 없어요. (나중에 🗑️ 버튼으로 지워도 돼요)')) { ccLog('clear-export', files.length + '개'); const okDel = await ccDelSegs(segs.map(x => x.at)).then(() => true, () => false); await ccSegCount(); toast(okDel ? '정리 완료' : '지우지 못했어요 — 다시 해 보세요'); /* v1.73: 내보낸 것만 */ }
 }
 async function ccClearAll() { // 🗑️ 폰에 쌓인 캠 영상 전부 삭제 (의미 없는 녹화분 정리 — v0.60)
   if (!ccDb) ccDb = await ccOpenDb().catch(() => null);
@@ -12893,10 +13016,10 @@ async function ccSaveAll() { // 쌓인 세그먼트를 파일로 내려받기 (�
     await new Promise(r => setTimeout(r, 600));
     URL.revokeObjectURL(a.href);
   }
-  if (confirm('저장이 끝났으면 폰 안의 캠 영상을 지울까요? (용량 확보)')) {
-    await ccClearSegs().catch(() => {});
-    ccSegN = 0; ccSegBytes = 0; ccRenderSegInfo();
-    toast('🧹 정리 완료');
+  if (confirm('폰 안의 캠 영상 ' + segs.length + '개를 지울까요? (용량 확보)\n\n내 파일 › 다운로드에 ' + segs.length + '개가 다 있는지 먼저 확인해 주세요 — 여러 파일 다운로드를 막으면 첫 파일만 저장돼요. 되돌릴 수 없어요. (나중에 지우기 버튼으로 지워도 돼요)')) {
+    const okDel = await ccDelSegs(segs.map(x => x.at)).then(() => true, () => false); // v1.73: 내려받은 것만(그사이 새로 녹화된 조각은 남김)
+    await ccSegCount();
+    toast(okDel ? '🧹 정리 완료' : '지우지 못했어요 — 다시 해 보세요');
   }
 }
 
