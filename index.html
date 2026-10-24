@@ -2276,7 +2276,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.73';
+const APP_VERSION = 'v1.74';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -8582,11 +8582,11 @@ function aiRefineBounceSplit(traj, s) { // s = 하강 마지막 표본 → 착�
   { const rt = (-qb + Math.sqrt(disc)) / (2 * qa); if (rt >= lo && rt <= hi) tStar = rt; } // v1.60c 꺾이는 쪽 근만(f' = +√disc)
   if (tStar === null) return null;
   const Q = t => q.a * (t - q.t0) * (t - q.t0) + q.b * (t - q.t0) + q.c;
-  if (Q(p2.t) - p2.y < 1) return null; // v1.60c 반등 점이 하강 포물선보다 위(화면 y 작게)로 벗어나야 — 아니면 아직 떨어지는 중
+  const dev = Q(p2.t) - p2.y; if (dev < 1) return null; // v1.74 dev를 돌려줌 · v1.60c 반등 점이 하강 포물선보다 위(화면 y 작게)로 벗어나야 — 아니면 아직 떨어지는 중
   let res = 0; pre.forEach(p => { res += (p.y - Q(p.t)) ** 2; }); res = Math.sqrt(res / pre.length);
   if (post[2]) res += Math.abs(post[2].y - (m * post[2].t + c2)) / 2 * Math.max(1, (p2.t - p1.t) / Math.max(1e-3, post[2].t - p2.t)); // v1.60c 직선 간격에 맞춤
   const xp = pre.slice(-3), mx = (xp[xp.length - 1].x - xp[0].x) / ((xp[xp.length - 1].t - xp[0].t) || 1e-3);
-  return { t: tStar, x: xp[xp.length - 1].x + mx * (tStar - xp[xp.length - 1].t), y: Q(tStar), res };
+  return { t: tStar, x: xp[xp.length - 1].x + mx * (tStar - xp[xp.length - 1].t), y: Q(tStar), res, vin: 2 * q.a * (tStar - q.t0) + q.b, vout: m, dev }; /* v1.74 꺾임 크기(aiBounceKink) */
 }
 function aiRefineBounceOld(traj, bi) {
   const pre = traj.slice(Math.max(0, bi - 5), bi + 1);
@@ -8619,21 +8619,54 @@ function aiRefineBounceOld(traj, bi) {
   const yStar = q.a * (tStar - t0) * (tStar - t0) + q.b * (tStar - t0) + q.c;
   return { t: tStar, x: xStar, y: yStar };
 }
+const AI_BT_WIN = 0.25, AI_BT_LATE = 0.15, AI_BT_REB = 0.12; /* v1.74 챌린지 바운스: 캠 시각 ±0.25초 창 · +0.15초보다 늦으면 튀어 오름(0.12초 안 실제 표본에서 3px)이 있어야 */
+function aiReboundAfter(traj, i, dy, win) { /* v1.74 바로 뒤(win초 안)의 실제 표본에서 화면 y가 dy px 넘게 올라감 = 튀어 오름 — 3점 평활값·빈칸 너머 표본은 안 셈(10/23 S558: 0.235초 빈칸 너머 점이 평활로 '반등'이 됨) */
+  for (let k = i + 1; k < traj.length && traj[k].t - traj[i].t <= win; k++) if (traj[i].y - traj[k].y >= dy) return true;
+  return false;
+}
+function aiBounceKink(traj, lo, hi, gap) { /* v1.74 착지 꺾임: 하강 2차식과 그 뒤 직선의 교점(aiRefineBounceSplit)이 [lo, hi] 안인 하강 마지막 표본 중 잔차가 가장 작은 것 → 표본 번호 | -1.
+     높은 가까운 캠은 튄 뒤에도 공이 카메라 쪽으로 오며 떠서 화면 y가 안 줄어 극대점이 없음(10/23 폴드3 가까운 박스 — 극대점 규칙만으로는 받는 사람 타구를 착지로 골랐음).
+     꺾임이 뚜렷해야: 내려오던 중(앞 3표본 6px↑)·하강 속도 60px/s↑·꺾인 뒤 기울기가 하강 속도의 35%(40px/s) 넘게 줄어듦·반등 둘째 점이 하강 포물선보다 3px 넘게 위·하강 맞춤 잔차가 하강 폭의 30% 이하·꺾인 뒤 표본 3개, 앞뒤 표본 간격 gap초 안, 가로 방향이 뒤집히면(라켓) 아님 */
+  let best = -1, br = Infinity;
+  for (let s = 2; s + 3 < traj.length; s++) {
+    if (traj[s + 1].t < lo || traj[s].t > hi) continue;
+    if (traj[s + 2].t - traj[s].t > gap || traj[s + 3].t - traj[s].t > gap + 0.05 || traj[s].t - traj[s - 2].t > gap) continue;
+    if (traj[s].y - traj[Math.max(0, s - 3)].y < 6) continue;
+    const r = aiRefineBounceSplit(traj, s); if (!r || r.t < lo || r.t > hi) continue;
+    if (r.res > 0.3 * (traj[s].y - traj[Math.max(0, s - 5)].y)) continue; /* 하강이 포물선으로 매끈해야 — 트랙이 다른 점으로 건너뛴 계단은 꺾임이 아님(10/23 실제 꺾임은 잔차 ≤ 하강 폭의 0.2) */
+    if (!(r.vin >= 60) || r.vin - r.vout < Math.max(40, 0.35 * r.vin) || !(r.dev >= 3)) continue;
+    const a = traj[Math.max(0, s - 4)], b = traj[s], c = traj[Math.min(traj.length - 1, s + 4)], vxa = (b.x - a.x) / ((b.t - a.t) || 1), vxb = (c.x - b.x) / ((c.t - b.t) || 1);
+    if (vxa * vxb < 0 && Math.min(Math.abs(vxa), Math.abs(vxb)) > 60) continue;
+    if (r.res < br) { br = r.res; best = s; }
+  }
+  return best;
+}
 function aiBounceIdxT(traj, anchor) { // v1.55: ① 챌린지(anchor = 캠이 잰 바운스 시각)면 그 시각 0.25초 안의 바운스(가로 방향이 뒤집히는 라켓 맞음은 제외) ② 착지 순간 몇 장이 비어 최대점이 반등 첫 점이면 → 하강 마지막 점으로(aiRefineBounce가 두 궤적 사이에서 착지점을 보간)
+  /* v1.74 챌린지: 그 창에 튀어 오르는 극대점이 없으면 화면 y 전체 최대점(최대 0.6초 늦음 = 받는 사람 타구 → 길게 '폴트')으로 가지 않고 착지 꺾임(aiBounceKink, 캠 시각 −0.25~+0.15초),
+     그것도 없으면 전체 최대점은 늦지 않을 때(+0.15초 안)만, 아니면 '바운스 미확정'(v1.61: 틀린 답보다 못 찾음). +0.15초보다 늦은 극대점은 바로 튀어 오를 때만. 기준 시각 없는 직접 판독은 예전 그대로 */
   const ys = traj.map(p => p.y); let bi = aiBounceIdx(ys);
-  if (anchor != null && traj.length >= 7) {
-    const sm = ys.map((y, i) => i === 0 || i === ys.length - 1 ? y : (ys[i - 1] + y + ys[i + 1]) / 3), cand = [];
-    for (let i = 2; i < sm.length - 2; i++) {
-      let top = true; for (let k = Math.max(0, i - 3); k <= Math.min(sm.length - 1, i + 3); k++) if (sm[k] > sm[i]) { top = false; break; }
-      if (!top || sm[i] - Math.min(...sm.slice(Math.max(0, i - 6), i)) < 3 || sm[i] - Math.min(...sm.slice(i + 1, Math.min(sm.length, i + 7))) < 3) continue;
-      const a = traj[Math.max(0, i - 4)], b = traj[i], c = traj[Math.min(traj.length - 1, i + 4)];
-      const vxa = (b.x - a.x) / ((b.t - a.t) || 1), vxb = (c.x - b.x) / ((c.t - b.t) || 1);
-      const rev = vxa * vxb < 0 && Math.min(Math.abs(vxa), Math.abs(vxb)) > 60; // 가로 방향이 뒤집힘 = 라켓일 수 있음(먼 코트는 원근으로 뒤집혀 보이기도) → 기준 시각 0.1초 안일 때만
-      if (Math.abs(traj[i].t - anchor) <= (rev ? 0.1 : 0.25)) cand.push(i);
+  if (anchor != null) {
+    const cand = [];
+    if (traj.length >= 7) {
+      const sm = ys.map((y, i) => i === 0 || i === ys.length - 1 ? y : (ys[i - 1] + y + ys[i + 1]) / 3);
+      for (let i = 2; i < sm.length - 2; i++) {
+        let top = true; for (let k = Math.max(0, i - 3); k <= Math.min(sm.length - 1, i + 3); k++) if (sm[k] > sm[i]) { top = false; break; }
+        if (!top || sm[i] - Math.min(...sm.slice(Math.max(0, i - 6), i)) < 3 || sm[i] - Math.min(...sm.slice(i + 1, Math.min(sm.length, i + 7))) < 3) continue;
+        const a = traj[Math.max(0, i - 4)], b = traj[i], c = traj[Math.min(traj.length - 1, i + 4)];
+        const vxa = (b.x - a.x) / ((b.t - a.t) || 1), vxb = (c.x - b.x) / ((c.t - b.t) || 1);
+        const rev = vxa * vxb < 0 && Math.min(Math.abs(vxa), Math.abs(vxb)) > 60; // 가로 방향이 뒤집힘 = 라켓일 수 있음(먼 코트는 원근으로 뒤집혀 보이기도) → 기준 시각 0.1초 안일 때만
+        if (traj[i].t - anchor > AI_BT_LATE && !aiReboundAfter(traj, i, 3, AI_BT_REB)) continue; /* v1.74 */
+        if (Math.abs(traj[i].t - anchor) <= (rev ? 0.1 : AI_BT_WIN)) cand.push(i);
+      }
     }
     if (cand.length) { cand.sort((a, b) => Math.abs(traj[a].t - anchor) - Math.abs(traj[b].t - anchor)); bi = cand[0]; }
+    else {
+      const k = aiBounceKink(traj, anchor - AI_BT_WIN, anchor + AI_BT_LATE, 0.15); if (k >= 0) return k; /* v1.74 꺾임 = 하강 마지막 표본(aiRefineBounce가 그 뒤와의 교점으로) */
+      if (bi >= 0 && traj[bi].t - anchor > AI_BT_LATE) return -1; /* v1.74 늦은 전체 최대점은 쓰지 않음 */
+      if (bi >= 0 && anchor - traj[bi].t > AI_BT_WIN && !aiReboundAfter(traj, bi, 3, AI_BT_REB)) return -1; /* v1.74c 캠 시각보다 0.25초 넘게 이른 전체 최대점(꺾임 창 밖)은 바로 튀어 오를 때만(0.12초 안 실제 표본 3px) — 높은 서버 쪽 캠에선 서브 치는 순간이 이른 최대점(검토: 네트 1m 안으로 투영돼 '서브 네트') */
+    }
+    if (bi >= 0 && Math.abs(traj[bi].t - anchor) > 0.6) return -1; // v1.61 챌린지: 캠이 잰 바운스 시각과 동떨어진 바운스(앞 랠리·다음 공)는 답하지 않음
   }
-  if (anchor != null && bi >= 0 && Math.abs(traj[bi].t - anchor) > 0.6) return -1; // v1.61 챌린지: 캠이 잰 바운스 시각과 동떨어진 바운스(앞 랠리·다음 공)는 답하지 않음
   if (bi < 2 || bi + 1 >= traj.length) return bi;
   const dts = []; for (let i = 1; i < traj.length; i++) dts.push(traj[i].t - traj[i - 1].t); dts.sort((a, b) => a - b); const md = dts[Math.floor(dts.length / 2)] || 1 / 30;
   if (traj[bi].t - traj[bi - 1].t > Math.max(0.05, md * 2.5) && traj[bi - 1].y > traj[bi - 2].y && traj[bi + 1].y < traj[bi].y) return bi - 1;
@@ -8660,6 +8693,7 @@ function aiVerdict(cx, cy, singles, baseW) { // 코트 좌표(m, 라인 중심 �
   const inCourt = dEdge >= -AI_BALL_R;    // 공 가장자리가 라인 바깥 가장자리에 닿으면 IN
   return { call: inCourt ? 'IN' : 'OUT', distCm: Math.round(Math.abs(dEdge) * 100), close: Math.abs(dEdge) < 0.05, singles };
 }
+const AI_NET_ZONE = 1.0; /* v1.74 서브가 네트에서 이만큼(m) 안에 떨어지면 네트 — 10/23 확인된 네트 서브는 모두 0.5m 안(그물에 맞고 아래로), 확인된 보통 서브는 모두 2.5m 밖(네트를 안 건드린 서브는 1.5m 안에 못 떨어짐) */
 function aiServeVerdict(cx, cy, side) { // v1.58: 서브 = 받는 쪽 서비스 박스(서비스라인·센터서비스라인·단식 사이드라인, 모두 5cm). side = 서버가 선 쪽 'deuce'|'ad' — 모르면 공이 떨어진 쪽 박스(길이·옆 폴트만)
   const W = AI_COURT_W, L = AI_COURT_L, mid = W / 2, inL = AI_SINGLES_IN, inR = W - AI_SINGLES_IN;
   const far = cy < L / 2; // 받는 쪽 = 공이 떨어진 쪽(서브는 네트를 넘어감)
@@ -8673,7 +8707,22 @@ function aiServeVerdict(cx, cy, side) { // v1.58: 서브 = 받는 쪽 서비스 
   const ok = dEdge >= -AI_BALL_R;   // 공 가장자리가 라인에 닿으면 IN
   const boxSide = (far && left) || (!far && !left) ? 'deuce' : 'ad';
   const rect = [left ? inL : mid, far ? ySvc : L / 2, left ? mid : inR, far ? L / 2 : ySvc];
+  const dNet = Math.abs(cy - L / 2); /* v1.74 네트에서 1m 안 = 서브가 네트에 걸림(서버 쪽이면 폴트, 넘어가 맞는 박스면 렛) — IN/폴트가 아님. 코트 좌표라 두 캠(각자 화면)·가까운/먼 서버 모두 같음. distCm = 네트에서 cm */
+  if (dNet <= AI_NET_ZONE) return { call: 'NET', net: true, distCm: Math.round(dNet * 100), close: false, serve: true, line: '네트', box: boxSide, sideKnown: side === 'deuce' || side === 'ad', rect };
   return { call: ok ? 'IN' : 'FAULT', distCm: Math.round(Math.abs(dEdge) * 100), close: Math.abs(dEdge) < 0.05, serve: true, line, box: boxSide, sideKnown: side === 'deuce' || side === 'ad', rect };
+}
+const AI_NET_STAY = 3.0, AI_NET_STAY_T = 0.3, AI_NET_STAY_TOL = 0.04, AI_NET_STAY_GAP = 0.35; /* v1.74c 네트 관문: 착지 뒤 0.3초(한 장 0.04초는 봐줌) 동안 공 자취(코트 투영)가 네트 3m 안 — 0.3초를 닫는 표본은 착지 뒤 0.65초 안(라이브 3장 묶음 간격) */
+function aiNetStay(traj, tb, H, sx, sy) { /* v1.74c 서브 '네트'(aiServeVerdict 네트 1m 안)를 부르기 전 확인 — 착지 뒤 공이 0.3초 넘게 네트 3m 안에 머물렀나 → { ok: true(머묾) | false(3m 넘게 멀어짐 = 착지가 아님: 높은 서버 쪽 캠의 서브 치는 순간·라이브 이른 꺾임) | null(그 뒤 표본이 모자람 — 네트를 맞은 공은 그물에 가려 자주 놓침), n, mx(m), span(초) }.
+     10/23 실제 트랙(v1.74 검토 netgate): 진짜 네트 S319 최대 1.10m, 서브 치는 순간을 네트로 고른 13개는 6.7~13.6m. 공중 점도 aiMapPt 그대로(바닥 접점 보정 없음 — 검토와 같음). sx·sy = 성긴 표본(640폭) → 영상 px 배율(없으면 traj가 영상 px). 순수 함수 */
+  const post = (traj || []).filter(p => p && p.t > tb + 0.01 && p.t <= tb + AI_NET_STAY_T + AI_NET_STAY_GAP).sort((a, b) => a.t - b.t);
+  let n = 0, mx = 0, span = 0;
+  for (const p of post) {
+    if (span >= AI_NET_STAY_T - AI_NET_STAY_TOL && p.t > tb + AI_NET_STAY_T) break; // 0.3초를 이미 채움
+    let d = Infinity; try { const m = aiMapPt(H, sx ? (p.x + 0.5) * sx - 0.5 : p.x, sy ? (p.y + 0.5) * sy - 0.5 : p.y); if (isFinite(m[0]) && isFinite(m[1])) d = Math.abs(m[1] - AI_COURT_L / 2); } catch (e) {}
+    n++; mx = Math.max(mx, d); span = p.t - tb;
+    if (d > AI_NET_STAY) return { ok: false, n, mx, span };
+  }
+  return { ok: span >= AI_NET_STAY_T - AI_NET_STAY_TOL ? true : null, n, mx, span };
 }
 let aiJudge = 'court', aiJudgeNote = '', aiJudgeHintSide = null, aiInChallenge = false; // v1.58 판정 기준: court | serve | serve-deuce | serve-ad · v1.58b 챌린지 안내('fallback' 서브 바운스 못 찾음 | 'hint' 서브였을 수 있음)
 function aiJudgeVerdict(cx, cy) { return aiJudge === 'court' ? aiVerdict(cx, cy, undefined, aiBaseW) : aiServeVerdict(cx, cy, aiJudge === 'serve-deuce' ? 'deuce' : aiJudge === 'serve-ad' ? 'ad' : null); }
@@ -9115,7 +9164,7 @@ function aiMiniCourt(c, cx, cy, vd) { // 위에서 본 코트 + 착지점
   g.fillStyle = '#2a6f97'; g.fillRect(0, 0, W, H); g.fillStyle = '#3d8bbf'; { const [x0, y0] = P(0, 0), [x1, y1] = P(AI_COURT_W, AI_COURT_L); g.fillRect(x0, y0, x1 - x0, y1 - y0); }
   g.strokeStyle = '#fff'; g.lineWidth = 1.5; aiCourtSegs().forEach(sg => { const [x0, y0] = P(sg[0], sg[1]), [x1, y1] = P(sg[2], sg[3]); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); });
   { const [x0, y0] = P(0, AI_COURT_L / 2), [x1] = P(AI_COURT_W, 0); g.strokeStyle = '#111'; g.lineWidth = 3; g.beginPath(); g.moveTo(x0 - 4, y0); g.lineTo(x1 + 4, y0); g.stroke(); }
-  if (vd && vd.serve && vd.rect) { const [x0, y0] = P(vd.rect[0], vd.rect[1]), [x1, y1] = P(vd.rect[2], vd.rect[3]); g.fillStyle = 'rgba(212,233,78,.35)'; g.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); } // v1.58 서브 박스
+  if (vd && vd.serve && vd.rect && !vd.net) { /* v1.74 네트면 박스를 칠하지 않음 */ const [x0, y0] = P(vd.rect[0], vd.rect[1]), [x1, y1] = P(vd.rect[2], vd.rect[3]); g.fillStyle = 'rgba(212,233,78,.35)'; g.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0)); } // v1.58 서브 박스
   if (cx != null && isFinite(cx) && isFinite(cy)) {
     const qx = Math.max(-1.5, Math.min(AI_COURT_W + 1.5, cx)), qy = Math.max(-1.5, Math.min(AI_COURT_L + 1.5, cy));
     const [bx, by] = P(qx, qy);
@@ -9154,7 +9203,7 @@ function aiResultCard(info) {
   res.appendChild(d);
   const cc = $('ai-card-court'); if (info.cx != null) aiMiniCourt(cc, info.cx, info.cy, info.vd); else cc.style.display = 'none';
   aiCropDraw(info);
-  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견' + (ci.serve ? '(코트 라인 기준) ' : ' ') + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? (info.vd.serve ? (info.vd.call === 'IN' ? '서브 IN' : '폴트') : info.vd.call) + ' ' + info.vd.distCm + 'cm' : (info.unref ? '보정 확인 필요' : '보정 없음')) + (ci.serve && ci.serveAgo != null ? ' · ' + ci.serveAgo + '초 전 서브' : '') + (ci.cal ? ' · 캠의 코트 보정' : ''); /* v1.58b */ d.appendChild(cap); }
+  if (aiChallengeInfo) { const ci = aiChallengeInfo; aiChallengeInfo = null; const cap = document.createElement('div'); cap.className = 'muted'; cap.style.cssText = 'font-size:12px;flex-basis:100%'; cap.textContent = '챌린지' + (ci.who ? '(' + ci.who + ' 영상)' : '') + ' — 캠 실시간 의견' + (ci.serve ? '(코트 라인 기준) ' : ' ') + (ci.call || '없음') + (ci.distCm != null ? ' ' + ci.distCm + 'cm' : '') + (ci.guess ? ' (바운스 시각은 추정)' : '') + ' → 되감기 판독 ' + (info.vd ? (info.vd.net ? '서브 네트(네트 근처 ' + info.vd.distCm + 'cm)' /* v1.74 · v1.74c */ : (info.vd.serve ? (info.vd.call === 'IN' ? '서브 IN' : '폴트') : info.vd.call) + ' ' + info.vd.distCm + 'cm') : info.netHold ? '네트 근처(확인 필요)' /* v1.74c */ : (info.unref ? '보정 확인 필요' : '보정 없음')) + (ci.serve && ci.serveAgo != null ? ' · ' + ci.serveAgo + '초 전 서브' : '') + (ci.cal ? ' · 캠의 코트 보정' : ''); /* v1.58b */ d.appendChild(cap); }
 }
 function aiApplyCamCal(cal, v) { // v1.58: 챌린지 클립과 함께 온 캠의 코트 보정을 판독 센터에 — 잘못된 값이면 안 씀
   try {
@@ -9685,7 +9734,8 @@ async function mhRecGo(camP, au) {
   R.pool = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = 512; c.height = 288; return c; });
   try { await mhRput('sess', m); } catch (e) { mhStatus('앱 저장 공간을 열지 못해 녹화할 수 없어요: ' + ((e && e.message) || e), null); mhRecCleanup(); return; }
   rec.ondataavailable = e => { if (!e.data || !e.data.size) return; const i = R.i++, blob = e.data; R.q = R.q.then(() => mhRput('chunks', { sess, i, blob })).catch(err => { R.failN++; mhRecInfo('영상 조각 저장 실패 — 폰 저장 공간을 확인해 주세요 (' + ((err && err.message) || err) + ')'); toast('녹화 저장이 안 되고 있어요 — 저장 공간을 확인해 주세요'); }); };
-  stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => { if (mhRec === R && !R.stopping) { mhRecStop('카메라가 끊겨서 여기까지 저장해요…').then(() => toastVis('카메라가 끊겨서 여기까지 저장했어요', 8000)); /* v1.73: 이유는 녹화 화면 줄에, 알림은 화면이 닫히고 폰을 다시 볼 때 */ } }));
+  rec.addEventListener('start', () => { R.started = true; }); rec.addEventListener('stop', () => { R.recEnded = true; }); /* v1.74e: 브라우저 첫 녹화는 'start'가 1.6~4초 늦고 그 전 장면은 브라우저가 버림(그 전에 멈추면 조각 0바이트) — 줄은 시작 전엔 '녹화 준비 중', 끝까지 조각이 없으면 mhRecStop2가 'empty' */
+  stream.getVideoTracks().forEach(t => t.addEventListener('ended', () => { if (mhRec === R && !R.stopping) { mhRecStop('카메라가 끊겨서 여기까지 저장해요…').then(r => toastVis(r === 'empty' ? '카메라가 끊겨서 녹화가 저장되지 않았어요 — 녹화가 시작되기 전이었어요' : '카메라가 끊겨서 여기까지 저장했어요', 8000)); /* v1.73: 이유는 녹화 화면 줄에, 알림은 화면이 닫히고 폰을 다시 볼 때 */ } }));
   rec.start(5000);
   if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { if (!e || !e.quota) return; R.leftMin = Math.max(0, Math.floor((e.quota * 0.8 - (e.usage || 0)) / (rbps / 8 * 60 * 1.3))); }).catch(() => {}); // v1.73: 남은 녹화 시간 — 녹화 화면 위 줄에(알림은 녹화 화면에 가려 안 보임)
   try { if (navigator.wakeLock) R.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
@@ -9708,9 +9758,9 @@ async function mhRecGo(camP, au) {
     if (mhRec !== R || R.stopping) return; tick++; const t = (performance.now() - R.t0p) / 1000; m.dur = t; /* v1.73: 멈추는 중엔 줄을 덮지 않음 */
     if (!m.H && tick % 5 === 1) { try { const H = mhCalib(v, true); if (H) { m.H = Array.from(H); R.band = mhBandFor(H, vh); } } catch (e) {} }
     let nr = 0; if (tick % 3 === 0) { try { nr = mhRallies(mhDropStatic(m.samples, vw), t, vw, vh).length; R.nr = nr; } catch (e) {} }
-    mhRecInfo('녹화 중 ' + mhFmtT(t) + ' · 공 ' + m.samples.length + '번 · 랠리 ' + (R.nr || 0) + '개' + (m.H ? ' · 코트 인식됨' : ' · 코트 찾는 중') + (R.ready ? '' : ' · 모델 준비 중') + (R.failN ? ' · 저장 실패 ' + R.failN : '') + (R.leftMin != null && R.leftMin - t / 60 < 40 ? ' · 저장 공간 약 ' + Math.max(0, Math.round(R.leftMin - t / 60)) + '분 남음' : ''));
+    mhRecInfo((R.started || R.i ? '녹화 중 ' : '녹화 준비 중 ') /* v1.74e 녹화기가 아직 시작 전 */ + mhFmtT(t) + ' · 공 ' + m.samples.length + '번 · 랠리 ' + (R.nr || 0) + '개' + (m.H ? ' · 코트 인식됨' : ' · 코트 찾는 중') + (R.ready ? '' : ' · 모델 준비 중') + (R.failN ? ' · 저장 실패 ' + R.failN : '') + (R.leftMin != null && R.leftMin - t / 60 < 40 ? ' · 저장 공간 약 ' + Math.max(0, Math.round(R.leftMin - t / 60)) + '분 남음' : ''));
     if (tick % 10 === 0) { try { await mhRput('sess', m); } catch (e) {} } // 앱이 꺼져도 표본·길이 남김
-    if (tick % 30 === 0 && navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); if (!R.stopping && e.quota && e.usage > e.quota * 0.8) { mhRecStop('저장 공간이 부족해서 녹화를 멈춰요…').then(() => toastVis('저장 공간이 부족해서 녹화를 멈췄어요 — 찍힌 영상은 안전해요', 8000)); } /* v1.73 */ } catch (x) {} }
+    if (tick % 30 === 0 && navigator.storage && navigator.storage.estimate) { try { const e = await navigator.storage.estimate(); if (!R.stopping && e.quota && e.usage > e.quota * 0.8) { mhRecStop('저장 공간이 부족해서 녹화를 멈춰요…').then(r => toastVis(r === 'empty' ? '저장 공간이 부족해서 녹화를 멈췄어요 — 저장된 영상은 없어요' : '저장 공간이 부족해서 녹화를 멈췄어요 — 찍힌 영상은 안전해요', 8000)); /* v1.74e empty */ } /* v1.73 */ } catch (x) {} }
   }, 1000);
 }
 function mhRecCleanup() { const R = mhRec; if (!R) return; clearInterval(R.timer); try { R.stream.getTracks().forEach(t => t.stop()); } catch (e) {} try { if (R.wake) R.wake.release(); } catch (e) {} const ov = $('mh-rec'), v = $('mh-rv'); if (v) v.srcObject = null; if (ov) ov.style.display = 'none'; try { ccLandscapeUnlock(); } catch (e) {} mhRec = null; }
@@ -9721,8 +9771,11 @@ async function mhRecStop(why) { // v1.73: 멈춘 이유를 녹화 화면 줄에(
 async function mhRecStop2(R) {
   await new Promise(res => { if (R.rec.state === 'inactive') return res(); R.rec.onstop = () => setTimeout(res, 50); try { R.rec.stop(); } catch (e) { res(); } setTimeout(res, 4000); });
   try { await R.q; } catch (e) {}
-  const m = R.m; m.dur = (performance.now() - R.t0p) / 1000; try { await mhRput('sess', m); } catch (e) {}
+  const m = R.m; m.dur = (performance.now() - R.t0p) / 1000;
+  let empty = false; if (R.recEnded && !R.i) { try { empty = !(await mhRchunks(m.sess)).length; } catch (e) {} } /* v1.74e: 녹화기가 끝까지(stop 이벤트) 비지 않은 조각을 하나도 안 냄 = 영상 없음 → 빈 기록은 지우고 사실대로. stop을 못 본 4초 시한 경로는 늦은 조각이 올 수 있어 예전 그대로 */
+  if (empty) { try { await mhRdel(m.sess); } catch (e) {} } else { try { await mhRput('sess', m); } catch (e) {} }
   mhRecCleanup(); mhRecCheck();
+  if (empty) { mhStatus('녹화가 시작되기 전에 멈춰서 저장된 영상이 없어요 — 다시 찍어 주세요', null); return 'empty'; }
   mhStatus('녹화를 파일로 만드는 중…', null);
   try { const file = await mhRecFile(m); await mhRecOpen(m, file); } catch (e) { mhStatus('녹화 파일을 만들지 못했어요: ' + ((e && e.message) || e) + ' — 아래 [열기]로 다시 해 보세요', null); }
 }
@@ -10562,7 +10615,8 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
   let say = '';
   if (aiNativeInfo && (aiNativeInfo.n + aiNativeInfo.add)) html += '<div class="muted" style="font-size:11px">바운스 주변 ' + (aiNativeInfo.n + aiNativeInfo.add) + '점을 원래 해상도(' + aiNativeInfo.z.toFixed(1) + '배 확대)로 다시 봐서 착지점을 다듬었어요</div>'; // v1.33
   if (bi < 0) {
-    const flying = aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.35;
+    const chNo = anchor != null; /* v1.74b 챌린지(캠 시각 기준)에서 못 찾음 — [2초 더 보기]·다시 누르기는 기준 시각 없이 다시 판정해 늦은 최대점(받는 사람 타구)을 고르므로 권하지 않음 */
+    const flying = !chNo && aiTraj.length >= 3 && aiTraj[aiTraj.length - 1].t > t1 - 0.35;
     // v0.93: 화면 밖으로 나간 경우 — 마지막 점이 가장자리 4% 안 + 직전 점들이 그쪽으로 이동
     let exitDir = null;
     if (aiTraj.length >= 4) {
@@ -10571,9 +10625,9 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     }
     let exitNote = '';
     if (exitDir && aiH && !aiCalUnref) { try { const L = aiTraj[aiTraj.length - 1]; const m = aiMapPt(aiH, L.x, L.y); const vd = aiVerdict(m[0], m[1], undefined, aiBaseW); exitNote = vd.call === 'OUT' ? ' 마지막으로 보인 위치가 이미 라인 밖 ' + vd.distCm + 'cm였어요 — 아웃일 가능성이 커요' : ' 마지막으로 보인 위치는 아직 코트 안이었어요'; } catch (e) {} }
-    html += `<div class="ai-verdict unsure" style="margin-top:6px">${exitDir ? '화면 밖으로 나감' : '바운스 미확정'}</div><div class="muted" style="font-size:12px;margin-top:4px">${exitDir ? '공이 화면 ' + exitDir + ' 가장자리로 나가 바운스가 카메라 시야 밖이에요.' + exitNote + ' — 카메라를 더 뒤·높게 걸거나 반대편 캠이 필요해요' : flying ? '구간 끝까지 공이 아직 날아가는 중이에요 — 이어서 더 보면 바운스를 찾을 수 있어요' : '구간 안에서 공이 가장 낮아지는 지점을 못 찾았어요 — 공이 튀는 순간에서 멈추고 다시 눌러 주세요'}</div>` +
-      (!exitDir && typeof aiDeep !== 'undefined' && aiDeep.frames.length ? `<div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn small" onclick="aiAnalyzeDeep(true)">▶ 2초 더 보기 (이어서 분석)</button></div>` : '');
-    say = exitDir ? ('공이 화면 ' + exitDir + ' 밖으로 나갔어요' + (exitNote.includes('아웃일') ? '. 아웃일 가능성이 커요' : '')) : flying ? '공이 아직 날아가는 중이에요. 2초 더 보기를 눌러 주세요' : '바운스를 못 찾았어요';
+    html += `<div class="ai-verdict unsure" style="margin-top:6px">${exitDir ? '화면 밖으로 나감' : '바운스 미확정'}</div><div class="muted" style="font-size:12px;margin-top:4px">${exitDir ? '공이 화면 ' + exitDir + ' 가장자리로 나가 바운스가 카메라 시야 밖이에요.' + exitNote + ' — 카메라를 더 뒤·높게 걸거나 반대편 캠이 필요해요' : flying ? '구간 끝까지 공이 아직 날아가는 중이에요 — 이어서 더 보면 바운스를 찾을 수 있어요' : chNo ? '캠이 잰 바운스 시각 근처에서 착지를 확정하지 못했어요 — 틀린 판정 대신 보류했어요. 0.25× 슬로와 ◀▶ 프레임 버튼으로 직접 확인하세요' /* v1.74b */ : '구간 안에서 공이 가장 낮아지는 지점을 못 찾았어요 — 공이 튀는 순간에서 멈추고 다시 눌러 주세요'}</div>` +
+      (!exitDir && !chNo /* v1.74b */ && typeof aiDeep !== 'undefined' && aiDeep.frames.length ? `<div class="row" style="gap:6px;margin-top:6px"><button type="button" class="btn small" onclick="aiAnalyzeDeep(true)">▶ 2초 더 보기 (이어서 분석)</button></div>` : '');
+    say = exitDir ? ('공이 화면 ' + exitDir + ' 밖으로 나갔어요' + (exitNote.includes('아웃일') ? '. 아웃일 가능성이 커요' : '')) : flying ? '공이 아직 날아가는 중이에요. 2초 더 보기를 눌러 주세요' : chNo ? '바운스를 확정하지 못했어요. 영상을 직접 확인해 주세요' /* v1.74b */ : '바운스를 못 찾았어요';
   } else {
     const b = aiTraj[bi];
     const rb = aiRefineBounce(aiTraj, bi) || b; // 보간 성공 시 정밀 착지점 사용
@@ -10584,14 +10638,17 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
     if (aiH && !aiCalUnref) { /* v1.66 */
       const vv0 = $('vj-video'); const [cx, cy] = aiGroundFix(aiH, vv0.videoWidth, vv0.videoHeight, aiMapPt(aiH, rb.x, rb.y)); // v1.55 공 중심 → 바닥 접점
       const vd = aiJudgeVerdict(cx, cy); Object.assign(aiCardInfo, { cx, cy, vd }); // v1.14 · v1.55 잰 베이스라인 폭 · v1.58 판정 기준(코트 라인/서브)
+      let netHold = null; if (vd.net) { const ns = aiNetStay(aiTraj, rb.t, aiH); if (ns.ok !== true) { netHold = { cm: vd.distCm, why: ns.ok === false ? 'far' : 'short', mx: ns.mx }; aiCardInfo.vd = null; aiCardInfo.netHold = netHold; } } /* v1.74c 네트 1m 안이어도 착지 뒤 0.3초 공이 네트 3m 안에 머문 것을 봤을 때만 '서브 네트'. 멀어졌으면(서브 치는 순간·공중 점) 또는 그 뒤를 못 봤으면 틀린 판정 대신 '네트 근처 — 확인 필요' — 박스 IN/폴트로 돌아가지 않음: 네트를 안 건드린 서브는 네트 1m 안에 못 떨어지고(10/23 확인 서브 최소 2.87m), 1m 안은 박스 길이 안이라 대개 '서브 IN'(v1.73이 진짜 네트를 IN이라 한 것과 같은 실패) */
       const cls = vd.close ? 'unsure' : (vd.call === 'IN' ? 'in' : 'out');
       const calNote = aiCalMode === 'auto-svc' ? ' · 자동 보정' : aiCalMode === 'cam' ? ' · 캠의 코트 보정' : '';
       if (vd.serve) {
         const boxName = (vd.box === 'deuce' ? '듀스' : '애드') + ' 쪽 서비스 박스';
-        html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 서브 IN' : '🔴 폴트'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">${boxName} ${vd.line}에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${calNote}</span></div>`;
-        if (!vd.sideKnown) html += `<div class="muted" style="font-size:12px;margin-top:4px">듀스·애드를 몰라(점수판을 안 쓰거나 노애드 결정 포인트) 공이 떨어진 쪽 박스로 봤어요 — 길이·옆만. 반대쪽 박스에 들어간 서브까지 보려면 판정 기준에서 듀스 쪽/애드 쪽을 고르세요.</div>`;
+        if (netHold) html += `<div class="ai-verdict unsure" style="margin-top:6px">네트 근처 — 확인 필요</div><div class="muted" style="font-size:12px;margin-top:4px">${netHold.why === 'far' ? '네트 근처 약 ' + netHold.cm + 'cm에서 바운스를 잡았지만 그 뒤 ' + AI_NET_STAY_T + '초 안에 공이 네트에서 ' + AI_NET_STAY + 'm 넘게 멀어져 착지가 아닐 수 있어요(서브를 치는 순간 등)' : '네트 근처 약 ' + netHold.cm + 'cm에 떨어진 것으로 보이지만 그 뒤 공을 ' + AI_NET_STAY_T + '초 동안 따라가지 못해 네트에 걸린 서브인지 확정하지 못했어요'} — 틀린 판정 대신 보류했어요. 0.25× 슬로와 ◀▶ 프레임 버튼으로 직접 확인하세요${calNote}</div>`; /* v1.74c */
+        else if (vd.net) html += `<div style="margin-top:6px"><span class="ai-verdict out" style="font-size:22px;padding:8px 18px">🔴 서브 네트</span> <span class="muted" style="font-size:12px">네트 근처 약 ${vd.distCm}cm에 떨어졌어요 — 네트에 걸린 서브로 봤어요${calNote}</span></div><div class="muted" style="font-size:12px;margin-top:4px">서버 쪽에 떨어졌으면 폴트, 네트를 넘어가 맞는 박스에 떨어졌으면 렛(다시 서브)이에요 — 어느 쪽인지는 확대 장면으로 확인하세요.</div>`; /* v1.74 · v1.74c 떨어진 자리로 본 것이라 사실처럼 말하지 않고, 네트 어느 쪽인지도 말하지 않음(투영이 네트 너머로 갈 수 있음 — S062 cy 11.17 vs 연구 12.02) */
+        else html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 서브 IN' : '🔴 폴트'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">${boxName} ${vd.line}에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${calNote}</span></div>`;
+        if (!vd.sideKnown && !vd.net) html += `<div class="muted" style="font-size:12px;margin-top:4px">듀스·애드를 몰라(점수판을 안 쓰거나 노애드 결정 포인트) 공이 떨어진 쪽 박스로 봤어요 — 길이·옆만. 반대쪽 박스에 들어간 서브까지 보려면 판정 기준에서 듀스 쪽/애드 쪽을 고르세요.</div>`;
         { const nt = { fallback: '캠이 서브 바운스를 따로 기록하지 못해 마지막 바운스를 봤어요', gap: '캠이 잠시 조용했다가 처음 튄 공을 서브로 골랐어요', alt: '이 서브 뒤에 캠이 서브 같은 바운스를 하나 더 봤어요(두 번째 서브였을 수 있어요)', guess: '캠이 바운스를 기록하지 못해 마지막 몇 초에서 찾았어요' }[aiJudgeNote]; if (nt) html += `<div class="muted" style="font-size:12px;margin-top:4px">${nt} — 확대 장면이 서브인지 확인하세요.</div>`; } // v1.58c
-        say = (['fallback', 'gap', 'guess', 'alt'].includes(aiJudgeNote) ? '서브 바운스인지 확인이 필요해요. ' : '') + (vd.call === 'IN' ? '서브 인' : '폴트') + (vd.close ? ', 아슬아슬해요' : '') + ', ' + vd.line + '에서 ' + vd.distCm + '센티' + (!vd.sideKnown && vd.call === 'IN' ? ', 길이와 옆만 봤어요' : '');
+        say = (['fallback', 'gap', 'guess', 'alt'].includes(aiJudgeNote) ? '서브 바운스인지 확인이 필요해요. ' : '') + (netHold ? '네트 근처예요. 판정을 보류했어요, 영상을 직접 확인해 주세요' /* v1.74c */ : vd.net ? '네트 근처 약 ' + vd.distCm + '센티에 떨어졌어요. 네트에 걸린 서브로 봤어요' /* v1.74 · v1.74c */ : (vd.call === 'IN' ? '서브 인' : '폴트') + (vd.close ? ', 아슬아슬해요' : '') + ', ' + vd.line + '에서 ' + vd.distCm + '센티' + (!vd.sideKnown && vd.call === 'IN' ? ', 길이와 옆만 봤어요' : ''));
       } else {
         html += `<div style="margin-top:6px"><span class="ai-verdict ${cls}" style="font-size:22px;padding:8px 18px">${vd.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${vd.close ? ' ?' : ''}</span> <span class="muted" style="font-size:12px">라인에서 약 ${vd.distCm}cm ${vd.call === 'IN' ? '안쪽' : '바깥'}${calNote}</span></div>`;
         say = (vd.call === 'IN' ? '인' : '아웃') + (vd.close ? ', 아슬아슬해요' : '') + ', 라인에서 ' + vd.distCm + '센티';
@@ -10609,7 +10666,7 @@ function aiFinish(t0, t1, anchor) { // v1.55 anchor = 챌린지에서 캠이 잰
   }
   if (say) aiSay(say);
   const spBi = bi; // v1.55 판정한 바운스와 같은 점
-  if (spBi >= 0) {
+  if (spBi >= 0 && !(aiCardInfo && (aiCardInfo.netHold || (aiCardInfo.vd && aiCardInfo.vd.net)))) { /* v1.74c 네트(근처) 공은 구질 참고 없음 */
     const sp = aiSpin(aiTraj, spBi);
     if (sp) html += `<div class="muted" style="font-size:11px;margin-top:6px">참고 · 구질 ${sp.label} 추정 — 화면 각도로만 본 값이라 정확하지 않아요 (낙하각 ${sp.angleIn}° · 바운스 반발 ${sp.rebound}%)</div>`; /* v1.72: 구질 분류는 신뢰 불가(9/22 검증) — 작게, '참고' */
   }
@@ -13448,11 +13505,13 @@ function ccHlPack(cutoff, recAt, vw, vh) { // 클립에 실을 공 자료: s = �
 }
 function clShotPanelLines(c) { // 구질 패널 줄들 (캠·뷰어 공용)
   if (!c) return [];
-  const l1 = c.call ? ((c.call === 'IN' ? 'IN' : 'OUT') + (c.close ? '?' : '') + (c.distCm != null ? ' · ' + c.distCm + 'cm' : '')) : '바운스';
+  if (c.net) return ['서브 네트']; if (c.nz) return ['네트 근처?']; /* v1.74c 네트(근처) 공은 구질·속도·코스·깊이 없음 — 네트 근처(확인 필요)는 대개 서브 치는 순간·공중 점을 고른 것이라 샷 정보도 틀림 */
+  const l1 = c.nz ? '네트 근처?' /* v1.74c */ : c.call ? ((c.call === 'IN' ? 'IN' : 'OUT') + (c.close ? '?' : '') + (c.distCm != null ? ' · ' + c.distCm + 'cm' : '')) : '바운스';
   const sh = c.shot || c;
   const l2 = [sh.spin || '', sh.kmh ? '약 ' + sh.kmh + 'km/h' : '', sh.course || '', sh.depth || ''].filter(Boolean).join(' · ');
   return l2 ? [l1, l2] : [l1];
 }
+function clPanelCol(c) { return c.net ? '#ff6b6b' : c.nz ? '#f1c40f' : c.call === 'IN' ? '#2ecc71' : c.call === 'OUT' ? '#ff6b6b' : '#f1c40f'; } /* v1.74c 구질 패널 색(캠·뷰어 공용) — 네트 빨강, 네트 근처(확인 필요) 노랑 */
 function clDrawTrail(g, pts, bi, scale, at) { // 꼬리: 오래될수록 옅게, 바운스 점은 노란 원
   if (!pts || pts.length < 2) return;
   const age = Math.max(0, Math.min(1, (Date.now() - at) / 4000)); const alpha = 1 - age * 0.85;
@@ -13488,13 +13547,13 @@ function clDraw() { // 오버레이: 코트 윤곽(주황) + 마지막 바운스
     clCorners.forEach((pt, i) => { const q = P(pt); g.beginPath(); g.arc(q[0], q[1], 4, 0, Math.PI * 2); g.fill(); g.font = 'bold 11px sans-serif'; g.fillText(String(i + 1), q[0] + 6, q[1] - 6); });
   }
   if (clTrail && Date.now() - clTrail.at < 4000) clDrawTrail(g, clTrail.pts, clTrail.bi, P, clTrail.at);
-  if (clLast && clOn) clDrawPanel(g, c.width, clShotPanelLines(clLast), clLast.call === 'IN' ? '#2ecc71' : clLast.call === 'OUT' ? '#ff6b6b' : '#f1c40f');
+  if (clLast && clOn) clDrawPanel(g, c.width, clShotPanelLines(clLast), clPanelCol(clLast)); /* v1.74c */
   if (clLast && Date.now() - clLast.at < 4000) {
     const q = P([clLast.px, clLast.py]);
-    const col = clLast.call === 'IN' ? '#2ecc71' : clLast.call === 'OUT' ? '#e74c3c' : '#f1c40f';
+    const col = clLast.net ? '#e74c3c' : clLast.nz ? '#f1c40f' : clLast.call === 'IN' ? '#2ecc71' : clLast.call === 'OUT' ? '#e74c3c' : '#f1c40f'; /* v1.74c */
     g.strokeStyle = col; g.lineWidth = 3; g.beginPath(); g.arc(q[0], q[1], 10, 0, Math.PI * 2); g.stroke();
     g.fillStyle = col; g.font = 'bold 13px sans-serif';
-    g.fillText(clLast.call ? (clLast.call + (clLast.close ? '?' : '') + ' ' + clLast.distCm + 'cm') : '바운스', q[0] + 14, q[1] + 5);
+    g.fillText(clLast.net ? '서브 네트' : clLast.nz ? '네트 근처?' : clLast.call ? (clLast.call + (clLast.close ? '?' : '') + ' ' + clLast.distCm + 'cm') : '바운스', q[0] + 14, q[1] + 5); /* v1.74c */
   }
 }
 // ── 라이브 판정 학습 모델 (v1.07): 프레임 차분 대신 소형 v4(ONNX, wasb.js)로 공 후보 추출. rVFC 틱에서 3장을 모아 한 번 추론(폴드3 WebGPU ≈0.3초/3장 → 초당 7~10장 표본), 추론 중엔 틱 건너뜀. 트랙은 판독 센터와 같은 aiTrackCands(정지 공 제거·속도 예측 연결). 느린 폰(900ms/3장 넘게 5회)은 프레임 차분으로 자동 전환 ──
@@ -13510,6 +13569,7 @@ let clFillOn = !!navigator.gpu, clFillUser = false; try { const s0 = localStorag
 let clFillLoose = true; /* 느슨한 방아쇠 — 시험 도구가 끌 수 있게 변수로(사용자 설정 아님) */
 let clLkAll = false, clLkLogAt = 0, clAutoHoldN = 0; /* v1.69b 자동 콜 라인 확인: clLkAll = 시험 도구가 모든 콜에 라인 확인을 기록(자동 콜이 아니어도, 사용자 설정 아님) · 보류 기록 간격 · 보류한 자동 콜 수 */
 const CL_FR_N = 36, CL_FILL_W = 0.1;
+const CL_NET_WAIT = 1.0; let clNetWaitT = 0, clNetPend = null; /* v1.74c 서브 후보가 네트 1m 안이면 착지 뒤 0.3초 자취(aiNetStay)가 모일 때까지 그 바운스를 붙잡아 두고(clNetPend = clDetect가 만든 c — 감지 때 점수판 상태 그대로) 콜을 최대 1초 미룸 — 3장 묶음 간격 0.33초 + 추론 0.3초. clNetWaitT = 미루기 시작 시각(시험 도구) */
 let clFR = null, clFRk = 0, clFRLastT = 0, clFillBusy = false, clFillN = 0, clFillOkN = 0, clFillTrip = 0, clFillMs = [], clFillOff = '', clFillTried = [], clFillBattLow = false, clFillBad = []; /* v1.69b clFillBad = 최근 다시 보기 8번이 화면이 듬성해서(폰이 바쁨) 실패했나 */
 let clMInf = [], clMGap = [], clMLastEnd = 0, clMGapSkip = false; /* 진단: 3장 추론 시간(ms)·묶음 사이 빈칸(초) 최근 20번 */
 function clFillSet(on) { clFillOn = !!on; clFillUser = true; try { localStorage.setItem('tm-cl-fill', clFillOn ? '1' : '0'); } catch (e) {} if (!clFillOn) clFR = null; }
@@ -13814,7 +13874,7 @@ function clDriftTick() { // v1.59: 거치대가 끄덕여도 보정이 화면과
 function clServePick(isServe, mC, sinceScore, sc) { // v1.58b 서브 후보 = 점수판 이벤트 뒤 첫 바운스, 또는 3.5초 넘게 바운스가 없다가 처음 나온 바운스(첫 서브 폴트를 점수판에 안 넣어도 두 번째 서브)
   const sAt = sc ? sc.at : ccLastScoreAt, sSide = sc ? sc.side : ccServeSide, sSet = sc ? sc.sideSet : ccServeSideSet; /* v1.69b sc = 감지 때 점수판 상태(clEmitCall) — 다시 보는 사이 온 점수 이벤트는 다음 구간 */
   const prevB = clPrevBounceAt; clPrevBounceAt = clLast.bounceAt;
-  if (isServe) { try { const sv = mC ? aiServeVerdict(mC[0], mC[1], sSide) : null; clLast.svFault = sv ? (sv.call === 'FAULT' || !!sv.close) : null; } catch (e) { clLast.svFault = null; } } // v1.58c 이 서브가 폴트로 보이나 · v1.58d 보정이 없거나 아슬아슬하면 null = 모름
+  if (isServe) { try { const sv = mC ? aiServeVerdict(mC[0], mC[1], sSide) : null; clLast.svFault = sv ? (sv.call === 'NET' ? (clLast.net ? true : null) /* v1.74c 관문을 못 넘은 네트 근처 = 모름 · v1.74d 라이브는 net을 내지 않아(nz만) 늘 null — null도 true처럼 다음 조용한 바운스를 두 번째 서브 후보로 넘김(clServeB.svFault !== false) */ : (sv.call === 'FAULT' || !!sv.close)) : null; /* v1.74 네트 = 폴트 쪽(다음 조용한 뒤 바운스를 두 번째 서브로) */ } catch (e) { clLast.svFault = null; } } // v1.58c 이 서브가 폴트로 보이나 · v1.58d 보정이 없거나 아슬아슬하면 null = 모름
   const scoreServe = clServeB && clServeB.how === 'score' && clServeB.bounceAt >= sAt && clLast.bounceAt - clServeB.bounceAt <= 30000; // 같은 포인트(점수판 서브 뒤 30초 안)
   const quiet = !prevB || clLast.bounceAt - prevB >= 3500, sideFresh = sinceScore <= 45; // v1.58d 점수판이 알려 준 쪽은 점수 뒤 45초 안의 서브에만
   let take = isServe;
@@ -13823,6 +13883,16 @@ function clServePick(isServe, mC, sinceScore, sc) { // v1.58b 서브 후보 = �
 }
 function clDetect(tw, th, v) {
   const track = clModelLive ? clModelTrack(clFrames, tw) : clPickTrack(clFrames, tw); // v1.07
+  if (clNetPend) { /* v1.74c 미뤄 둔 서브 후보(네트 1m 안) — 바운스를 다시 고르지 않고 붙잡은 그 바운스로 관문(aiNetStay)을 다시 봄: 지금 트랙에 그 착지 표본이 그대로 있으면 그 뒤 표본까지, 없으면(트랙이 바뀜·놓인 공으로 지워짐) 붙잡아 둔 트랙으로. 아직 모자라고 착지 1초 안이면 더 기다리고, 아니면 그 바운스를 콜(clEmitCall: 머묾 = 서브 네트, 아니면 네트 근처 확인 필요). 다시 고르면 네트 공이 카메라 쪽으로 와 가장 낮은 점이 트랙 끝이 되거나(10/23 S319) 놓인 공으로 지워져 콜이 아예 없어졌음(검토 모의: S319 라이브 NET 11번 중 7번). 다시 보기는 안 함(고리 버퍼 1.2초가 착지 앞을 놓쳤을 수 있음) */
+    const P = clNetPend.c, nowS = performance.now() / 1000;
+    if (P.v !== v || clNetPend.vw !== v.videoWidth || clNetPend.vh !== v.videoHeight || nowS - P.t > 3) { clNetPend = null; clNetWaitT = 0; } /* 영상 크기·카메라가 바뀜(보정 좌표가 다름)·너무 오래됨 = 버림 */
+    else {
+      const bp = P.pts[P.bi], tp = track && track.pts, j = tp ? tp.findIndex(p => p.t === bp.t && Math.abs(p.x - bp.x) < 1 && Math.abs(p.y - bp.y) < 1) : -1;
+      const c2 = j >= 0 ? Object.assign({}, P, { pts: tp, bi: j }) : P;
+      if (aiNetStay(c2.pts, P.t, clH, v.videoWidth / P.tw, v.videoHeight / P.th).ok === null && nowS - P.t < CL_NET_WAIT) return;
+      clNetPend = null; clNetWaitT = 0; clEmitCall(c2); return;
+    }
+  }
   const loose = clModelLive && clFillLooseOn(); /* v1.69 느슨한 방아쇠: 트랙 4점·착지 앞뒤 1점 V자도 — 라인 가까운 바운스를 착지 다시 보기가 확인할 때만 콜(지도 B 모의: 드롭 바른 순간 콜 19→56%, 오차 1.8cm) */
   if (!track || track.pts.length < (loose ? 4 : 6)) return;
   const pts = track.pts;
@@ -13830,7 +13900,8 @@ function clDetect(tw, th, v) {
   let bi;
   if (clModelLive) { bi = 0; pts.forEach((p, i) => { if (p.y > pts[bi].y) bi = i; }); if (bi === 0 || bi === pts.length - 1) bi = -1; } // 모델 경로: 표본이 성겨 이동평균이 한 칸 밀림 → 원시 최대점
   else bi = aiBounceIdx(pts.map(p => p.y));
-  const strict = !(bi < 3 || bi > pts.length - 3) && !(pts[bi].y - pts[bi - 2].y < 3 || pts[bi].y - pts[bi + 2].y < 2); // 하강·반등 양쪽 표본이 있고 진짜 내려왔다 튀어오른 모양
+  const biRaw = bi; let kinkB = false; if (clModelLive && bi > 2) { const k = clLateKink(pts, bi); if (k >= 0) { bi = k; kinkB = true; } } /* v1.74 */
+  const strict = kinkB || (!(bi < 3 || bi > pts.length - 3) && !(pts[bi].y - pts[bi - 2].y < 3 || pts[bi].y - pts[bi + 2].y < 2)); // 하강·반등 양쪽 표본이 있고 진짜 내려왔다 튀어오른 모양
   if (!strict && !(loose && bi >= 1 && bi <= pts.length - 2 && pts[bi].y - pts[bi - 1].y >= 2 && pts[bi].y - pts[bi + 1].y >= 1)) return;
   if (performance.now() / 1000 - pts[bi].t < 0.12) return; // 반등 직후 표본이 더 모이면 다음 틱에
   const rb = aiRefineBounce(pts, bi) || pts[bi];
@@ -13841,17 +13912,24 @@ function clDetect(tw, th, v) {
   const held = clCalHeld(); /* v1.67 다듬지 못한 자동 보정 = 판정 쉼(바운스·시각·꼬리·하이라이트 공 기록은 그대로) */
   if (clH && !held) mC = aiGroundFix(clH, v.videoWidth, v.videoHeight, aiMapPt(clH, px, py)); // v1.55 바닥 접점
   if (mC && Math.max(-mC[0], mC[0] - AI_COURT_W, -mC[1], mC[1] - AI_COURT_L) > 2.5) { clFrames = clFrames.filter(f => f.t > rb.t + 0.05); return; } // v1.25: 코트 밖 2.5m 넘게 찍히면 공중 타구(발리)의 투영 — 바운스 아님
-  const c = { pts, bi, tw, th, v, rb, t: rb.t, px, py, mC, held, strict, src: clModelLive ? 'sparse' : 'diff', why: null, sc: { at: ccLastScoreAt, n: clCallsSinceScore, side: ccServeSide, sideSet: ccServeSideSet }, detAt: Date.now() }; /* v1.69b 감지 때 점수판 상태(다시 보는 사이 점수가 들어와도 이 값으로) */
+  const c = { pts, bi, tw, th, v, rb, t: rb.t, px, py, mC, held, strict, cut: kinkB ? pts[biRaw].t : 0, src: clModelLive ? 'sparse' : 'diff', why: null, sc: { at: ccLastScoreAt, n: clCallsSinceScore, side: ccServeSide, sideSet: ccServeSideSet }, detAt: Date.now() }; /* v1.69b 감지 때 점수판 상태(다시 보는 사이 점수가 들어와도 이 값으로) */
+  if (strict && mC && Math.abs(mC[1] - AI_COURT_L / 2) <= AI_NET_ZONE && clServeCandNow(mC) && performance.now() / 1000 - rb.t < CL_NET_WAIT && aiNetStay(pts, rb.t, clH, sx, sy).ok === null) { clNetPend = { c, vw: v.videoWidth, vh: v.videoHeight }; clNetWaitT = performance.now() / 1000; return; } /* v1.74c 서브 후보가 네트 1m 안인데 착지 뒤 0.3초 자취가 아직 모자람('서브 네트'는 머문 것을 봤을 때만 — clEmitCall) — 성긴 표본은 착지 0.12초 뒤에 콜하므로 이 바운스를 붙잡고 다음 틱에(clDetect 맨 앞) 최대 CL_NET_WAIT초. 뚜렷한 바운스만(느슨한 방아쇠는 예전대로 다시 보기) */
   if (clModelLive && clFillLive() && clFR && window.WASB && clFillNear(mC, clServeCandNow(mC))) { clFillRun(c); return; } /* v1.69 착지 다시 보기 → 끝나면 clEmitCall */
   if (!strict) { clFillTried.push(rb.t); while (clFillTried.length > 8) clFillTried.shift(); return; } /* v1.69 느슨한 방아쇠는 다시 보기가 확인할 때만 콜 */
   clEmitCall(c);
+}
+function clLateKink(pts, bi) { /* v1.74 라이브 성긴 표본(640폭): 가장 낮은 점 bi 앞 0.15~0.8초에 뚜렷한 착지 꺾임(aiBounceKink, 묶음 사이 빈칸 0.5초까지)이 있고 그 뒤로 튀어 오르지 않고(화면 y가 3px 넘게 줄지 않음) bi까지 내려오기만 했으면
+     = 높은 가까운 캠에서 튄 공이 카메라 쪽으로 오며 뜬 것 — bi는 받는 사람 타구·화면 밖 직전(챌린지의 늦은 최대점과 같은 실패) → 꺾임 표본 | -1 */
+  const k = aiBounceKink(pts, pts[bi].t - 0.8, pts[bi].t - 0.15, 0.5); if (k < 0 || k + 1 >= bi) return -1;
+  for (let j = k + 2; j <= bi; j++) if (pts[j - 1].y - pts[j].y > 3) return -1;
+  return k;
 }
 function clEmitCall(c) { /* v1.69 clDetect의 콜 내기 부분을 떼어 냄 — 성긴 표본('sparse'·프레임 차분 'diff')과 착지 다시 보기('fill')가 같이 씀. c.t = 착지 시각(perf 초), c.px·py = 원래 영상 px, c.pts·bi = 성긴 트랙(640폭 — 꼬리·샷 정보·학습 샘플) */
   const { pts, bi, tw, th, v, px, py, mC, held } = c;
   const sx = v.videoWidth / tw, sy = v.videoHeight / th;
   const vd = mC ? aiVerdict(mC[0], mC[1], undefined, clBaseW) : null; // v1.55 잰 베이스라인 폭
   clLastCall = performance.now() / 1000; clNCalls++;
-  clFrames = clFrames.filter(f => f.t > c.t + 0.05); // 같은 바운스 재감지 방지
+  clFrames = clFrames.filter(f => f.t > Math.max(c.t, c.cut || 0) + 0.05); // 같은 바운스 재감지 방지 · v1.74 늦은 최대점 대신 앞의 꺾임을 골랐으면 그 최대점(받는 사람 타구)까지 버림
   const at = Date.now();
   const bounceAt = at - Math.round((performance.now() / 1000 - c.t) * 1000); // 벽시계 기준 착지 시각 (v1.14 챌린지 창)
   const shot = clShotInfo(pts, bi, sx, sy, px, py); // 🌀 스핀·속도·코스·깊이 (v0.64, 참고치)
@@ -13860,12 +13938,13 @@ function clEmitCall(c) { /* v1.69 clDetect의 콜 내기 부분을 떼어 냄 �
   const preScore = bounceAt < sc.at; /* v1.69 점수판 이벤트보다 먼저 튄 공(앞 포인트) — 착지 다시 보기로 콜이 늦게 나가도 서브 세기·서브 후보에 넣지 않음 */
   const behindB = clBehindB(mC); /* v1.59 베이스라인 뒤에서 튄 공(서브 전 공 튀기기·아웃 공)은 서브 후보가 아님 */
   const isServe = !preScore && !behindB && (scNow ? clCallsSinceScore : sc.n) === 0 && sinceScore >= 3 && sinceScore <= 45; if (!behindB && !preScore && scNow) clCallsSinceScore++;
+  let svNet = false, svNear = false, netCm = null, netSeen = null; try { const sv0 = isServe && mC ? aiServeVerdict(mC[0], mC[1], sc.side) : null; if (sv0 && sv0.net) { netCm = sv0.distCm; netSeen = aiNetStay(pts, c.t, clH, sx, sy).ok; svNear = true; } } catch (e) {} /* v1.74d 라이브는 빨간 '서브 네트'(svNet)를 내지 않음 — 관문이 머묾을 봐도(netSeen true) 노란 '네트 근처?'(nz)만: 10/24 서브 라이브 점검에서 빨강이 맞힘 1(S145)·IN 서브에 거짓 1(S125). svNet은 늘 false(아래 상태 줄·메시지·clLast는 nz 쪽으로), 챌린지·판독 센터 네트 카드는 그대로 */ /* v1.74 서브 후보가 네트 1m 안 = 서브 네트(상태 줄·판정 메시지 net — 자동 콜 소리는 없음, 폴트 쪽) · v1.74c 착지 뒤 0.3초 공이 네트 3m 안에 머문 것을 봤을 때만(aiNetStay) — 아니면 '네트 근처 — 확인 필요'(nz: 서브 기록은 모름, 자동 콜 없음) */
   const cmpp = mC ? clCmPerPx(px, py, v) : 0, cmpm = cmpp * v.videoWidth / ((window.WASB && WASB.W) || 512); /* v1.69b 문턱은 모델 1칸(512폭)의 cm */
   let auto = clDualNearOk(mC) ? clAutoCallFor(vd, mC, isServe, c.src, cmpm, sc.side) : null, lk = null, autoHold = null; // v0.84 · v1.27 두 캠이면 내 쪽 코트 절반만 콜 · v1.69 그 자리 1px 크기 문턱
   if (auto) { lk = clAutoLineOk(v, mC, isServe, sc.side, c.src, cmpm, auto); if (!lk.ok) { autoHold = auto; auto = null; clAutoHoldN++; clAutoHoldLog(lk, autoHold, vd); } } /* v1.69b 콜을 정한 라인이 지금 화면에서 보정 자리에 있을 때만 외침 — 카메라가 흔들려 보정이 낡으면(10/13 아이폰: 가까운 베이스라인이 한 영상 안에서 화면 y 591~707px로 오르내림) IN 드롭을 35~48cm 밖으로 봐 '아웃!'을 외쳤음 */
   else if (clLkAll && mC) { const ln = clLineOf(mC, isServe, sc.side); lk = clLineCheck(v, clH, ln, ln.ax === 'y' ? mC[0] : mC[1]); } /* 시험 도구 기록 */
   if (auto) clCallSay(auto === 'OUT' ? '아웃!' : '폴트!');
-  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt, src: c.src };
+  clLast = { at, px, py, call: vd ? vd.call : null, close: !!(vd && vd.close), distCm: vd ? vd.distCm : 0, shot, auto, bounceAt, src: c.src, net: svNet, nz: svNear, netCm }; /* v1.74c */
   try { if (!behindB && !preScore && (scNow || isServe)) clServePick(isServe, mC, sinceScore, sc); } catch (e) {} /* v1.69b 감지 뒤 점수 이벤트가 왔으면 서브만(앞 구간 값으로) */ // v1.58b 서브 후보 · v1.58d 따로 뺌(clServePick)
   clTrail = { at, pts: pts.map(p => [p.x * sx, p.y * sy]), bi }; // v0.78 꼬리
   clHlLogAdd(pts.map(p => ({ t: at - Math.round((performance.now() / 1000 - p.t) * 1000), x: p.x * sx, y: p.y * sy })), { t: clLast.bounceAt, x: px, y: py, cx: mC ? mC[0] : null, cy: mC ? mC[1] : null, call: vd ? vd.call : null, distCm: vd ? vd.distCm : 0, close: !!(vd && vd.close) }); // v1.25 세로 하이라이트용
@@ -13874,8 +13953,8 @@ function clEmitCall(c) { /* v1.69 clDetect의 콜 내기 부분을 떼어 냄 �
   const trailStep = Math.max(1, Math.ceil(trailN.length / 24));
   const trail = trailN.filter((_, i) => i % trailStep === 0 || i === bi || i === trailN.length - 1);
   clDraw();
-  clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)' : held ? '바운스 감지 (보정 확인 필요 — 판정 쉬는 중)' : '🟡 바운스 감지 (보정 없음)') + (isServe ? ' · 서브' : '') + (c.src === 'fill' ? ' · 착지 다시 봄' : '') + (autoHold ? ' · 자동 콜 보류(라인 ' + (lk.why === 'moved' || lk.why === 'far' ? '어긋남' : '안 보임') + ')' : '') + clShotText(shot) + ' · 누적 ' + clNCalls + '회');
-  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: shot.spin, kmh: shot.kmh, course: shot.course, depth: shot.depth, cy: mC ? Math.round(mC[1] * 100) / 100 : null, cx: mC ? Math.round(mC[0] * 100) / 100 : null, bounceAt: clLast.bounceAt, near: mC ? mC[1] >= AI_COURT_L / 2 : null, dual: clDualOn(), hold: held ? 'cal' : null, src: c.src, fw: c.why || null, lat: Math.round((performance.now() / 1000 - c.t) * 100) / 100, cmpp: cmpp ? Math.round(cmpp * 100) / 100 : null, cmpm: cmpm ? Math.round(cmpm * 100) / 100 : null, lk: lk ? { ok: !!lk.ok, s: lk.px != null ? Math.round(lk.s * 1000) / 10 : null, n: lk.n, c: lk.c, w: lk.why || null } : null, ahold: autoHold || null } }); /* v1.69b lk(라인 확인: s cm = 진짜 라인이 보정보다 바깥쪽으로)·ahold(보류한 자동 콜) 추가만 */ /* v1.69 src(착지: fill 다시 봄 | sparse 성긴 표본 | diff 프레임 차분)·fw(다시 보기 실패 이유)·lat(착지 → 콜 초)·cmpp 추가만 — 뷰어는 모르는 칸을 무시 */ /* v1.67 hold */ // v1.27 cx·bounceAt·near
+  clStatus((auto ? (auto === 'OUT' ? '📣 아웃! ' : '📣 폴트! ') : '') + (vd ? (svNet ? '🔴 서브 네트 (네트 근처 ' + netCm + 'cm)' : svNear ? '🟡 네트 근처 ' + netCm + 'cm (확인 필요)' /* v1.74c */ : (vd.call === 'IN' ? '🟢 IN' : '🔴 OUT') + (vd.close ? ' (아슬아슬 ' : ' (') + vd.distCm + 'cm)') : held ? '바운스 감지 (보정 확인 필요 — 판정 쉬는 중)' : '🟡 바운스 감지 (보정 없음)') + (isServe && !svNet ? ' · 서브' : '') + (c.src === 'fill' ? ' · 착지 다시 봄' : '') + (autoHold ? ' · 자동 콜 보류(라인 ' + (lk.why === 'moved' || lk.why === 'far' ? '어긋남' : '안 보임') + ')' : '') + (svNet || svNear ? '' : clShotText(shot)) /* v1.74c 네트(근처) 공은 구질·속도·코스·깊이 없음 */ + ' · 누적 ' + clNCalls + '회');
+  if (ccChan) ccChan.send({ type: 'broadcast', event: 'call', payload: { at, call: vd ? vd.call : null, distCm: vd ? vd.distCm : null, close: !!(vd && vd.close), singles: !!(vd && vd.singles), x: px / v.videoWidth, y: py / v.videoHeight, n: clNCalls, auto, serve: isServe, net: svNet, nz: svNear, netCm: svNet || svNear ? netCm : null, nzw: svNear ? (netSeen === true ? 'stay' : netSeen === false ? 'far' : 'short') : null /* v1.74d 네트 근처의 관문 결과(stay = v1.74c였으면 빨간 서브 네트 · far 멀어짐 · short 자취 모자람) — 기록·시험용 */, trail, bi: trail.findIndex(q => q[0] === trailN[bi][0] && q[1] === trailN[bi][1]), spin: svNet || svNear ? null : shot.spin, kmh: svNet || svNear ? null : shot.kmh, course: svNet || svNear ? null : shot.course, depth: svNet || svNear ? null : shot.depth, /* v1.74c nz = 네트 근처(확인 필요)·netCm = 네트에서 cm·네트(근처) 공은 샷 정보 없음 — 옛 뷰어는 모르는 칸을 무시 */ cy: mC ? Math.round(mC[1] * 100) / 100 : null, cx: mC ? Math.round(mC[0] * 100) / 100 : null, bounceAt: clLast.bounceAt, near: mC ? mC[1] >= AI_COURT_L / 2 : null, dual: clDualOn(), hold: held ? 'cal' : null, src: c.src, fw: c.why || null, lat: Math.round((performance.now() / 1000 - c.t) * 100) / 100, cmpp: cmpp ? Math.round(cmpp * 100) / 100 : null, cmpm: cmpm ? Math.round(cmpm * 100) / 100 : null, lk: lk ? { ok: !!lk.ok, s: lk.px != null ? Math.round(lk.s * 1000) / 10 : null, n: lk.n, c: lk.c, w: lk.why || null } : null, ahold: autoHold || null } }); /* v1.69b lk(라인 확인: s cm = 진짜 라인이 보정보다 바깥쪽으로)·ahold(보류한 자동 콜) 추가만 */ /* v1.69 src(착지: fill 다시 봄 | sparse 성긴 표본 | diff 프레임 차분)·fw(다시 보기 실패 이유)·lat(착지 → 콜 초)·cmpp 추가만 — 뷰어는 모르는 칸을 무시 */ /* v1.67 hold */ // v1.27 cx·bounceAt·near
   clSampleUpload(pts, bi, tw, th, v, vd, shot, mC); // 🧪 학습 샘플 (비동기, 실패해도 판정엔 영향 없음)
   if (clAutoCut && vd && vd.close && at - clLastAutoCut > CL_AUTOCUT_GAP) {
     clLastAutoCut = at;
@@ -13977,7 +14056,7 @@ function cvCall(p, slot) {
     spin: SPINS.includes(p.spin) ? p.spin : null, kmh: Number.isFinite(p.kmh) && p.kmh >= 15 && p.kmh <= 170 ? Math.round(p.kmh) : null,
     trail: Array.isArray(p.trail) ? p.trail.slice(0, 40).filter(q => Array.isArray(q) && q.length === 2 && q.every(v => Number.isFinite(v) && v >= 0 && v <= 1)) : [],
     course: COURSES.includes(p.course) ? p.course : null, depth: DEPTHS.includes(p.depth) ? p.depth : null,
-    slot, cy: Number.isFinite(p.cy) ? p.cy : null, cx: Number.isFinite(p.cx) ? p.cx : null, near: typeof p.near === 'boolean' ? p.near : null, tb: cvBounceT(p, slot), synced: !!cvClock[slot], rx: Date.now(), farOnly: false, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve, hold: p.hold === 'cal' }); /* v1.67 캠이 보정 확인 필요로 판정을 쉼 */
+    slot, cy: Number.isFinite(p.cy) ? p.cy : null, cx: Number.isFinite(p.cx) ? p.cx : null, near: typeof p.near === 'boolean' ? p.near : null, tb: cvBounceT(p, slot), synced: !!cvClock[slot], rx: Date.now(), farOnly: false, alt: null, conflict: false, auto: p.auto === 'OUT' ? 'OUT' : p.auto === 'FAULT' ? 'FAULT' : null, serve: !!p.serve, net: !!(p.net && p.serve), nz: !!(p.nz && p.serve && !p.net), netCm: Number.isFinite(p.netCm) ? Math.round(p.netCm) : null, hold: p.hold === 'cal' }); /* v1.74c nz·netCm */ /* v1.74 net = 서브 네트 */ /* v1.67 캠이 보정 확인 필요로 판정을 쉼 */
   if (cvCalls[0].auto && Date.now() - cvAutoSaid > 1500) { cvAutoSaid = Date.now(); clCallSay(cvCalls[0].auto === 'OUT' ? '아웃!' : '폴트!'); toast(cvCalls[0].auto === 'OUT' ? '📣 아웃!' : '📣 폴트!'); } // v0.84 본폰도 외침 · v1.27 두 캠이 같은 콜을 보내도 한 번만
   // 두 캠이 같은 바운스(0.8초 안)를 잡았으면 하나로 합침 — 공에 가까운 캠(코트 y 큼)의 판정을 우선, 다르면 ⚠️ 표시 (v0.65)
   if (cvChanB || cvCalls.some(c => c.slot === 'B')) { // v1.27: 시계 맞춘 착지 시각 0.5초 안 + 같은 자리(3m) → 같은 바운스, 가까운 캠 우선
@@ -13987,7 +14066,7 @@ function cvCall(p, slot) {
       const c = cvCalls[i];
       if (c.slot === slot || c.alt || !cvDualSame(me, c)) continue;
       const prim = cvDualPrimary(me, c), sec = prim === me ? c : me;
-      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm, hold: !!sec.hold }; prim.serve = !!(prim.serve || sec.serve); // v1.58c 합쳐도 서브 표시 유지
+      prim.alt = { slot: sec.slot, call: sec.call, distCm: sec.distCm, hold: !!sec.hold }; prim.serve = !!(prim.serve || sec.serve); { const pn = prim.net; prim.net = !!(pn || sec.net); if (!pn && sec.net) prim.netCm = sec.netCm; prim.nz = !prim.net && !!(prim.nz || sec.nz); if (prim.nz && prim.netCm == null) prim.netCm = sec.netCm; } /* v1.74c 네트도 서브처럼 합침 — 가까운 캠이 먼저 IN을 보냈으면 다른 캠의 '서브 네트'가 묻혀 'IN · 서브'로 보였음 */ // v1.58c 합쳐도 서브 표시 유지
       prim.conflict = !!(prim.call && sec.call && prim.call !== sec.call);
       prim.farOnly = prim.near === false && sec.near !== true; /* v1.67 가까운 캠이 판정을 못 냈으면(보정 없음·쉼) 먼 쪽 캠만 본 것 */
       cvCalls = cvCalls.filter(x => x !== sec);
@@ -14009,14 +14088,14 @@ function cvRenderCalls() {
   if (!last || !feed) return;
   if (!cvCalls.length) { last.innerHTML = ''; feed.innerHTML = ''; const su = $('cc-call-sum'); if (su) su.innerHTML = ''; return; }
   const fmt = at => { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()); };
-  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.call ? `<span class="ai-verdict ${(c.close || c.farOnly) ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}${c.farOnly ? ' (먼 쪽 캠만 봄)' : ''}</span>` : c.hold ? '<span class="ai-verdict unsure">보정 확인 필요</span>' : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
+  const badge = c => (c.auto ? '<span class="ai-verdict out">📣 ' + (c.auto === 'OUT' ? '아웃 콜' : '폴트 콜') + '</span> ' : '') + (c.net ? '<span class="ai-verdict out">🔴 서브 네트</span>' /* v1.74 */ : c.nz ? '<span class="ai-verdict unsure">🟡 네트 근처</span>' /* v1.74c */ : c.call ? `<span class="ai-verdict ${(c.close || c.farOnly) ? 'unsure' : c.call === 'IN' ? 'in' : 'out'}">${c.call === 'IN' ? '🟢 IN' : '🔴 OUT'}${c.close ? ' (아슬아슬)' : ''}${c.farOnly ? ' (먼 쪽 캠만 봄)' : ''}</span>` : c.hold ? '<span class="ai-verdict unsure">보정 확인 필요</span>' : '<span class="ai-verdict unsure">🟡 바운스</span>') + (c.serve && !c.net ? ' <span class="muted" style="font-size:11px">서브</span>' : '');
   const c0 = cvCalls[0];
   const shotStr = c => [c.spin ? '🌀 ' + c.spin : '', c.kmh ? '약 ' + c.kmh + 'km/h' : '', c.course || '', c.depth || ''].filter(Boolean).join(' · ');
   const shotShort = c => [c.spin ? (c.spin[0] === '탑' ? 'T' : c.spin[0] === '슬' ? 'S' : 'F') : '', c.kmh ? c.kmh : '', c.course ? (c.course === '크로스' ? '✕' : '│') : '', c.depth ? c.depth[0] : ''].filter(Boolean).join('');
   const slotStr = c => (cvChanB || c.slot === 'B') ? '<b>' + c.slot + '캠</b>' + (c.alt ? (c.conflict ? ' <span class="ai-verdict unsure" style="font-size:11px;padding:2px 8px">⚠️ ' + c.alt.slot + '캠은 ' + (c.alt.call || '바운스만') + '</span>' : ' <span class="muted">(' + c.alt.slot + (c.alt.call || !c.call ? '캠도 같음)' : '캠은 ' + (c.alt.hold ? '보정 확인 필요' : '바운스만') + ')') + '</span>') : '') + ' · ' : ''; /* v1.67 */
-  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${slotStr(c0)}${c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : c0.hold ? '캠 보정 확인 필요(판정 쉬는 중)' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
-    (shotStr(c0) ? `<div style="font-size:12.5px;margin-top:3px">${shotStr(c0)} <span class="muted" style="font-size:11px">(폰 1대 참고치)</span></div>` : '');
-  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + ((cvChanB || c.slot === 'B') ? c.slot + (c.conflict ? '⚠️' : '') + ' ' : '') + (c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
+  last.innerHTML = `<div class="row" style="gap:8px;align-items:center">${badge(c0)}<span class="muted" style="font-size:12px;flex:1">${slotStr(c0)}${c0.net ? '네트 근처' + (c0.netCm != null ? ' 약 ' + c0.netCm + 'cm' : '') + '에 떨어졌어요 — 네트에 걸린 서브로 봤어요' /* v1.74c */ : c0.nz ? '네트 근처' + (c0.netCm != null ? ' 약 ' + c0.netCm + 'cm' : '') + ' — 네트에 걸린 서브인지 확인 필요' : c0.distCm != null ? '라인에서 ' + c0.distCm + 'cm' : c0.hold ? '캠 보정 확인 필요(판정 쉬는 중)' : '캠 보정 없음'} · ${fmt(c0.at)}${c0.singles ? ' · 단식' : ''}</span><button type="button" class="tag-btn" onclick="cvCut()">✂️ 이 순간</button></div>` +
+    (shotStr(c0) && !c0.net && !c0.nz /* v1.74c */ ? `<div style="font-size:12.5px;margin-top:3px">${shotStr(c0)} <span class="muted" style="font-size:11px">(폰 1대 참고치)</span></div>` : '');
+  feed.innerHTML = cvCalls.length > 1 ? '<div class="muted" style="font-size:11.5px">' + cvCalls.slice(1, 12).map(c => fmt(c.at) + ' ' + ((cvChanB || c.slot === 'B') ? c.slot + (c.conflict ? '⚠️' : '') + ' ' : '') + (c.net ? '🔴네트' : c.nz ? '🟡네트?' /* v1.74c */ : c.call ? (c.call === 'IN' ? '🟢' : '🔴') + (c.close ? '?' : '') + ' ' + c.distCm + 'cm' : '🟡') + (shotShort(c) && !c.net && !c.nz ? ' ' + shotShort(c) : '')).join(' · ') + '</div>' : '';
   // 누적 요약 (샷 정보 있는 것만)
   const withShot = cvCalls.filter(c => c.spin || c.kmh);
   const sum = $('cc-call-sum');
@@ -14041,7 +14120,7 @@ function cvDrawOverlay() { // 라이브 썸네일 위: 꼬리(4초) + 구질 패
   if (!cvChan) return;
   if (cvTrail && Date.now() - cvTrail.at < 4000) clDrawTrail(g, cvTrail.pts, cvTrail.bi, q => [q[0] * W, q[1] * H], cvTrail.at);
   const c0 = cvCalls.find(x => x.slot === 'A') || cvCalls[0];
-  if (c0) clDrawPanel(g, W, clShotPanelLines(c0), c0.call === 'IN' ? '#2ecc71' : c0.call === 'OUT' ? '#ff6b6b' : '#f1c40f');
+  if (c0) clDrawPanel(g, W, clShotPanelLines(c0), clPanelCol(c0)); /* v1.74c */
 }
 function cvFrame(p) {
   if (!p || !p.d || typeof p.d !== 'string' || !p.d.startsWith('data:image/')) return;
