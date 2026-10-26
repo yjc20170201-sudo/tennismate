@@ -49,10 +49,28 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   function tmHardReload() { // 주소에 시각을 붙여 HTTP 캐시를 건너뛰고 다시 연다 (앱은 쿼리 문자열을 쓰지 않음)
     try { location.replace(location.pathname + '?u=' + Date.now() + location.hash); } catch (e) { location.reload(); }
   }
+  function tmShowNotice(n) { // v1.76 C8: 앱 안 공지 — version.json의 notice {id, text, until: 'YYYY-MM-DD', url: 'https://app.tennismate.kr/…'}, 닫으면 id 기억(tm-notice-seen). 클럽캠이 켜진 캠 폰엔 안 띄움
+    if (!n || typeof n !== 'object' || !n.id || !n.text) return;
+    if (n.until && /^\d{4}-\d{2}-\d{2}$/.test(String(n.until)) && Date.now() > Date.parse(n.until + 'T23:59:59+09:00')) return;
+    try { if (localStorage.getItem('tm-notice-seen') === String(n.id)) return; } catch (e) {}
+    try { if (typeof ccStream !== 'undefined' && ccStream) return; } catch (e) {}
+    if (!document.body || document.getElementById('tm-notice')) return;
+    const d = document.createElement('div'); d.id = 'tm-notice'; d.setAttribute('role', 'status');
+    d.style.cssText = 'position:fixed;left:8px;right:8px;bottom:76px;z-index:10000;max-width:640px;margin:0 auto;background:#1b5e20;color:#fff;border-radius:12px;padding:10px 52px 10px 14px;font-size:13px;line-height:1.5;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+    const t = document.createElement('div'); t.textContent = String(n.text).slice(0, 300); d.appendChild(t);
+    const u = String(n.url || '');
+    if (/^https:\/\/app\.tennismate\.kr\/[^\s"'<>`]*$/.test(u)) { const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '자세히 보기'; a.style.cssText = 'color:#d4e94e;font-weight:700'; d.appendChild(a); }
+    const x = document.createElement('button'); x.type = 'button'; x.textContent = '닫기'; x.setAttribute('aria-label', '공지 닫기');
+    x.style.cssText = 'position:absolute;right:6px;top:6px;background:none;border:0;color:#fff;font-size:12px;font-weight:700;padding:4px 6px;cursor:pointer';
+    x.onclick = () => { try { localStorage.setItem('tm-notice-seen', String(n.id)); } catch (e) {} d.remove(); };
+    d.appendChild(x); document.body.appendChild(d);
+  }
+  window.__tmShowNotice = tmShowNotice; // 테스트 훅
   async function tmCheckVer() {
     try {
       const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
       const j = await r.json(); const v = j.build; const cur = tmCurVer();
+      try { tmShowNotice(j.notice); } catch (e) {} /* v1.76 C8 */
       let stale = false;
       if (j.app && cur && j.app !== cur) stale = true;
       if (firstBuild === null) firstBuild = v; else if (v !== firstBuild) stale = true;
@@ -670,6 +688,22 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 .cs-choice label, .cc-consent label { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; }
 .cc-consent { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-top: 8px; display: grid; gap: 6px; font-size: 13px; }
 .cc-consent .need { outline: 2px solid #e53935; border-radius: 6px; }
+/* v1.77 작은 고침(patch-v177-fixes): ① 판독 탭 선택 상자(#ai-model·#ai-judge 등)가 폰 폭을 넘어 화면이 옆으로 밀리던 것 — flex 항목은 기본 min-width:auto(가장 긴 항목 글자 폭)라 줄어들지 않음 → 0으로 풀고 폭은 부모 안으로 */
+#tab-judge .row, #tab-judge .vj-ctrl { min-width: 0; max-width: 100%; }
+#tab-judge .row > select, #tab-judge .vj-ctrl > select { min-width: 0; max-width: 100%; text-overflow: ellipsis; }
+#tab-judge select { max-width: 100%; }
+/* ② 신고 버튼 — 작게, 다른 버튼(가입·탈퇴)과 떨어진 자리에 */
+.tm-rep-btn { font-size: 11.5px; padding: 3px 10px; color: var(--muted); }
+.tm-rep-line { display: flex; justify-content: flex-end; margin-top: 6px; }
+#report-body .cs-box ul { font-size: 13px; line-height: 1.6; padding-left: 18px; margin: 6px 0 0; }
+/* v1.77 회원 차단(patch-v177-block): 이름 단추(글자처럼, 점선 밑줄)·클럽 회원 칩 단추·차단 단추·안내 줄 — 이모지 없음 */
+.tm-name-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; text-align: left; word-break: break-all; }
+.member-chips .chip.tm-chip-btn { font-family: inherit; cursor: pointer; line-height: inherit; }
+.tm-blk-btn { font-size: 11.5px; padding: 3px 10px; color: var(--muted); }
+.tm-blk-note { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+.tm-rep-line > * + * { margin-left: 6px; }
+.tm-blk-row { gap: 8px; padding: 6px 0; border-top: 1px dashed var(--border); }
+#blocks-body #blk-q { min-width: 0; }
 </style>
 </head>
 <body>
@@ -1274,9 +1308,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
           <button type="button" class="tag-btn" style="flex:1" onclick="vcStepBoth(1)">함께 다음 프레임 ▶</button>
         </div>
         <div id="vc-status" class="muted" style="font-size:12px;margin-top:6px">싱크 지점을 A·B 모두 찍으면 동기 재생이 켜져요</div>
+        <div id="vc-report" style="display:none;align-items:center;gap:8px;margin-top:6px"></div><!-- v1.77: 매치 방에서 받은 상대 클립 신고 -->
       </div>
       <div class="vj-sub" style="margin-top:16px">🏟️ 매치 룸 — 라이브 챌린지 (베타)</div>
-      <details class="help"><summary>매치 룸 사용법</summary><div class="muted" style="font-size:12px">둘 다 로그인해서 같은 방에 들어가고, 각자 폰을 코트 양쪽에 걸어두세요. 카메라는 최근 90초만 계속 버퍼에 담아둡니다(서버 업로드 없음). 시비가 나면 아무나 🚨 챌린지 — 두 폰이 직전 20초를 잘라 올리고, 잠시 후 양쪽 화면에 두 앵글이 자동 싱크로 나란히 열려요.</div></details>
+      <details class="help"><summary>매치 룸 사용법</summary><div class="muted" style="font-size:12px">둘 다 로그인해서 같은 방에 들어가고, 각자 폰을 코트 양쪽에 걸어두세요. 카메라는 최근 90초만 이 폰에 계속 담아 둡니다(챌린지 전에는 서버에 올리지 않아요). 시비가 나면 아무나 🚨 챌린지 — 두 폰이 직전 20초를 잘라 올리고, 잠시 후 양쪽 화면에 두 앵글이 자동 싱크로 나란히 열려요.</div></details>
       <div id="mr-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
       <div id="mr-main" style="display:none">
         <div class="vj-ctrl">
@@ -1287,8 +1322,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <div id="mr-room" style="display:none">
           <div class="vj-ctrl" style="margin-top:8px">
             <div class="vj-mark set" id="mr-room-info" style="flex:1">방 —</div>
+            <button type="button" class="tag-btn tm-rep-btn" id="mr-report" onclick="tmReportOpen({ where: '매치 방', room: mrCode || '', date: todayStr() })">신고</button><!-- v1.77 -->
             <button type="button" class="tag-btn" onclick="mrLeave()">나가기</button>
           </div>
+          <div id="mr-blk-note" class="tm-blk-note" style="display:none;align-items:center;gap:8px"><span style="flex:1">차단한 회원이 이 방에 있어요</span><button type="button" class="tag-btn" onclick="mrLeave()">나가기</button></div><!-- v1.77 차단 -->
           <div style="position:relative;margin-top:8px">
             <video id="mr-cam" class="vj-video" playsinline muted style="max-height:200px;margin-top:0;display:block"></video>
             <svg id="mr-cam-guide" viewBox="0 0 100 56" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none"></svg>
@@ -1306,12 +1343,12 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     </div>
     <div class="section-title store-hide">클럽캠 — 공기계 실시간 중계 (베타)</div><!-- v1.71: 스토어 앱에서는 클럽캠 전체 숨김 -->
     <div class="card store-hide">
-      <details class="help"><summary>클럽캠 사용법</summary><div class="muted" style="font-size:12px">남는 폰(공기계)을 펜스에 걸어 <b>클럽 전용 캠</b>으로 쓰세요. ① 공기계: 같은 계정으로 로그인 → <b>📡 클럽캠 시작</b> → 코드가 떠요 ② 내 폰: 코드 입력 → <b>👀 보기</b>로 라이브 확인, 시비 나면 <b>✂️</b> — 직전 20초가 판독 센터에 자동으로 열려요 ③ 영상은 공기계 안에 1분 단위로 계속 쌓이고(서버 업로드 없음), 끝나면 💾 전체 저장 → AI 학습데이터로! <b>데이터 사용량은 시간당 50~100MB</b> 정도예요.</div></details>
+      <details class="help"><summary>클럽캠 사용법</summary><div class="muted" style="font-size:12px">남는 폰(공기계)을 펜스에 걸어 <b>클럽 전용 캠</b>으로 쓰세요. ① 공기계: 같은 계정으로 로그인 → <b>📡 클럽캠 시작</b> → 코드가 떠요 ② 내 폰: 코드 입력 → <b>👀 보기</b>로 라이브 확인, 시비 나면 <b>✂️</b> — 직전 20초가 판독 센터에 자동으로 열려요 ③ 경기 전체 영상은 공기계 안에 1분 단위로 쌓여요. 서버에는 판정 확인·챌린지·하이라이트로 잘라 낸 짧은 클립만 올라가고, 캠 코드를 등록한 계정과 운영자만 볼 수 있어요. AI 학습에는 '모두 AI 학습 이용에도 동의했어요'를 확인한 날의 영상만 써요. <b>데이터 사용량은 시간당 50~100MB</b> 정도예요.</div></details>
       <div id="cc-gate" class="vj-mark" style="margin-top:8px">☁️ 서버 로그인 후 사용할 수 있어요</div>
       <div id="cc-main" style="display:none">
         <div class="cc-consent" id="cc-consent">
           <label id="cc-allok-l"><input type="checkbox" id="cc-allok" onchange="ccSessionSet('allok', this.checked); if (this.checked) ccSessionRecord();"> 오늘 이 코트에서 경기하는 모든 선수가 촬영에 동의했어요 (동의하지 않은 분이 있으면 켜지 마세요)</label>
-          <label class="store-hide"><input type="checkbox" id="cc-alltrain" onchange="ccSessionSet('alltrain', this.checked); if (this.checked) ccSessionRecord();"> 모두 AI 학습 이용에도 동의했어요 — 이 확인이 있는 날만 학습 샘플을 모아요</label>
+          <label class="store-hide"><input type="checkbox" id="cc-alltrain" onchange="ccSessionSet('alltrain', this.checked); if (this.checked) ccSessionRecord();"> 모두 AI 학습 이용에도 동의했어요 — 이 확인이 있는 날의 영상만 운영자가 AI 학습에 써요</label>
           <div class="muted" style="font-size:12px">코트에 촬영 안내문을 붙여 주세요 · <a href="javascript:void(0)" onclick="consentOpen()">내 촬영·학습 동의</a></div>
         </div>
         <button type="button" class="btn small full" id="cc-start-btn" style="margin-top:8px" onclick="ccToggle()">이 폰을 클럽캠으로 (공기계에서 누르세요)</button>
@@ -1381,7 +1418,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-fill" onchange="clFillSet(this.checked)"> 착지 다시 보기 — 라인 가까운 바운스는 착지 앞뒤 0.2초를 한 번 더 봐서 정확하게 (학습 모델일 때, 메모리 약 21MB, 그 콜은 0.7초쯤 늦게). 느려지거나 배터리 20% 아래면 저절로 쉬어요 — 상태는 맨 아래 진단 줄</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-singles" onchange="aiSingles = this.checked"> 단식 경기 (사이드라인 안쪽 기준)</label>
             <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cc-voice" checked onchange="ccVoiceSet(this.checked)"> 점수 콜 소리 — 본폰 점수판이 포인트를 넣으면 이 폰이 외쳐요 (본폰이 👀 보기로 연결돼 있어야)</label>
-            <label class="muted store-hide" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — '모두 AI 학습 이용에도 동의' 확인이 있는 날만, 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
+            <label class="muted store-hide" style="display:none"><input type="checkbox" id="cl-sample" checked onchange="clSampleSet(this.checked)"> 학습 샘플 자동 수집 — '모두 AI 학습 이용에도 동의' 확인이 있는 날만, 바운스마다 사진 6장+공 위치를 서버로 (팩당 ~0.1MB, 하루 최대 400개) · 오늘 <span id="cl-sample-n">0</span>개</label>
             <div class="row" style="gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap">
               <span class="muted" style="font-size:12px">하이라이트 클립 <b id="cc-hl-n">0</b>개 (본폰 점수판 포인트마다 직전 10초)</span>
               <button type="button" class="btn small" style="flex:0 0 auto" onclick="ccBuildHighlight()">하이라이트 만들기</button>
@@ -1479,9 +1516,11 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div class="more-row" onclick="openHomeEdit()"><div><b>홈 화면 편집</b><div class="muted">홈에 보일 섹션 고르기</div></div><span class="chev">›</span></div>
       <!-- v1.71: 문의하기·이용약관·개인정보 처리방침 — 주소 상수(CONTACT_URL·POLICY_URLS)가 비어 있으면 policyRowsInit이 숨김 -->
       <div class="more-row" id="contact-row" style="display:none" onclick="tmOpenUrl(CONTACT_URL)"><div><b>문의하기</b><div class="muted">카카오톡 채널로 물어보세요 · 보통 하루 안에 답해요</div></div><span class="chev">›</span></div>
+      <div class="more-row" id="report-row" style="display:none" onclick="tmReportOpen()"><div><b>신고하기</b><div class="muted">부적절한 영상·이름·글이나 회원 알리기 · 카카오톡 채널</div></div><span class="chev">›</span></div><!-- v1.77: 구글 플레이 UGC — 스토어 앱에서도 보임 -->
+      <div class="more-row" id="block-row" style="display:none" onclick="tmBlocksOpen()"><div><b>차단한 사람</b><div class="muted">차단한 회원 보기 · 차단 풀기 · 닉네임으로 찾아 차단</div></div><span class="chev">›</span></div><!-- v1.77 차단: 로그인일 때만 보임 · 스토어 앱에서도 보임 -->
       <div class="more-row" id="terms-row" style="display:none" onclick="tmOpenUrl(POLICY_URLS.terms)"><div><b>이용약관</b><div class="muted">테니스메이트 서비스 이용 조건</div></div><span class="chev">›</span></div>
       <div class="more-row" id="privacy-row" style="display:none" onclick="tmOpenUrl(POLICY_URLS.privacy)"><div><b>개인정보 처리방침</b><div class="muted">어떤 정보를 왜 모으고 얼마나 보관하는지</div></div><span class="chev">›</span></div>
-      <div class="more-row" id="acctdel-row" style="display:none" onclick="acctDelEntry()"><div><b>계정 삭제</b><div class="muted">계정과 서버에 올린 영상·사진 지우기 · 남는 기록 안내</div></div><span class="chev">›</span></div><!-- v1.72 -->
+      <div class="more-row" id="acctdel-row" style="display:none" onclick="acctDelEntry()"><div><b>계정 삭제</b><div class="muted">계정과 서버에 올린 영상 지우기 · 남는 기록 안내</div></div><span class="chev">›</span></div><!-- v1.72 -->
       <div class="more-row" onclick="openLicenses()"><div><b>오픈소스 라이선스</b><div class="muted">앱에 쓰인 모델·라이브러리의 저작권 고지</div></div><span class="chev">›</span></div>
       <div class="more-row" style="cursor:default"><div><b>버전</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타</div></div></div>
     </div>
@@ -1496,6 +1535,27 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <button data-tab="more" onclick="showTab('more', this)"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></span>더보기</button>
 </nav>
 
+<!-- v1.77: 신고하기 — 구글 플레이 사용자 콘텐츠(UGC) 정책: 앱 안에서 부적절한 콘텐츠·회원을 신고. 창구는 문의하기와 같은 카카오톡 채널(이용약관 제13조) · 스토어 앱에서도 보임 -->
+<div class="modal-bg" id="modal-report" onclick="if(event.target===this)closeModal('report')">
+  <div class="modal" role="dialog" aria-labelledby="report-h">
+    <h3 id="report-h">신고하기</h3>
+    <div id="report-body"></div>
+  </div>
+</div>
+<!-- v1.77 차단: 차단한 사람(더보기 › 설정) — 목록·차단 풀기·닉네임으로 찾아 차단 · 스토어 앱에서도 보임 -->
+<div class="modal-bg" id="modal-blocks" onclick="if(event.target===this)closeModal('blocks')">
+  <div class="modal" role="dialog" aria-labelledby="blocks-h">
+    <h3 id="blocks-h">차단한 사람</h3>
+    <div id="blocks-body"></div>
+  </div>
+</div>
+<!-- v1.77 차단: 회원 창(이름을 누르면 [신고하기]·[차단하기]) · 차단 확인 — 차단한 사람 창 위에 뜨도록 그 뒤에 둠 -->
+<div class="modal-bg" id="modal-user" onclick="if(event.target===this)closeModal('user')">
+  <div class="modal" role="dialog" aria-labelledby="user-h">
+    <h3 id="user-h">회원</h3>
+    <div id="user-body"></div>
+  </div>
+</div>
 <!-- 경기 기록 모달 -->
 <div class="modal-bg" id="modal-record" onclick="if(event.target===this)closeModal('record')">
   <div class="modal">
@@ -1566,15 +1626,15 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <h3>클럽캠 촬영·AI 학습 동의</h3>
     <div class="cs-box">
       <b>[필수] 클럽캠 촬영 동의</b>
-      <p>테니스메이트 운영자는 AI 인/아웃 판정, 점수·경기 기록, 하이라이트 제공을 위해 예약한 우리 코트에서 경기하는 동안 클럽캠으로 경기 영상(얼굴·몸·동작 포함, 소리는 녹음하지 않음)과 촬영 일시·코트 정보, AI 판정 결과(공 위치·IN/OUT)를 수집합니다. 경기 전체 영상은 촬영한 폰에 저장됩니다. 실시간 중계 화면은 테니스메이트 서버(서울)를 거쳐 전달되고, 판정 확인·챌린지·하이라이트를 위해 잘라 낸 짧은 클립은 이 서버에 올라갑니다. 중계 화면과 클립은 그 클럽캠의 캠 코드를 등록한 계정(캠을 켠 사람의 계정, 같은 계정으로 로그인한 폰 포함)과 운영자만 볼 수 있습니다. 서버는 서울에 있지만 서버 회사(Supabase)는 국외 회사라, 서버 운영과 접속 기록 처리가 국외에서 이루어질 수 있습니다. 동의하지 않을 권리가 있으며, 동의하지 않으시면 참여하시는 경기에는 클럽캠을 켜지 않습니다.</p><!-- v1.71: 볼 수 있는 사람(014c)·국외 회사 -->
+      <p>테니스메이트 운영자는 AI 인/아웃 판정, 점수·경기 기록, 하이라이트 제공을 위해, 예약한 우리 코트에서 경기하는 동안 클럽캠으로 경기 영상(얼굴·몸·동작 포함, 소리는 녹음하지 않음)과 촬영 일시·캠 코드·코트 보정 정보, AI 판정 결과(공 위치·IN/OUT·거리, 서브 때 서버 자리에 사람이 보였는지와 선 쪽 — 누구인지는 알아보지 않음), 화면에 표시되는 점수와 팀 이름을 처리합니다. 경기 전체 영상은 촬영한 폰에 저장되고 폰의 보관 시간이 지나면 오래된 것부터 지워지며, 캠 코드를 등록한 계정(캠을 켠 사람의 계정, 같은 계정으로 로그인한 폰·PC 포함)과 운영자는 이 영상을 PC로 옮길 수 있습니다. 실시간 중계 화면은 테니스메이트 서버를 거쳐 전달되고(저장하지 않음), 판정 확인·챌린지·하이라이트를 위해 잘라 낸 짧은 클립은 서버에 올라갑니다. 중계 화면과 클립은 캠 코드를 등록한 계정과 운영자만 볼 수 있습니다. 서버의 클립은 캠을 켠 회원이 계정을 지우거나, 그 회원이나 영상에 나온 분이 삭제를 요청할 때까지 보관합니다. 서버는 서울에 있지만 서버 회사(Supabase)는 국외 회사라, 서버 운영과 접속 기록 처리가 국외에서 이루어질 수 있습니다. 동의하지 않을 권리가 있으며, 동의하지 않으시면 참여하시는 경기에는 클럽캠을 켜지 않습니다.</p><!-- v1.76: 처리방침 1.0판 2-1장과 같은 내용(PC로 옮기기·클립 보유 기간·중계 화면 저장 안 함) -->
       <div class="cs-choice"><label><input type="radio" name="cs-film" id="cs-film-y" value="1"> 동의합니다</label><label><input type="radio" name="cs-film" id="cs-film-n" value="0"> 동의하지 않습니다</label></div>
     </div>
     <div class="cs-box">
       <b>[선택] AI 학습 이용 동의</b>
-      <p>경기 참가자 모두가 동의한 날에는 경기 전체 영상을 운영자 PC로 옮기고, 공이 튈 때마다 찍힌 코트 사진 몇 장(촬영 일시·캠 정보·판정·공 궤적 포함, 학습 샘플)을 위의 테니스메이트 서버로 올려, 테니스메이트 공 인식 AI 모델의 학습·성능 개선에만 이용합니다. 서버에 올린 학습 사진은 올린 캠 계정(캠을 켠 사람의 계정)과 운영자만 볼 수 있고, 학습 자료는 외부에 제공하거나 공개하지 않으며, 모델 개선 목적이 끝나면(최대 3년) 파기합니다. 얼굴을 흐리게 하는 가명처리는 준비 중이며, 갖춰지면 학습 전에 적용합니다. 동의하지 않아도 클럽캠·판정·하이라이트 등 모든 기능을 똑같이 이용할 수 있고, 언제든 이 화면에서 철회할 수 있습니다. 철회한 뒤 촬영한 영상은 학습에 쓰지 않습니다.</p><!-- v1.71: 학습 사진 조회 범위(012) -->
+      <p>경기 참가자 모두가 AI 학습 이용에 동의한 날(캠을 켠 사람이 '모두 AI 학습 이용에도 동의했어요'를 확인해 서버에 기록된 날)에는, 운영자가 그날 경기 전체 영상(촬영 일시·캠 정보 포함)을 운영자 PC로 옮겨 테니스메이트 공 인식 AI 모델의 학습과 판정·하이라이트 기능의 정확도 확인·개선에만 이용합니다. 학습 자료는 운영자만 보고 외부에 제공하거나 공개하지 않으며, 목적을 이루면 파기하고 촬영일부터 최대 3년을 넘기지 않습니다(캠 코드를 등록한 회원이 계정을 지우면 그 캠의 영상은 그때 지웁니다). 다만 운영자가 개발에 쓰는 AI 도우미(Anthropic PBC, 미국, privacy@anthropic.com)가 판정·보정을 확인하는 작업 때 이 영상에서 잘라 낸 장면을 인터넷으로 받아 분석하며, Anthropic 정책에 따른 기간 동안 보관될 수 있습니다(국외 이전). 얼굴을 흐리게 하는 가명처리는 아직 없고, 갖추면 학습 전에 적용합니다. 동의하지 않아도 클럽캠·판정·하이라이트 등 모든 기능을 똑같이 이용할 수 있고, 언제든 이 화면에서 철회할 수 있습니다. 철회한 뒤 촬영한 영상은 학습에 쓰지 않으며, 이미 옮긴 영상도 요청하시면 찾아 지웁니다(이미 학습을 마친 모델에서 특정 장면을 꺼내 지울 수는 없습니다). 동의하지 않으면 위의 AI 도우미로도 보내지 않습니다. 만 14세 미만이 나오는 경기는 보호자의 학습 동의까지 받아야 '모두 AI 학습 이용에도 동의했어요'를 확인할 수 있습니다.</p><!-- v1.76: 처리방침 1.0판 2-2장·7장(Anthropic)과 같은 내용(학습 사진 서버 업로드 삭제 — C3) -->
       <div class="cs-choice"><label><input type="radio" name="cs-train" id="cs-train-y" value="1"> 동의합니다</label><label><input type="radio" name="cs-train" id="cs-train-n" value="0"> 동의하지 않습니다</label></div>
     </div>
-    <p class="muted" style="font-size:12px">만 14세 미만은 보호자의 동의가 필요해요. 다른 사람이 나오는 영상을 유튜브 등에 공개할 때는 그분 동의를 따로 받아 주세요.</p>
+    <p class="muted" style="font-size:12px">만 14세 미만은 보호자의 동의가 필요해요. 다른 사람이 나오는 영상을 유튜브 등에 공개할 때는 그분 동의를 따로 받아 주세요. 자세한 내용: <a href="https://app.tennismate.kr/privacy#s2" target="_blank" rel="noopener">개인정보 처리방침 2장</a></p>
     <div class="row" style="gap:8px"><button type="button" class="btn small" id="cs-save" onclick="consentSave()">저장</button><button type="button" class="btn small outline" onclick="closeModal('consent')">닫기</button></div>
     <div class="muted" id="cs-status" style="font-size:12px;margin-top:6px"></div>
   </div>
@@ -2048,6 +2108,9 @@ const TMAuth = (() => {
     if (/email not confirmed/i.test(m)) return '이메일 인증이 아직 안 됐어요. 받은 편지함을 확인해 주세요.';
     if (/user already registered/i.test(m)) return '이미 가입된 이메일이에요. 로그인해 주세요.';
     if (/password should be at least/i.test(m)) return '비밀번호는 6자 이상이어야 해요.';
+    { const s = m.match(/only request this after (\d+) seconds?/i); if (s) return '잠시 뒤에 다시 해 주세요 — ' + s[1] + '초 뒤부터 돼요.'; } /* v1.77: 메일 보내기 간격(같은 주소 60초 — 가입·재설정·확인 메일 다시 보내기) */
+    if (/email rate limit/i.test(m)) return '지금은 메일을 더 보낼 수 없어요(보내기 한도). 잠시 뒤에 다시 해 주세요.'; /* v1.77: 프로젝트 시간당 메일 한도 */
+    if (err.code === 'email_address_invalid' || /unable to validate email|email address .* is invalid/i.test(m)) return '이메일 주소를 확인해 주세요.'; /* v1.77: 서버가 받지 않는 주소 */
     if (/rate limit/i.test(m)) return '요청이 너무 잦아요. 잠시 후 다시 시도해 주세요.';
     if (err.code === '23505' || /profiles_nickname_uniq|duplicate key/i.test(m)) {
       return '이미 사용 중인 닉네임이에요. 다른 닉네임을 골라 주세요.';
@@ -2114,14 +2177,34 @@ const TMAuth = (() => {
     });
     if (error) throw new Error(koMessage(error));
     // 이메일 확인이 켜져 있으면 session은 null — UI는 "메일함 확인" 안내로 분기
-    return { needsEmailConfirm: !data.session, session: data.session };
+    // v1.77: 이메일 확인을 켠 뒤, 이미 확인을 마친 주소로 다시 가입하면 서버는 오류 대신 identities가 빈 가짜 사용자를 돌려줌(가입 여부를 숨김) — 메일도 안 감
+    const existing = !data.session && !!(data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
+    return { needsEmailConfirm: !data.session, session: data.session, existing };
   }
 
   async function signInEmail(email, password) {
     const c = requireClient();
     const { data, error } = await c.auth.signInWithPassword({ email: String(email || '').trim(), password });
-    if (error) throw new Error(koMessage(error));
+    if (error) { const e = new Error(koMessage(error)); if (error.code === 'email_not_confirmed' || /email not confirmed/i.test(String(error.message || ''))) e.code = 'email_not_confirmed'; throw e; } /* v1.77: 이메일 확인 전 — 화면이 '메일함 확인' 안내로 */
     return data.session;
+  }
+
+  /** v1.77: 가입 확인 메일 다시 보내기(Supabase 'Confirm email' 켬) — 서버 한도: 같은 주소 60초에 1번(max_frequency 1m)·프로젝트 시간당 메일 수(Rate Limits).
+      이미 확인한 주소·없는 주소도 서버는 오류 없이 답함(가입 여부를 숨김) — 화면 문구가 그것을 알려 줌 */
+  async function resendSignup(email) {
+    const c = requireClient();
+    const { error } = await c.auth.resend({ type: 'signup', email: String(email || '').trim(), options: { emailRedirectTo: init._redirectTo } });
+    if (error) throw mailErr(error);
+    return true;
+  }
+  function mailErr(error) { // v1.77: 보내기 한도 오류 → 쉬운 말 + 기다릴 초(retryAfter)
+    const m = String((error && error.message) || error || ''), code = String((error && error.code) || ''), st = error && error.status;
+    const e = new Error(koMessage(error)); e.code = code;
+    const s = m.match(/after (\d+) seconds?/i);
+    if (s) { e.code = 'rate'; e.retryAfter = Math.min(3600, Math.max(1, parseInt(s[1], 10) || 60)); e.message = '조금 전에 보냈어요 — ' + e.retryAfter + '초 뒤에 다시 보낼 수 있어요'; }
+    else if (/email rate limit/i.test(m) || code === 'over_email_send_rate_limit') { e.code = 'rate'; e.retryAfter = 60; e.message = '지금은 메일을 더 보낼 수 없어요(보내기 한도). 잠시 뒤에 다시 눌러 주세요 — 계속 안 되면 더보기 › 문의하기로 알려 주세요'; }
+    else if (st === 429 || code === 'over_request_rate_limit' || /rate limit|too many/i.test(m)) { e.code = 'rate'; e.retryAfter = 60; e.message = '요청이 너무 잦아요 — 1분쯤 뒤에 다시 눌러 주세요'; }
+    return e;
   }
 
   async function updatePassword(pw) { // v1.22: 재설정 링크로 로그인된 상태에서 새 비밀번호
@@ -2261,7 +2344,7 @@ const TMAuth = (() => {
   return {
     init, storedUid,
     get ready() { return ready; },
-    signUpEmail, signInEmail, resetPassword, updatePassword,
+    signUpEmail, signInEmail, resetPassword, updatePassword, resendSignup, /* v1.77 */
     signInKakao, signInGoogle,
     signOut, deleteAccount, reauth, signOutLocal, cancelDelete, /* v1.72 · v1.72c cancelDelete */
     refreshMyProfile, completeOnboarding, updateMyProfile,
@@ -2276,7 +2359,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.75';
+const APP_VERSION = 'v1.77';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2762,7 +2845,7 @@ let homeLayout = HOME_SECTIONS.map(s => ({ key: s.key, on: !s.off })); // off: �
 
 // ===== 유틸 =====
 const $ = id => document.getElementById(id);
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); // 사용자 입력 → HTML 안전
+const esc = s => String(s == null ? '' : s).replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]); // 사용자 입력 → HTML 안전 · v1.77 B5: 백틱도(속성을 백틱으로 감싸는 곳이 생겨도 안전)
 // ── UI 정리 루틴 (v0.70): 코드가 그린 제목·버튼·라벨의 앞머리 이모지 제거(상태 이모지 🟢🔴🟡✂⛶ 유지), 빈 섹션 숨김 ──
 const UI_KEEP = ['🟢', '🔴', '🟡', '✂', '⛶'];
 const UI_LEAD = /^(\s*)((?:\p{Extended_Pictographic}|\p{Emoji_Presentation})(?:[\uFE0F\u200D]|\p{Extended_Pictographic}|\p{Emoji_Presentation}|[\u{1F3FB}-\u{1F3FF}])*)\s*/u;
@@ -2984,14 +3067,116 @@ function skipAuth() { // 둘러보기: 이번 방문 동안 로그인 창 자동
   toast('둘러보는 중이에요 — 기록·랭킹을 저장하려면 위쪽 [로그인 / 가입]을 누르세요');
   try { updateHeader(); } catch (e) {} // v1.70
 }
+// ===== v1.77 이메일 확인(Supabase 'Confirm email' 켬) — 가입 뒤 세션 없음·확인 전 로그인·메일 링크 (설명: deploy/patch-v177-email.SPEC.md) =====
+// 상태는 메모리에만(tmMail) — 주소를 브라우저 저장소에 남기지 않음. 앱이 다시 열리면 로그인 실패('Email not confirmed')가 같은 안내로 데려옴.
+const tmMail = { email: '', why: '', cdUntil: 0, busy: false }; // why: signup(방금 가입) · login(확인 전 로그인) · link(쓸 수 없는 링크로 열림)
+const tmMailLink = (() => { // 메일 링크로 열렸는지 — supabase가 주소의 #…를 읽고 지우기 전(TMAuth.init 전, 이 줄은 페이지를 읽을 때 실행)
+  const o = { type: '', err: '', told: false, shown: false };
+  try {
+    const h = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+    if (h.get('access_token')) { o.type = String(h.get('type') || '').slice(0, 20); return o; } // 정상 링크 — supabase가 로그인(implicit, detectSessionInUrl)
+    const q = new URLSearchParams(String(location.search || '').replace(/^\?/, ''));
+    const bad = (p) => p.get('error_code') || p.get('error') || (p.get('error_description') ? 'error' : '');
+    const he = bad(h), qe = bad(q);
+    if (!he && !qe) return o;
+    { const p = he ? h : q, v = String(he || qe).replace(/[^\w-]/g, '').slice(0, 40) || 'error'; /* v1.77 fixes: 메일 링크 오류(otp_expired · 'Email link is invalid…')만 메일 안내 — 소셜 로그인 등 다른 오류는 other에만(지우기는 그대로) */
+      if (String(p.get('error_code') || '') === 'otp_expired' || /email link/i.test(String(p.get('error_description') || ''))) o.err = v; else o.other = v; }
+    // 주소의 오류 표시를 지움 — 새로고침 때 다시 안 뜨게, supabase가 이 링크 때문에 이 폰의 로그인을 지우지 않게(앱 변수 history와 겹치지 않게 window.history)
+    const keep = []; q.forEach((v, k) => { if (!/^(error|error_code|error_description)$/.test(k)) keep.push(encodeURIComponent(k) + '=' + encodeURIComponent(v)); });
+    window.history.replaceState(window.history.state, '', location.pathname + (keep.length ? '?' + keep.join('&') : '') + (he ? '' : location.hash));
+  } catch (e) {}
+  return o;
+})();
+function authMailView() { // v1.77: renderAuth('confirm') — 새 화면에 이모지 쓰지 않음, 주소는 esc
+  const slot = `<button class="btn full" id="au-resend" onclick="authResend()">확인 메일 다시 보내기</button>
+      <div class="muted" id="au-resend-msg" role="status" aria-live="polite" style="font-size:12px;min-height:18px;margin:6px 0 2px;text-align:center"></div>`;
+  if (tmMail.why === 'link') return `<div class="ob-hero"><h3>메일의 링크를 쓸 수 없어요</h3>
+      <div class="muted">링크가 만료됐거나 이미 쓰였어요. 가입 확인을 이미 마쳤다면 그냥 로그인하면 돼요.</div></div>
+      <label>가입한 이메일</label>
+      <input type="email" id="au-email" placeholder="you@example.com" autocomplete="email" value="${esc(tmMail.email)}">
+      ${slot}
+      <button class="btn full outline" onclick="authMailLogin()">로그인</button>
+      <div class="muted" style="font-size:12px;margin-top:8px">비밀번호 재설정 메일이었다면 로그인 화면에서 [비밀번호 재설정]을 다시 눌러 주세요.</div>`;
+  const top = tmMail.why === 'login'
+    ? `<h3>이메일 확인이 아직 안 됐어요</h3><div class="muted">가입할 때 보낸 메일에서 확인 링크를 눌러 주세요. 메일이 없으면 아래에서 다시 보낼 수 있어요.</div>`
+    : `<h3>메일함에서 확인 링크를 눌러 주세요</h3><div class="muted">아래 주소로 가입 확인 메일을 보냈어요. 메일 속 링크를 누르면 가입이 끝나요.</div>`;
+  return `<div class="ob-hero">${top}</div>
+      <div class="cc-consent" id="au-mail-addr" style="margin:10px 0;text-align:center;font-weight:700;word-break:break-all">${esc(tmMail.email)}</div>
+      <ul class="muted" style="font-size:13px;line-height:1.6;padding-left:18px;margin:6px 0 4px">
+        <li>메일이 안 보이면 스팸함·프로모션함도 봐 주세요.</li>
+        <li>링크가 다른 브라우저(메일 앱 안의 창 등)에서 열렸다면, 이 화면으로 돌아와 [확인했어요, 로그인]을 눌러 같은 이메일·비밀번호로 로그인해 주세요.</li>
+        <li>주소가 틀렸다면 [다른 이메일로 가입]을 눌러 주세요.</li>
+      </ul>
+      ${slot}
+      <button class="btn full outline" onclick="authMailLogin()">확인했어요, 로그인</button>
+      <button class="btn full outline" onclick="authMailOther()">다른 이메일로 가입</button>`;
+}
+function authMailPending(email, why) { // v1.77: 안내 화면 열기 — 가입 직후(메일을 방금 보냄 → 60초 기다림)·확인 전 로그인
+  tmMail.email = String(email || '').trim(); tmMail.why = why || 'signup';
+  if (tmMail.why === 'signup') tmMail.cdUntil = Date.now() + 60000;
+  renderAuth('confirm');
+  try { if (!$('modal-auth').classList.contains('open')) openModal('auth'); } catch (e) {}
+}
+function authMailAfterSignup(email, r) { // v1.77: authDo('signup')에서 세션이 없을 때
+  if (r && r.existing) { // 이미 확인을 마친 주소 — 서버는 메일을 보내지 않음
+    tmMail.email = ''; tmMail.why = '';
+    renderAuth('login'); const i = $('au-email'); if (i) i.value = String(email || '');
+    toast('이미 가입된 이메일일 수 있어요 — 로그인하거나 [비밀번호 재설정]을 눌러 주세요', 5000);
+    return;
+  }
+  authMailPending(email, 'signup');
+}
+function authMailTick() { // v1.77: [확인 메일 다시 보내기] 남은 초 — 버튼은 한 줄 전체 폭이라 글자가 바뀌어도 자리가 그대로
+  clearTimeout(authMailTick._t);
+  const b = $('au-resend'); if (!b) return;
+  const left = Math.ceil((tmMail.cdUntil - Date.now()) / 1000);
+  if (tmMail.busy) { b.disabled = true; b.textContent = '보내는 중…'; }
+  else if (left > 0) { b.disabled = true; b.textContent = '확인 메일 다시 보내기 (' + left + '초 뒤)'; }
+  else { b.disabled = false; b.textContent = '확인 메일 다시 보내기'; }
+  if (!tmMail.busy && left > 0) authMailTick._t = setTimeout(authMailTick, 500);
+}
+async function authResend() { // v1.77: supabase.auth.resend({ type: 'signup' }) — 한 번에 하나, 60초 간격(서버가 알려 준 초가 있으면 그만큼)
+  const say = (t) => { const m = $('au-resend-msg'); if (m) m.textContent = t; };
+  if (!serverMode() || !TMAuth.client) { say('서버에 아직 연결되지 않았어요 — 인터넷을 확인하고 잠시 뒤 다시 눌러 주세요'); return; }
+  if (tmMail.busy || tmMail.cdUntil > Date.now()) { authMailTick(); return; }
+  const inp = tmMail.why === 'link' ? $('au-email') : null;
+  const email = String((inp ? inp.value : tmMail.email) || '').trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { say('이메일 주소를 확인해 주세요'); return; }
+  tmMail.busy = true; say(''); authMailTick();
+  try {
+    await TMAuth.resendSignup(email);
+    tmMail.email = email; tmMail.cdUntil = Date.now() + 60000;
+    say(tmMail.why === 'link' ? '확인 메일을 보냈어요 — 아직 확인 전인 주소면 메일이 가요. 이미 확인한 주소면 메일 없이 로그인하면 돼요'
+      : '확인 메일을 다시 보냈어요 — 메일함(스팸함 포함)을 확인해 주세요');
+  } catch (e) {
+    const sec = e && e.retryAfter; if (sec) tmMail.cdUntil = Date.now() + sec * 1000;
+    say((e && e.message) || '보내지 못했어요 — 잠시 뒤 다시 눌러 주세요');
+  } finally { tmMail.busy = false; authMailTick(); }
+}
+function authMailLogin() { // v1.77: 로그인 화면으로 — 주소는 미리 채움(비밀번호는 어디에도 남기지 않으니 다시 입력)
+  const i0 = $('au-email'); if (tmMail.why === 'link' && i0 && i0.value.trim()) tmMail.email = i0.value.trim();
+  const em = tmMail.email; tmMail.why = '';
+  renderAuth('login');
+  const i = $('au-email'), p = $('au-pw'); if (i && em) i.value = em; if (p && em) { try { p.focus(); } catch (e) {} }
+}
+function authMailOther() { tmMail.email = ''; tmMail.why = ''; renderAuth('signup'); } // v1.77: 주소를 잘못 적었을 때 — 다시 가입
+function authMailOnSession(session) { // v1.77: onAuthChange(로그인됨) — 확인 링크로 들어왔거나, 기다리는 중 다른 창에서 확인돼 로그인이 넘어옴
+  if (!session) return;
+  const viaLink = tmMailLink.type === 'signup' && !tmMailLink.told;
+  const waited = tmMail.why === 'signup' && !authBusy;
+  if (viaLink || waited) { tmMailLink.told = true; setTimeout(() => { try { toast('이메일 확인을 마쳤어요 — 환영해요', 3500); } catch (e) {} }, 300); }
+  else if (tmMailLink.err && !tmMailLink.shown) { tmMailLink.shown = true; setTimeout(() => { try { toast('메일의 링크가 만료됐거나 이미 쓰였어요 — 지금 로그인한 계정으로 계속 쓰면 돼요', 5000); } catch (e) {} }, 300); }
+  if (tmMail.why || tmMail.email) { tmMail.why = ''; tmMail.email = ''; tmMail.cdUntil = 0; clearTimeout(authMailTick._t); }
+}
 function openAuth(view) {
   if (!serverMode()) return; // 데모 모드에서는 절대 열리지 않음
+  if ((view || 'login') === 'login' && tmMailLink.err && !tmMailLink.shown) { tmMailLink.shown = true; tmMail.why = 'link'; view = 'confirm'; } /* v1.77: 만료·이미 쓴 메일 링크로 열림 → 한 번만 안내 */
   renderAuth(view || 'login');
   openModal('auth');
 }
 // v1.71: 스토어(구글 플레이) 출시·개인정보 처리방침 준비 — 주소가 정해지면 아래 상수만 채우면 됨(비어 있으면 줄을 숨기거나 '(곧 공개)')
-const TERMS_VER = '2026-10-22'; // v1.71: 가입 동의 판 — 약관·처리방침 문구를 바꾸면 날짜를 올릴 것
-const POLICY_URLS = { terms: '', privacy: '' }; // v1.71: 이용약관·개인정보 처리방침 공개 주소(http/https)
+const TERMS_VER = '2026-10-26'; // v1.71: 가입 동의 판 — 약관·처리방침 문구를 바꾸면 날짜를 올릴 것 · v1.76: 1.0판 시행일 — 옛 판(2026-10-22, 문서 공개 전)이나 기록 없는 계정은 tmTermsGate가 다시 확인
+const POLICY_URLS = { terms: 'https://app.tennismate.kr/terms', privacy: 'https://app.tennismate.kr/privacy' }; // v1.71: 이용약관·개인정보 처리방침 공개 주소(http/https) · v1.76: 1.0판 공개 — 절대 주소(tmSafeUrl은 http(s)만 받음, 옛 github.io에서 열어도 공식 주소로, Cloudflare가 .html을 308로 떼므로 확장자 없이)
 const CONTACT_URL = 'https://pf.kakao.com/_ypxcmX/chat'; // v1.71: 문의하기 — 카카오톡 채널 주소(예: https://pf.kakao.com/_xxxx/chat)
 function tmSafeUrl(u) { u = String(u || '').trim(); return /^https?:\/\/[^\s"'<>`]+$/i.test(u) ? u : ''; } // v1.71: http(s) 주소만
 function tmOpenUrl(u) { u = tmSafeUrl(u); if (u) window.open(u, '_blank', 'noopener'); } // v1.71: 새 창으로(앱 화면·녹화는 그대로)
@@ -3007,14 +3192,360 @@ function authTermsOk() { // v1.71: 가입 필수 확인 2개(만 14세 이상·�
   const miss = ['au-age14', 'au-terms'].filter(id => !($(id) && $(id).checked));
   if (!miss.length) return true;
   miss.forEach(id => { const l = $(id + '-l'); if (l) { l.classList.add('need'); setTimeout(() => l.classList.remove('need'), 4000); } });
-  toast(miss.length > 1 ? '가입하려면 만 14세 이상 확인과 약관·처리방침 동의를 모두 체크해 주세요'
+  toast(miss.length > 1 ? '만 14세 이상 확인과 이용약관 동의를 모두 체크해 주세요'
     : miss[0] === 'au-age14' ? '만 14세 이상만 가입할 수 있어요 — 확인란을 체크해 주세요'
-    : '이용약관과 개인정보 처리방침에 동의해야 가입할 수 있어요');
+    : '이용약관에 동의하고 개인정보 처리방침을 확인해야 계속할 수 있어요');
   return false;
 }
-function policyRowsInit() { // v1.71: 더보기 › 설정의 문의하기·이용약관·개인정보 처리방침 줄 — 주소가 없으면 숨김
-  [['contact-row', CONTACT_URL], ['terms-row', POLICY_URLS.terms], ['privacy-row', POLICY_URLS.privacy]].forEach(([id, u]) => { const r = $(id); if (r) r.style.display = tmSafeUrl(u) ? '' : 'none'; });
+// ===== v1.77 신고하기 (구글 플레이 사용자 콘텐츠 정책 — 앱 안에서 부적절한 콘텐츠·회원 신고) — 설명: deploy/patch-v177-fixes.SPEC.md =====
+// 창구 = 문의하기와 같은 카카오톡 채널(CONTACT_URL) — 이용약관 제13조의 요청할 곳 그대로라 문서는 바꾸지 않음. 약관보다 더 약속하지 않음(기한 없음 — '지체 없이 확인').
+// 스토어 앱(?src=twa)에서도 보임(store-hide 아님). 새 화면에 이모지 쓰지 않음, 이름·클럽·방 코드 같은 글은 모두 esc. 신고 내용은 앱이 서버에 보내지 않음(카카오톡 대화로만).
+function tmRepS() { if (!tmRepS.s) tmRepS.s = { ctx: {}, n: 0, cur: null }; return tmRepS.s; } // 상태(처음 쓸 때 만듦 — 화면이 이 줄보다 먼저 그려져도 안전)
+function tmReportBtn(ctx, label) { // 신고 버튼 HTML — 상황(클럽·경기·방 코드·날짜)은 번호로 맡겨 둠(따옴표·태그가 든 이름도 onclick에 안 들어감)
+  const S = tmRepS(), id = ++S.n; S.ctx[id] = ctx || {}; if (S.ctx[id - 400]) delete S.ctx[id - 400]; // 오래된 화면의 상황은 400개까지만
+  return `<button type="button" class="tag-btn tm-rep-btn" onclick="event.stopPropagation();tmReportOpen(${id})">${esc(label || '신고')}</button>`;
 }
+function tmRepDate(t) { // 시각 → 로컬 날짜(yyyy-mm-dd) — toISOString(UTC)은 새벽에 전날이 됨
+  const d = new Date(t); if (isNaN(d.getTime())) return '';
+  const p = (n) => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
+function tmRepTime(t) { const d = new Date(t); if (isNaN(d.getTime())) return ''; const p = (n) => String(n).padStart(2, '0'); return p(d.getHours()) + ':' + p(d.getMinutes()); }
+function tmReportLines(c) { // 상황 → 신고에 적어 둘 줄(글자만, 화면에 넣을 땐 esc)
+  const L = [], cut = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 60);
+  if (c.where) L.push('어디: ' + cut(c.where));
+  if (c.club) L.push('클럽: ' + cut(c.club));
+  if (c.title) L.push('경기: ' + cut(c.title));
+  if (c.host) L.push('진행한 회원: ' + cut(c.host));
+  if (c.user) L.push('회원: ' + cut(c.user)); /* v1.77 차단: 회원 창에서 연 신고 */
+  if (c.room) L.push('방 코드: ' + cut(c.room));
+  if (c.date) L.push('날짜: ' + cut(c.date) + (c.time ? ' ' + cut(c.time) : ''));
+  return L;
+}
+function tmReportOpen(x) { // 신고 안내 창 — x = tmReportBtn 번호 · 상황 객체 · 없음(더보기 › 설정)
+  const S = tmRepS(), c = typeof x === 'number' ? (S.ctx[x] || {}) : (x && typeof x === 'object' ? x : {});
+  S.cur = c;
+  const L = tmReportLines(c), has = !!tmSafeUrl(CONTACT_URL), body = $('report-body'); if (!body) return;
+  body.innerHTML = `<div class="muted" style="font-size:13px;line-height:1.6">부적절한 영상·이름·글이나 그런 회원이 있으면 운영자에게 알려 주세요. 카카오톡 채널 '테니스메이트' 대화로 받아요.</div>
+    ${L.length ? `<div class="cs-box" id="report-ctx"><div class="muted" style="font-size:12px">지금 보던 곳(대화창에 같이 적어 주세요)</div>${L.map((t) => `<div style="font-size:13px;word-break:break-all">${esc(t)}</div>`).join('')}</div>` : ''}
+    <div class="cs-box"><b style="font-size:13px">대화창에 적어 주세요</b>
+      <ul>
+        <li><b>무엇을</b> — 어디에 있는지(클럽 이름·날짜·방 코드·닉네임 등)</li>
+        <li><b>왜</b> — 어떤 점이 문제인지(사생활 침해·욕설·명예훼손·저작권 침해 등)</li>
+      </ul></div>
+    <div class="muted" style="font-size:12px;line-height:1.6">신고를 받으면 운영자가 지체 없이 확인해요. 사생활·명예·저작권 같은 권리 침해면 게시물을 내리고, 올린 회원과 신고한 분께 알려 드려요(${policyLink('terms', '이용약관')} 제13조). 카카오톡을 쓰지 않으면 이용약관 제13조의 이메일로도 받아요.</div>
+    ${tmBlkReportHtml(c)}
+    ${has ? `<button type="button" class="btn full" id="report-go" onclick="tmReportGo()">카카오톡 채널로 신고하기</button>` : `<div class="muted" style="font-size:12px;margin-top:8px">신고 창구 주소를 준비 중이에요 — 이용약관 제13조의 이메일로 알려 주세요.</div>`}
+    <div class="muted" id="report-msg" role="status" aria-live="polite" style="font-size:12px;min-height:16px;margin-top:6px;text-align:center"></div>
+    <button type="button" class="btn full outline" onclick="closeModal('report')">닫기</button>`;
+  openModal('report');
+}
+function tmReportGo() { // 카카오톡 채널 열기(문의하기와 같은 주소) — 적을 내용은 되면 클립보드에(복사를 기다리지 않고 창을 먼저 — 탭 안에서 열어야 막히지 않음)
+  const c = tmRepS().cur || {};
+  const txt = ['[신고]'].concat(tmReportLines(c), ['무엇을: ', '왜: ']).join('\n');
+  let cp = null; try { if (navigator.clipboard && navigator.clipboard.writeText) cp = navigator.clipboard.writeText(txt); } catch (e) { cp = null; }
+  tmOpenUrl(CONTACT_URL);
+  const m = $('report-msg'); if (m) m.textContent = '카카오톡 채널을 열었어요 — 위 내용을 적어 보내 주세요';
+  if (cp && cp.then) cp.then(() => { const m2 = $('report-msg'); if (m2) m2.textContent = '적을 내용을 복사했어요 — 대화창에 붙여 넣고 채워 보내 주세요'; }, () => {});
+}
+function tmReportClipShow(room, at) { // 매치 방에서 받은 상대 클립 아래 신고 줄 — 내 파일을 열면 숨김(room 없음)
+  const el = $('vc-report'); if (!el) return;
+  if (!room) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<span class="muted" style="font-size:12px;flex:1">상대 클립에 부적절한 장면이 있으면</span>${tmReportBtn({ where: '매치 방 클립', room, date: tmRepDate(at || Date.now()), time: tmRepTime(at || Date.now()) })}`;
+  el.style.display = 'flex';
+  try { tmBlkClipPeers(room, at); } catch (e) {} /* v1.77 차단: 클립을 올린 회원(서버 기록) → [차단] */
+}
+// ===== v1.77 회원 차단 (구글 플레이 사용자 제작 콘텐츠 정책 — 1:1 상호작용에 사용자 차단) — 설명: deploy/patch-v177-block.SPEC.md =====
+// 막는 것은 서버(016 — 차단 사이는 같은 경기 기록·승인 불가, 매치 방 클립 조회 불가, 차단하면 둘이 든 대기 경기 취소), 숨기는 것은 앱(차단한 사람의 화면만).
+// 차단 목록은 폰에 저장하지 않음(로그인마다 서버 my_blocks에서 읽어 메모리에만). 상대에게 알리지 않음. 스토어 앱에서도 보임(store-hide 아님).
+// 서버에 016이 아직 없으면(함수 없음 PGRST202) 차단 단추는 '준비 중'으로 보이고 숨기기는 하지 않음(빈 목록). 새 화면에 이모지 없음, 이름은 모두 esc, onclick에는 번호만.
+function tmBlkS() { if (!tmBlkS.s) tmBlkS.s = { ids: new Set(), list: [], loaded: false, state: 'idle', p: null, uid: null, gen: 0, users: {}, n: 0, cur: null, ask: null, found: [], findQ: '', busy: false, quiet: false, hiddenPlayers: 0, clipGen: 0 }; return tmBlkS.s; } // 상태(처음 쓸 때 만듦)
+function tmBlkRpc(name, args, ms) { // svClient()(시험 훅 포함)로 RPC + 시간 제한 — 넘으면 { error: timeout }
+  return Promise.race([Promise.resolve().then(() => svClient().rpc(name, args || {})), new Promise((r) => setTimeout(() => r({ data: null, error: { message: 'timeout', code: 'timeout' } }), ms || 8000))]);
+}
+function tmBlkMissing(e) { // 서버에 016이 아직 없음(함수·표 없음)
+  if (!e) return false; const c = String(e.code || ''), m = String(e.message || e);
+  return c === 'PGRST202' || c === '42883' || c === '42P01' || /could not find the function|does not exist|schema cache/i.test(m);
+}
+function tmBlkHas(uid) { return !!uid && tmBlkS().ids.has(String(uid)); }
+function tmBlkRowShow() { const r = $('block-row'); if (r) r.style.display = (typeof svLogged === 'function' && svLogged()) ? '' : 'none'; }
+function tmBlkReset() { // 로그아웃·계정 바뀜: 차단 상태 비움
+  const S = tmBlkS(); S.ids = new Set(); S.list = []; S.loaded = false; S.state = 'idle'; S.p = null; S.uid = null; S.gen++; S.hiddenPlayers = 0; S.found = []; S.findQ = ''; S.cur = null; S.ask = null;
+  tmBlkRowShow();
+}
+function svLoadBlocks(force) { // 내 차단 목록(서버 my_blocks, 3초 제한) — 실패하면 빈 목록(전에 읽은 것이 있으면 그대로) + 화면 복귀 때 다시
+  const S = tmBlkS();
+  if (typeof svLogged !== 'function' || !svLogged()) { tmBlkReset(); return Promise.resolve(S); }
+  const uid = String(svMyId() || '');
+  if (S.uid !== uid) { tmBlkReset(); S.uid = uid; }
+  tmBlkRowShow();
+  if (S.p && !force) return S.p;
+  const gen = S.gen, before = [...S.ids].sort().join(',');
+  if (!S.loaded) S.state = 'loading';
+  const p = (async () => {
+    let r; try { r = await tmBlkRpc('my_blocks', {}, 3000); } catch (e) { r = { data: null, error: e }; }
+    if (gen !== S.gen) return S; // 그사이 로그아웃·계정 바뀜
+    if (r && !r.error && Array.isArray(r.data)) {
+      S.list = r.data.filter((x) => x && x.id).map((x) => ({ id: String(x.id), nick: String(x.nickname || '') || '탈퇴한 회원', at: x.created_at || null }));
+      S.ids = new Set(S.list.map((x) => x.id)); S.loaded = true; S.state = 'ok';
+    } else {
+      S.state = tmBlkMissing(r && r.error) ? 'none' : 'err';
+      if (S.p === p) S.p = null; // 다음에 다시 읽음
+    }
+    if ([...S.ids].sort().join(',') !== before) { try { tmBlkRerender(); } catch (e) {} }
+    return S;
+  })();
+  S.p = p;
+  return p;
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) return; try { const S = tmBlkS(); if (svLogged() && (S.state === 'err' || S.state === 'none')) svLoadBlocks(true); } catch (e) {} }); /* v1.77 차단: 못 읽었으면 화면 복귀 때 다시 */
+function tmBlkRerender() { // 차단 목록이 바뀌면 화면만 다시(서버 다시 읽기 없음): 클럽 카드·둘러보기·진행 중 경기·승인 대기함·랭킹 안내·매치 방 안내
+  try { renderMyClub(); renderClubList(); } catch (e) {}
+  try { boardsRender(); } catch (e) {}
+  try { if (svLogged()) svRefresh(); } catch (e) {}
+  try { renderRank(); } catch (e) {}
+  try { tmBlkRoomCheck(); } catch (e) {}
+}
+function tmBlkAfter() { // 차단·풀기 뒤: 선수 목록(랭킹·H2H·선수 고르기)에서 바로 빼고, 서버에서 다시 읽어 거름(조용히) + 나머지 다시 그림
+  const S = tmBlkS();
+  try { let n = 0; for (let i = players.length - 1; i >= 0; i--) if (players[i] && players[i].cloud && tmBlkHas(players[i].uid)) { players.splice(i, 1); n++; } if (n) { S.hiddenPlayers += n; renderAll(); } } catch (e) {}
+  S.quiet = true;
+  Promise.resolve().then(() => svImportPlayers()).catch(() => {}).then(() => { S.quiet = false; });
+  tmBlkRerender();
+  try { const l = $('sv-opp-list'); if (l) l.innerHTML = ''; } catch (e) {}
+}
+function tmUserBtn(users, label, cls, where, room) { // 회원 단추 HTML — 회원(uid·닉네임)·어디·방 코드는 번호로 맡겨 둠(따옴표·태그가 든 닉네임도 onclick에 안 들어감), 최근 400개
+  const S = tmBlkS(), id = ++S.n;
+  S.users[id] = { users: (Array.isArray(users) ? users : [users]).filter((u) => u && u.uid).map((u) => ({ uid: String(u.uid), nick: String(u.nick == null ? '' : u.nick) || '회원' })), where: where || '', room: room || '' };
+  if (S.users[id - 400]) delete S.users[id - 400];
+  return `<button type="button" class="${cls || 'tm-name-btn'}" onclick="event.stopPropagation();tmUserOpen(${id})">${esc(label)}</button>`;
+}
+function tmNameHtml(uid, nick, where) { // 이름 글자 — 로그인이고 다른 서버 회원이면 누르면 회원 창(신고·차단), 아니면 글자만(esc)
+  return (uid && svLogged() && String(uid) !== String(svMyId())) ? tmUserBtn([{ uid, nick }], nick, 'tm-name-btn', where) : esc(nick);
+}
+function tmClubRows(rows, myUid) { // 서버 클럽 회원 행 → [{uid, name}](나 빼고, 닉네임이 안 보이면 name null)
+  return (rows || []).filter((m) => m && m.user_id && m.user_id !== myUid && !((m.profiles && m.profiles.nickname) === ME.name)).map((m) => ({ uid: String(m.user_id), name: (m.profiles && m.profiles.nickname) || null }));
+}
+function tmClubChips(c) { // 내 클럽 회원 칩 — 서버 클럽이고 로그인이면 칩을 누르면 회원 창, 차단한 회원 칩은 뺌(회원 수는 서버 기준 그대로)
+  if (!c || !c.cloud || !Array.isArray(c.memberRows) || !svLogged()) return ((c && c.members) || []).map((m) => `<span class="chip">${esc(m)}</span>`).join('');
+  let hid = 0;
+  const h = c.memberRows.map((r) => { if (!r.name) return '<span class="chip">?</span>'; if (tmBlkHas(r.uid)) { hid++; return ''; } return tmUserBtn([{ uid: r.uid, nick: r.name }], r.name, 'chip tm-chip-btn', '내 클럽 회원 목록'); }).join('');
+  return h + (hid ? `<span class="tm-blk-note" style="flex-basis:100%;margin-top:2px">차단한 회원 ${hid}명은 목록에서 뺐어요</span>` : '');
+}
+function tmBlkClubHidden(c) { return !!(c && c.cloud && c.ownerUid && myClubId !== c.id && tmBlkHas(c.ownerUid)); } // 차단한 회원이 만든 클럽(내 클럽은 보임)
+function tmBlkNote(id, after, text) { // 목록 아래 작은 안내 줄(없으면 만듦, 글자만)
+  let el = $(id);
+  if (!el && after && after.parentNode && text) { el = document.createElement('div'); el.id = id; el.className = 'tm-blk-note'; after.insertAdjacentElement('afterend', el); }
+  if (!el) return; el.textContent = text || ''; el.style.display = text ? '' : 'none';
+}
+function tmBlkRankNote() { // 랭킹 표 아래: 빠진 수 · 이름을 누르면 신고·차단
+  const t = $('rank-table'); if (!t) return;
+  const S = tmBlkS(), n = S.hiddenPlayers || 0, on = svLogged();
+  const cloud = on && players.some((p) => p && p.cloud && p.uid);
+  tmBlkNote('rank-blk-note', t, !on ? '' : n ? `차단한 회원 ${n}명은 이 목록에서 빠져 있어요 · 이름을 누르면 신고·차단할 수 있어요` : cloud ? '이름을 누르면 신고·차단할 수 있어요' : '');
+}
+function tmUserOpen(x) { // 회원 창 — x = tmUserBtn 번호
+  const S = tmBlkS(), d = typeof x === 'number' ? S.users[x] : x;
+  if (!d || !d.users || !d.users.length) return;
+  if (!svLogged()) { toast('로그인하면 신고·차단할 수 있어요'); return; }
+  S.cur = d; S.ask = null; tmUserRender('user'); openModal('user');
+  if (S.state !== 'ok' && S.state !== 'loading') svLoadBlocks(true).then(() => { const m = $('modal-user'); if (m && m.classList.contains('open') && !S.ask) tmUserRender('user'); });
+}
+function tmUserRender(view) { // 회원 창 그리기: 'user'(이름 · [신고하기] · [차단하기]/[차단 풀기] · [닫기]) | 'ask'(차단 확인)
+  const S = tmBlkS(), d = S.cur || { users: [] }, body = $('user-body'), h3 = $('user-h'); if (!body) return;
+  const us = d.users || [], none = S.state === 'none';
+  const msg = '<div class="muted" id="user-msg" role="status" aria-live="polite" style="font-size:12px;min-height:16px;margin-top:6px;text-align:center"></div>';
+  if (view === 'ask' && S.ask) {
+    if (h3) h3.textContent = S.ask.nick + ' 님을 차단할까요?';
+    body.innerHTML = `<ul style="margin:0 0 6px 18px;padding:0;font-size:13px;line-height:1.6">
+      <li>서로 경기 결과를 올리거나 승인할 수 없어요. 둘이 함께 든 승인 대기 경기는 취소돼요(차단을 풀어도 돌아오지 않아요).</li>
+      <li>매치 방에서 서로의 영상 클립을 받을 수 없어요.</li>
+      <li>내 화면의 랭킹·선수 목록·클럽 회원 목록·진행 중인 경기에서 이 회원이 보이지 않아요.</li>
+      <li>상대에게 따로 알리지 않아요. 더보기 › 설정 › 차단한 사람에서 언제든 풀 수 있어요.</li>
+      <li>괴롭힘이나 부적절한 영상이면 차단과 함께 신고도 해 주세요.</li>
+    </ul>
+    <button type="button" class="btn full" id="blk-go" onclick="tmBlockGo()">차단하기</button>
+    <button type="button" class="btn full outline" onclick="tmBlockCancel()">취소</button>${msg}`;
+    return;
+  }
+  if (h3) h3.textContent = us.length === 1 ? us[0].nick : '회원';
+  const blkBtn = (u, i, cls) => tmBlkHas(u.uid)
+    ? `<button type="button" class="btn ${cls} outline" onclick="tmUnblockAt(${i})">차단 풀기</button>`
+    : `<button type="button" class="btn ${cls}"${none ? ' disabled' : ''} onclick="tmBlockAsk(${i})">${none ? '차단하기 (준비 중)' : '차단하기'}</button>`;
+  let h = '';
+  if (us.length > 1) h += us.map((u, i) => `<div class="row tm-blk-row"><span style="flex:1;min-width:0;word-break:break-all">${esc(u.nick)}</span>${blkBtn(u, i, 'small')}</div>`).join('');
+  h += '<button type="button" class="btn full outline" id="user-report" onclick="tmUserReport()">신고하기</button>';
+  if (us.length === 1) h += blkBtn(us[0], 0, 'full');
+  if (none) h += '<div class="muted" id="user-none" style="font-size:12px;margin-top:6px">차단 기능은 서버 준비 중이에요 — 잠시 뒤 다시 해 주세요.</div>';
+  h += '<button type="button" class="btn full outline" onclick="closeModal(\'user\')">닫기</button>' + msg;
+  body.innerHTML = h;
+}
+function tmUserReport() { // 회원 창 [신고하기] → 신고 안내 창(상황: 어디·회원 — 차단 단추도 함께)
+  const d = tmBlkS().cur || {}, us = d.users || [];
+  closeModal('user');
+  tmReportOpen({ where: d.where || '회원', user: us.map((u) => u.nick).join(', '), users: us, room: d.room || '' });
+}
+function tmBlkReportUsers(c) { return (c && Array.isArray(c.users) ? c.users : []).filter((u) => u && u.uid && String(u.uid) !== String(svMyId())); }
+function tmBlkReportHtml(c) { // 신고 안내 창에 넣을 차단 줄 — 상황에 회원이 있으면 [이 회원 차단하기], 상황 없는 설정의 신고하기면 차단 찾는 곳 안내
+  if (typeof svLogged !== 'function' || !svLogged()) return '';
+  const us = tmBlkReportUsers(c);
+  if (us.length) return `<div class="cs-box" id="report-blk"><div class="muted" style="font-size:12px">이 회원을 더 보고 싶지 않으면</div>${us.map((u, i) => `<button type="button" class="btn small outline" style="margin:6px 6px 0 0" onclick="tmBlockFromReport(${i})">${us.length > 1 ? esc(u.nick) + ' 차단하기' : '이 회원 차단하기'}</button>`).join('')}</div>`;
+  if (!c || !Object.keys(c).length) return '<div class="muted" id="report-blk-hint" style="font-size:12px;line-height:1.6">회원을 차단하려면 랭킹·클럽 회원 목록에서 이름을 누르거나, 승인 대기함·진행 중인 경기의 차단 단추를 누르세요. 더보기 › 설정 › 차단한 사람에서 닉네임으로 찾아 차단할 수도 있어요.</div>';
+  return '';
+}
+function tmBlockFromReport(i) { const c = tmRepS().cur || {}, u = tmBlkReportUsers(c)[i]; if (!u) return; closeModal('report'); tmBlockAsk(u.uid, u.nick, { room: c.room || '' }); }
+function tmBlockAsk(x, nick, opt) { // 차단 확인 — x = 회원 창의 번호 또는 uid
+  const S = tmBlkS(); let u = null;
+  if (typeof x === 'number') { const d = S.cur || {}, w = (d.users || [])[x]; if (w) u = { uid: w.uid, nick: w.nick, room: d.room || '', back: 'user' }; }
+  else if (x) u = { uid: String(x), nick: String(nick || '') || '회원', room: (opt && opt.room) || '', back: (opt && opt.back) || '' };
+  if (!u || !u.uid) return;
+  if (!svLogged()) { toast('로그인하면 차단할 수 있어요'); return; }
+  if (S.state === 'none') { toast('차단 기능은 서버 준비 중이에요 — 잠시 뒤 다시 해 주세요'); return; }
+  if (tmBlkHas(u.uid)) { toast('이미 차단한 회원이에요'); return; }
+  S.ask = u; tmUserRender('ask'); openModal('user');
+}
+function tmBlockCancel() { const S = tmBlkS(), a = S.ask; S.ask = null; if (a && a.back === 'user' && S.cur) tmUserRender('user'); else closeModal('user'); }
+async function tmBlockGo() { // [차단하기] → 서버 block_user(차단 + 둘이 든 대기 경기 취소)
+  const S = tmBlkS(), a = S.ask; if (!a || S.busy) return;
+  const btn = $('blk-go'), m = (t) => { const e = $('user-msg'); if (e) e.textContent = t; };
+  S.busy = true; if (btn) btn.disabled = true; m('차단하는 중…');
+  let r; try { r = await tmBlkRpc('block_user', { p_uid: a.uid }, 8000); } catch (e) { r = { data: null, error: e }; }
+  S.busy = false; if (btn) btn.disabled = false;
+  if (r && r.error) {
+    if (tmBlkMissing(r.error)) { S.state = 'none'; m('차단 기능은 서버 준비 중이에요 — 잠시 뒤 다시 해 주세요'); return; }
+    m('차단하지 못했어요 — 잠시 뒤 다시 해 주세요'); return;
+  }
+  const code = String((r && r.data) || '');
+  const T = { self: '나 자신은 차단할 수 없어요', none: '이미 탈퇴했거나 찾을 수 없는 회원이에요', limit: '차단은 200명까지 할 수 있어요', auth: '로그인이 풀렸어요 — 다시 로그인한 뒤 해 주세요' };
+  if (code !== 'ok') { m(T[code] || '차단하지 못했어요 — 잠시 뒤 다시 해 주세요'); return; }
+  S.ids.add(a.uid); if (!S.list.some((x) => x.id === a.uid)) S.list.unshift({ id: a.uid, nick: a.nick, at: new Date().toISOString() });
+  if (S.state !== 'ok') S.state = 'ok';
+  S.ask = null; closeModal('user');
+  let left = false;
+  try { if (a.room && mrChan && mrCode === a.room) { await mrLeave(true); left = true; } } catch (e) {} // 받은 클립 줄에서 차단 → 그 방에서 나옴
+  toast(left ? '차단했어요 — 방에서 나왔어요' : '차단했어요');
+  tmBlkAfter();
+  const bm = $('modal-blocks'); if (bm && bm.classList.contains('open')) tmBlocksRender();
+  svLoadBlocks(true).then(() => { const b2 = $('modal-blocks'); if (b2 && b2.classList.contains('open')) tmBlocksRender(); }); // 서버 기준으로 다시(차단한 시각)
+}
+function tmUnblockAt(i) { const d = tmBlkS().cur || {}, u = (d.users || [])[i]; if (u) tmUnblock(u.uid); }
+function tmUnblockList(i) { const x = tmBlkS().list[i]; if (x) tmUnblock(x.id); }
+async function tmUnblock(uid) { // [차단 풀기] → 서버 unblock_user(취소된 대기 경기는 되살리지 않음)
+  const S = tmBlkS(); uid = String(uid || ''); if (!uid || S.busy) return;
+  S.busy = true; let r; try { r = await tmBlkRpc('unblock_user', { p_uid: uid }, 8000); } catch (e) { r = { data: null, error: e }; } S.busy = false;
+  if (r && r.error) { toast(tmBlkMissing(r.error) ? '차단 기능은 서버 준비 중이에요 — 잠시 뒤 다시 해 주세요' : '차단을 풀지 못했어요 — 잠시 뒤 다시 해 주세요'); return; }
+  const code = String((r && r.data) || '');
+  if (code !== 'ok') { toast(code === 'auth' ? '로그인이 풀렸어요 — 다시 로그인한 뒤 해 주세요' : '차단을 풀지 못했어요 — 잠시 뒤 다시 해 주세요'); return; }
+  S.ids.delete(uid); S.list = S.list.filter((x) => x.id !== uid);
+  toast('차단을 풀었어요');
+  const um = $('modal-user'); if (um && um.classList.contains('open') && !S.ask) tmUserRender('user');
+  const bm = $('modal-blocks'); if (bm && bm.classList.contains('open')) tmBlocksRender();
+  tmBlkAfter();
+}
+function tmBlocksOpen() { // 더보기 › 설정 › 차단한 사람
+  const S = tmBlkS(); S.found = []; S.findQ = '';
+  tmBlocksRender(true); openModal('blocks');
+  if (svLogged()) svLoadBlocks(true).then(() => { const m = $('modal-blocks'); if (m && m.classList.contains('open')) tmBlocksRender(); });
+}
+function tmBlocksRender(loading) {
+  const S = tmBlkS(), body = $('blocks-body'); if (!body) return;
+  const note = '<div class="muted" style="font-size:12px;line-height:1.6;margin-top:10px">차단하면 서로 경기 결과와 매치 방 클립을 주고받을 수 없고, 내 화면에서 그 회원이 보이지 않아요. 상대에게 따로 알리지 않아요.</div>';
+  let h = '';
+  if (!svLogged()) h = '<div class="muted" style="font-size:13px">로그인하면 쓸 수 있어요.</div>';
+  else if (S.state === 'none') h = '<div class="muted" id="blocks-none" style="font-size:13px">서버 준비 중이에요 — 잠시 뒤 다시 열어 주세요</div>';
+  else if (loading && !S.loaded) h = '<div class="muted" style="font-size:13px">불러오는 중…</div>';
+  else {
+    if (!S.loaded && S.state === 'err') h += '<div class="muted" id="blocks-err" style="font-size:13px">목록을 불러오지 못했어요 — 잠시 뒤 다시 열어 주세요</div>';
+    else h += S.list.length
+      ? `<div id="blocks-list">${S.list.map((x, i) => `<div class="row tm-blk-row"><span style="flex:1;min-width:0;word-break:break-all">${esc(x.nick)}${x.at ? ' · ' + esc(tmRepDate(x.at)) : ''}</span><button type="button" class="tag-btn tm-blk-btn" onclick="tmUnblockList(${i})">차단 풀기</button></div>`).join('')}</div>`
+      : '<div class="muted" id="blocks-empty" style="font-size:13px">차단한 사람이 없어요</div>';
+    h += `<div style="display:flex;gap:6px;margin-top:12px"><input id="blk-q" placeholder="닉네임으로 찾아 차단" maxlength="20" style="flex:1" onkeydown="if(event.key==='Enter')tmBlkFind()"><button type="button" class="tag-btn" onclick="tmBlkFind()">찾기</button></div><div id="blk-find" style="margin-top:4px"></div>`;
+  }
+  body.innerHTML = h + note + '<button type="button" class="btn full outline" onclick="closeModal(\'blocks\')">닫기</button>';
+  if (S.findQ) { const q = $('blk-q'); if (q) q.value = S.findQ; if (S.found.length) tmBlkFindRender(); }
+}
+async function tmBlkFind() { // 닉네임으로 찾아 차단(목록에 없는 회원도 — 랭킹은 100명까지만)
+  const S = tmBlkS(), inp = $('blk-q'), box = $('blk-find'), q = ((inp && inp.value) || '').trim(); if (!box) return;
+  if (!q) { box.innerHTML = '<span class="muted" style="font-size:12px">닉네임을 입력해 주세요</span>'; return; }
+  S.findQ = q; box.innerHTML = '<span class="muted" style="font-size:12px">찾는 중…</span>';
+  try {
+    const { data, error } = await svClient().from('profiles').select('id, nickname').ilike('nickname', '%' + q + '%').is('deleted_at', null).limit(5);
+    if (error) throw error;
+    const me = String(svMyId() || '');
+    S.found = (data || []).filter((p) => p && p.id && String(p.id) !== me).map((p) => ({ uid: String(p.id), nick: String(p.nickname || '') || '회원' }));
+    tmBlkFindRender();
+  } catch (e) { box.innerHTML = '<span class="muted" style="font-size:12px">찾지 못했어요 — 잠시 뒤 다시 해 주세요</span>'; }
+}
+function tmBlkFindRender() {
+  const S = tmBlkS(), box = $('blk-find'); if (!box) return;
+  box.innerHTML = S.found.length
+    ? S.found.map((u, i) => `<div class="row tm-blk-row"><span style="flex:1;min-width:0;word-break:break-all">${esc(u.nick)}</span>${tmBlkHas(u.uid) ? '<span class="muted" style="font-size:12px">차단함</span>' : `<button type="button" class="tag-btn tm-blk-btn" onclick="tmBlkFindAsk(${i})">차단하기</button>`}</div>`).join('')
+    : '<span class="muted" style="font-size:12px">찾는 회원이 없어요</span>';
+}
+function tmBlkFindAsk(i) { const u = tmBlkS().found[i]; if (u) tmBlockAsk(u.uid, u.nick, { back: '' }); }
+function tmBlkRoomCheck() { // 매치 방: 접속 표시(앱이 적는 uid — 안내에만 씀)에 차단한 회원이 있으면 '차단한 회원이 이 방에 있어요' + [나가기]. 막기는 서버(클립)
+  const el = $('mr-blk-note'); if (!el) return;
+  let hit = false;
+  try { if (mrChan && mrChan.presenceState) Object.values(mrChan.presenceState() || {}).forEach((a) => (a || []).forEach((m) => { if (m && m.uid && tmBlkHas(m.uid)) hit = true; })); } catch (e) {}
+  el.style.display = hit ? 'flex' : 'none';
+}
+function tmBlkClipPeers(room, at) { // 받은 상대 클립 줄 — 그 방에 클립을 올린 회원(서버 기록 room_peers — 방송 uid를 믿지 않음)을 [차단]으로. 서버에 016이 없거나 실패하면 신고 줄 그대로
+  const S = tmBlkS(), gen = ++S.clipGen;
+  if (!room || !/^[A-Z0-9]{6}$/.test(String(room)) || typeof svLogged !== 'function' || !svLogged()) return;
+  tmBlkRpc('room_peers', { p_code: String(room) }, 6000).then((r) => {
+    if (gen !== S.clipGen) return;
+    const el = $('vc-report'); if (!el || el.style.display === 'none' || !r || r.error || !Array.isArray(r.data)) return;
+    const me = String(svMyId() || '');
+    const peers = r.data.filter((x) => x && x.id && String(x.id) !== me).map((x) => ({ uid: String(x.id), nick: String(x.nickname || '') || '회원' }));
+    if (!peers.length) return;
+    const t = at || Date.now();
+    el.innerHTML = `<span class="muted" style="font-size:12px;flex:1">상대 클립에 부적절한 장면이 있으면</span>${tmReportBtn({ where: '매치 방 클립', room, date: tmRepDate(t), time: tmRepTime(t), users: peers })}${tmUserBtn(peers, '차단', 'tag-btn tm-blk-btn', '매치 방 클립', room)}`;
+  }, () => {});
+}
+function policyRowsInit() { // v1.71: 더보기 › 설정의 문의하기·이용약관·개인정보 처리방침 줄 — 주소가 없으면 숨김
+  [['contact-row', CONTACT_URL], ['report-row', CONTACT_URL], ['terms-row', POLICY_URLS.terms], ['privacy-row', POLICY_URLS.privacy]].forEach(([id, u]) => { const r = $(id); if (r) r.style.display = tmSafeUrl(u) ? '' : 'none'; });
+  try { tmPolicyFootInit(); } catch (e) {} /* v1.76 C7 */
+}
+function tmPolicyFootInit() { // v1.76 C7: 로그인 없이 쓰는 화면(내 영상 하이라이트 카드 아래·판독 탭 맨 아래)에도 이용약관·처리방침 링크 — 주소가 없으면 안 그림
+  const f = authPolicyFoot(); if (!f) return;
+  [['mh-card', 'pf-mh'], ['tab-judge', 'pf-judge']].forEach(([host, id]) => {
+    const h = $(host); if (!h || $(id)) return;
+    const d = document.createElement('div'); d.id = id; d.innerHTML = f;
+    if (host === 'mh-card') h.insertAdjacentElement('afterend', d); else h.appendChild(d);
+  });
+}
+function tmTermsNeed(session) { // v1.76 C6: 동의한 약관 판(user_metadata.terms_ver)이 지금 판(TERMS_VER)과 다르거나 만 14세 확인이 없는 계정(10/22 전 가입 12명 등)
+  try {
+    if (!serverMode() || !session || !session.user) return false;
+    const m = session.user.user_metadata || {};
+    if (m.age14 === true && m.terms_ver === TERMS_VER) return false;
+    try { if (sessionStorage.getItem('tm-terms-ok') === session.user.id + '|' + TERMS_VER) return false; } catch (e) {}
+    return true;
+  } catch (e) { return false; }
+}
+function tmTermsGate(session) { // v1.76 C6: 재확인 창 — 3m 캠(클럽캠 켜짐·PC로 보내기 대기)·하이라이트 분석 중·다른 창이 열려 있으면 띄우지 않고 다음 로그인·화면 복귀 때
+  if (!tmTermsNeed(session || TMAuth.session)) return;
+  try { if (ccChan || ccStream || ccSendMode) return; } catch (e) {}
+  try { if (typeof mhBusy !== 'undefined' && mhBusy) return; } catch (e) {}
+  try { if (acctDelWant) return; } catch (e) {}
+  if (document.querySelector('.modal-bg.open')) return;
+  renderAuth('reterms'); openModal('auth');
+}
+async function tmTermsAccept() { // v1.76 C6: 확인 → user_metadata에 가입 때와 같은 기록(age14·terms_ver·terms_at)
+  if (!authTermsOk()) return;
+  const b = $('au-reterms-ok'); if (b) b.disabled = true;
+  try {
+    const { error } = await TMAuth.client.auth.updateUser({ data: { age14: true, terms_ver: TERMS_VER, terms_at: new Date().toISOString() } });
+    if (error) throw error;
+    try { sessionStorage.setItem('tm-terms-ok', TMAuth.session.user.id + '|' + TERMS_VER); } catch (e) {}
+    closeModal('auth'); toast('확인했어요 — 계속 이용해 주세요');
+  } catch (e) { if (b) b.disabled = false; toast('저장하지 못했어요 — 인터넷을 확인하고 다시 눌러 주세요'); }
+}
+async function tmTermsDecline() { // v1.76 C6: 동의하지 않음 → 이 폰 로그아웃(계정은 그대로 — 지우려면 다시 로그인해 [계정 삭제] 또는 카카오톡 채널)
+  closeModal('auth');
+  try { await TMAuth.signOut(); } catch (e) {}
+  toast('로그아웃했어요 — 계정을 지우려면 다시 로그인해 [계정 삭제]를 누르거나 카카오톡 채널로 요청해 주세요', 6000);
+}
+function tmTermsDelete() { closeModal('auth'); try { acctDelEntry(); } catch (e) {} } // v1.76 C6: 동의하지 않아도 계정 삭제는 됨
 try { policyRowsInit(); } catch (e) {}
 addEventListener('DOMContentLoaded', () => { try { policyRowsInit(); } catch (e) {} });
 function renderAuth(view) {
@@ -3031,21 +3562,31 @@ function renderAuth(view) {
       <input type="password" id="au-pw">
       <div class="cc-consent" style="margin:12px 0 6px"><!-- v1.71: 가입 필수 확인 2개 — 둘 다 체크해야 가입(authTermsOk) -->
         <label id="au-age14-l" style="display:flex;gap:8px;align-items:flex-start;margin:0;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="au-age14" style="width:auto;flex:none;margin:2px 0 0" onchange="this.parentNode.classList.remove('need')"> <span>만 14세 이상이에요 <span class="muted">(필수)</span></span></label>
-        <label id="au-terms-l" style="display:flex;gap:8px;align-items:flex-start;margin:0;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="au-terms" style="width:auto;flex:none;margin:2px 0 0" onchange="this.parentNode.classList.remove('need')"> <span>이용약관과 개인정보 처리방침에 동의해요 <span class="muted">(필수)</span></span></label>
+        <label id="au-terms-l" style="display:flex;gap:8px;align-items:flex-start;margin:0;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="au-terms" style="width:auto;flex:none;margin:2px 0 0" onchange="this.parentNode.classList.remove('need')"> <span>이용약관에 동의하고 개인정보 처리방침을 확인했어요 <span class="muted">(필수)</span></span></label>
         <div class="muted" style="font-size:12px;padding-left:22px">${policyLink('terms', '이용약관')} · ${policyLink('privacy', '개인정보 처리방침')}</div>
       </div>
       <button class="btn full" onclick="authDo('signup')">가입하기</button>
       <button class="btn full outline" onclick="renderAuth('login')">← 로그인으로 돌아가기</button>`;
+  } else if (view === 'reterms') { /* v1.76 C6: 약관·처리방침 1.0판 재확인(tmTermsGate) — 가입 화면과 같은 체크 2개(authTermsOk), 닫기 단추 없음 */
+    html = `<div class="ob-hero"><h3>이용약관과 개인정보 처리방침</h3>
+      <div class="muted">테니스메이트 이용약관과 개인정보 처리방침을 공개했어요. 계속 쓰시려면 아래 두 가지를 확인해 주세요.</div></div>
+      <div class="cc-consent" style="margin:12px 0 6px">
+        <label id="au-age14-l" style="display:flex;gap:8px;align-items:flex-start;margin:0;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="au-age14" style="width:auto;flex:none;margin:2px 0 0" onchange="this.parentNode.classList.remove('need')"> <span>만 14세 이상이에요 <span class="muted">(필수)</span></span></label>
+        <label id="au-terms-l" style="display:flex;gap:8px;align-items:flex-start;margin:0;font-size:13px;color:var(--text);cursor:pointer"><input type="checkbox" id="au-terms" style="width:auto;flex:none;margin:2px 0 0" onchange="this.parentNode.classList.remove('need')"> <span>이용약관에 동의하고 개인정보 처리방침을 확인했어요 <span class="muted">(필수)</span></span></label>
+        <div class="muted" style="font-size:12px;padding-left:22px">${policyLink('terms', '이용약관')} · ${policyLink('privacy', '개인정보 처리방침')}</div>
+      </div>
+      <button class="btn full" id="au-reterms-ok" onclick="tmTermsAccept()">확인하고 계속</button>
+      <button class="btn full outline" onclick="tmTermsDelete()">계정 삭제</button>
+      <button class="btn full outline" onclick="tmTermsDecline()">동의하지 않고 로그아웃</button>
+      <div class="muted" style="font-size:12px;margin-top:8px">만 14세 미만이면 [계정 삭제]를 눌러 주세요. 확인하지 않아도 계정 삭제는 할 수 있어요.</div>`;
   } else if (view === 'reset') {
     html = head + `
       <label>가입한 이메일</label>
       <input type="email" id="au-email" placeholder="you@example.com">
       <button class="btn full" onclick="authDo('reset')">재설정 메일 보내기</button>
       <button class="btn full outline" onclick="renderAuth('login')">← 로그인으로 돌아가기</button>`;
-  } else if (view === 'confirm') {
-    html = `<div class="ob-hero"><div class="big">📮</div><h3>확인 메일을 보냈어요</h3>
-      <div class="muted">받은 편지함에서 인증 링크를 눌러 가입을 마친 뒤, 다시 로그인해 주세요.</div></div>
-      <button class="btn full" onclick="renderAuth('login')">로그인하러 가기</button>`;
+  } else if (view === 'confirm') { /* v1.77: 이메일 확인 기다림·확인 전 로그인·쓸 수 없는 링크 — authMailView(tmMail) */
+    html = authMailView();
   } else { // login
     html = head + `
       <label>이메일</label>
@@ -3062,6 +3603,7 @@ function renderAuth(view) {
       </div>${authPolicyFoot()}`; /* v1.71: 이용약관·처리방침 링크(주소 있을 때만) */
   }
   $('auth-body').innerHTML = html;
+  if (view === 'confirm') authMailTick(); /* v1.77: 다시 보내기 남은 초 */
 }
 async function authDo(action) {
   if (!serverMode() || authBusy) return;
@@ -3070,11 +3612,14 @@ async function authDo(action) {
   authBusy = true;
   try {
     if (action === 'login') {
-      await TMAuth.signInEmail($('au-email').value, $('au-pw').value);
-      toast('👋 다시 만나 반가워요!');
+      const liEmail = String($('au-email').value || '').trim(); let liOk = true; /* v1.77 */
+      try { await TMAuth.signInEmail(liEmail, $('au-pw').value); }
+      catch (e) { if (!(e && e.code === 'email_not_confirmed')) throw e; liOk = false; authMailPending(liEmail, 'login'); } /* v1.77: 이메일 확인 전 → 가입 때와 같은 안내·다시 보내기 */
+      if (liOk) toast('👋 다시 만나 반가워요!');
     } else if (action === 'signup') {
-      const r = await TMAuth.signUpEmail($('au-email').value, $('au-pw').value, $('au-nick').value, { age14: true, terms_ver: TERMS_VER, terms_at: new Date().toISOString() }); /* v1.71: 가입 동의 기록 → user_metadata */
-      if (r.needsEmailConfirm) renderAuth('confirm');
+      const suEmail = String($('au-email').value || '').trim(); /* v1.77: 안내 화면에 보여 줄 주소 — 요청 중에 화면이 바뀌어도 */
+      const r = await TMAuth.signUpEmail(suEmail, $('au-pw').value, $('au-nick').value, { age14: true, terms_ver: TERMS_VER, terms_at: new Date().toISOString() }); /* v1.71: 가입 동의 기록 → user_metadata */
+      if (r.needsEmailConfirm) authMailAfterSignup(suEmail, r); /* v1.77: 이메일 확인 켬 — 세션 없음 → 메일함 안내·다시 보내기(60초 간격) */
       else toast('🎉 가입 완료! 환영해요');
     } else if (action === 'reset') {
       await TMAuth.resetPassword($('au-email').value);
@@ -3095,6 +3640,7 @@ function needsServerOnboard(p) { return !p || p.ntrp == null || !p.region; }
 function onAuthChange(session, profile) {
   renderAccountBox();
   if (!session) tmProfReady = false; // v1.70b: 로그아웃·만료 — 다음 계정 프로필이 오기 전엔 이전 이름을 쓰지 않음
+  if (!session) { try { tmBlkReset(); } catch (e) {} } /* v1.77 차단: 로그아웃이면 차단 상태 비움·줄 숨김 */
   try { updateHeader(); } catch (e) {} // v1.70: 로그인 / 가입 ↔ 내 이름
   mrRenderGate(); // v0.40: 로그인 상태에 따라 매치 룸 열기/닫기
   svRenderGate(); // v0.43: 서버 경기 카드
@@ -3107,14 +3653,17 @@ function onAuthChange(session, profile) {
     if (cvChan) cvStop(true);
   }
   if (!session) return;
+  try { authMailOnSession(session); } catch (e) {} /* v1.77: 확인 링크로 로그인됨·다른 창에서 확인됨 → 안내 정리·환영 */
   if (ccChan && !ccSendMode && ccSessUid && session.user && session.user.id && session.user.id !== ccSessUid) { ccLog('auth-other', '다른 계정 로그인 → 캠 끔'); ccStop(); toast('다른 계정으로 로그인해서 클럽캠을 껐어요 — 다시 켜면 이 계정의 촬영 동의를 확인해요'); } // v1.57: 캠은 켠 계정 것
   else if (ccOffline() && ccJoinWakeFn) ccJoinWakeFn(); // v1.57: 로그인이 살아났으면 중계 연결을 바로 다시
   applyServerProfile(profile); // 재접속 시 서버 프로필을 화면에 입힘 (닉네임이 데모 기본 이름으로 남는 버그 픽스)
+  try { svLoadBlocks(); } catch (e) {} /* v1.77 차단: 차단 목록 먼저(svImportPlayers가 최대 3초 기다림) */
   svImportPlayers(); // ☁️ 서버 가입자들을 선수 목록에 합류 (비동기)
   svLoadClubs();     // 🏘️ 서버 클럽 목록으로 교체 (비동기)
   svLoadKdkHistory(); // 📜 서버 개인전 기록 (비동기)
   adminTouch(); // v1.19: 접속 기록 + 관리자 줄 표시 (비동기)
   closeModal('auth');
+  setTimeout(() => { try { tmTermsGate(session); } catch (e) {} }, 1500); /* v1.76 C6: 약관 재확인 — 온보딩·계정 삭제 창이 먼저 열리면 다음 번 */
   if (!onboarded && !(ccChan && ccStream) && (profile || navigator.onLine !== false) && needsServerOnboard(profile)) openOnboard(); // 가입 직후 → 기존 온보딩을 프로필 설정 단계로 · v1.57e 녹화 중·인터넷이 없어 프로필을 못 받았으면 안 띄움
 }
 async function svLoadClubs() { // 실전 모드: 서버 클럽으로 교체 (전 멤버 공유)
@@ -3132,7 +3681,7 @@ async function svLoadClubs() { // 실전 모드: 서버 클럽으로 교체 (전
       const names = rows.map(m => (m.profiles && m.profiles.nickname) || '?').filter(n => n !== ME.name);
       const lid = 2000 + i;
       clubs.push({ id: lid, cid: c.id, cloud: true, name: c.name, region: c.region, emoji: c.emoji || '🎾',
-        level: c.level || '-', desc: c.descr || '', members: names, wins: 0, losses: 0, ownerUid: c.owner_id });
+        level: c.level || '-', desc: c.descr || '', members: names, wins: 0, losses: 0, ownerUid: c.owner_id, memberRows: tmClubRows(rows, myUid) }); /* v1.77 차단: 회원 칩 → 회원 창 */
       if (myUid && rows.some(m => m.user_id === myUid)) myClubId = lid;
     });
     try { renderClubs(); renderMap(); renderHome(); } catch (e) {}
@@ -3208,18 +3757,23 @@ function enterRealMode(pf) { // 실전 모드: 데모 전적을 서버 실데이
 }
 async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선수를 전부 빼고 실제 가입자만 표시
   if (typeof svLogged !== 'function' || !svLogged()) return;
+  const blkWait = Promise.race([Promise.resolve().then(() => svLoadBlocks()), new Promise((r) => setTimeout(r, 3000))]).catch(() => {}); /* v1.77 차단: 차단 목록과 함께(최대 3초 — 못 읽으면 거르지 않음) */
   try {
     const { data } = await svClient().from('profiles')
       .select('id, nickname, ntrp, region, play_style, elo_pts, singles_pts, doubles_pts, singles_matches, singles_wins, doubles_matches, doubles_wins, matches, wins')
       .is('deleted_at', null).limit(100);
     if (!data) return;
+    await blkWait;
     const myNick = (TMAuth.profile && TMAuth.profile.nickname) || null;
     const seen = new Set();
+    let blkN = 0;
     const real = data.filter(pr => {
       if (!pr.nickname || pr.nickname === myNick || pr.nickname === ME.name || seen.has(pr.nickname)) return false;
+      if (tmBlkHas(pr.id)) { blkN++; return false; } /* v1.77 차단: 차단한 회원은 이 목록에서 뺌 → 랭킹·H2H·선수 고르기에서 안 보임 */
       seen.add(pr.nickname);
       return true;
     });
+    tmBlkS().hiddenPlayers = blkN;
     enterRealMode(TMAuth.profile); // 데모 전적 제거 + 내 서버 스탯 반영
     players.length = 0;            // 데모 선수 전원 제거
     real.forEach((pr, i) => players.push({
@@ -3239,7 +3793,7 @@ async function svImportPlayers() { // 실전 모드: 로그인하면 데모 선�
     try { if (typeof cw !== 'undefined' && !cw) renderCw(); } catch (e) {}
     try { if (typeof ss !== 'undefined' && !ss) renderSs(); } catch (e) {}
     try { renderKdkHistory(); } catch (e) {}
-    toast(real.length ? '👥 실전 모드 — 가입 멤버 ' + real.length + '명만 표시해요' : '👥 실전 모드 — 아직 다른 가입 멤버가 없어요. 초대해 보세요!');
+    if (!tmBlkS().quiet) toast(real.length ? '👥 실전 모드 — 가입 멤버 ' + real.length + '명만 표시해요' : '👥 실전 모드 — 아직 다른 가입 멤버가 없어요. 초대해 보세요!'); /* v1.77 차단: 차단·풀기 뒤 다시 읽을 땐 조용히 */
   } catch (e) { /* 서버 목록은 보조 — 실패해도 데모 목록으로 동작 */ }
 }
 function applyServerProfile(p) { // 서버 프로필 → ME 동기화 + 전체 화면 갱신
@@ -3368,7 +3922,7 @@ function acctDelFailText(r) {
   if (c === 'reauth') return '비밀번호 확인 시간이 지났어요. 비밀번호를 다시 입력해 주세요.';
   if (c === 'admin') return '관리자 계정은 이 화면에서 지울 수 없어요.';
   if (c === 'forbidden') return '운영자만 할 수 있어요.';
-  if (c === 'files_left') return '서버의 영상·사진을 다 지우지 못했어요. 계정은 아직 그대로예요. 잠시 뒤 다시 시도해 주세요.';
+  if (c === 'files_left') return '서버의 영상을 다 지우지 못했어요. 계정은 아직 그대로예요. 잠시 뒤 다시 시도해 주세요.';
   if (c === 'files_more') return '파일이 많아 아직 지우는 중이에요. 다시 시도를 누르면 이어서 지워요.';
   if (c === 'no_function' || c === 'config') return '서버의 계정 삭제 기능이 아직 준비되지 않았어요. 카카오톡 채널로 요청해 주시면 처리해 드려요.';
   if (c === 'network') return '인터넷 연결을 확인한 뒤 다시 시도해 주세요.';
@@ -3396,8 +3950,8 @@ function acctDelRender() {
     h += sub('바로 지워지는 것') + ul([
       li('이메일 주소, 비밀번호(암호화된 값), 로그인 세션, 로그인 기록(서버 업체가 보관하는 부분은 업체가 정한 기간 뒤 자동 삭제)'), /* v1.72c */
       li('프로필(닉네임·NTRP·지역·플레이 스타일)'),
-      li('접속 기록' + cnt('visits', '일') + ', 촬영·AI 학습 동의 기록, 클럽 가입'),
-      li('서버에 올린 영상 클립·학습용 사진' + cnt('files', '개')),
+      li('접속 기록' + cnt('visits', '일') + ', 촬영·AI 학습 동의 기록, 클럽 가입, 차단 목록'), /* v1.77 차단: 내가 차단한 기록·다른 회원이 나를 차단한 기록(016 cascade) */
+      li('서버에 올린 영상 클립' + cnt('files', '개')),
       li('내가 연 진행 중 대진표' + cnt('boards', '개') + ', 지난 기록 이관 자료')
     ]);
     const keep = [
@@ -3466,7 +4020,7 @@ async function acctDelRun() {
   let fresh = null;
   try { fresh = await TMAuth.reauth(pw); }
   catch (e) { d.busy = false; d.step = 'auth'; d.msg = (e && e.message) || '비밀번호를 확인하지 못했어요'; acctDelRender(); return; }
-  d.note = d.target ? '이 회원의 파일과 계정을 지우는 중' : '서버의 영상·사진과 계정을 지우는 중'; acctDelRender();
+  d.note = d.target ? '이 회원의 파일과 계정을 지우는 중' : '서버의 영상과 계정을 지우는 중'; acctDelRender();
   let res = null;
   try {
     for (let i = 0; i < 12; i++) {
@@ -4463,7 +5017,7 @@ function recapStats() {
 function renderRecap() {
   const r = recapStats();
   const wr = r.ms.length ? Math.round(r.wins / r.ms.length * 100) : 0;
-  const cnt = {};
+  const cnt = Object.create(null); /* v1.77 B5 검증: 이름 키 */
   r.ms.forEach(h => { cnt[h.opp] = (cnt[h.opp] || 0) + 1; });
   const rival = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0];
   const tc = {};
@@ -4480,7 +5034,7 @@ function renderRecap() {
       <div class="recap-cell"><div class="rv">${r.minSum}</div><div class="rl">연습 시간(분)</div></div>
       <div class="recap-cell"><div class="rv">🔥${practiceStreak()}</div><div class="rl">주간 스트릭</div></div>
     </div>
-    <div class="muted" style="margin-top:8px">${rival ? `이번 달 최다 매치업: <b>${rival[0]}</b> (${rival[1]}경기)` : '이번 달 경기를 기록하면 리캡이 채워져요.'}${topType ? ` · 가장 많이 한 연습: <b>${topType[0]}</b>` : ''}${r.chk ? ` · 📍 코트 방문 <b>${r.chk}회</b>` : ''}${fav ? ` · 👑 단골 코트: <b>${fav.court.name}</b>` : ''}</div>
+    <div class="muted" style="margin-top:8px">${rival ? `이번 달 최다 매치업: <b>${esc(rival[0])}</b> (${rival[1]}경기)` : '이번 달 경기를 기록하면 리캡이 채워져요.'}${topType ? ` · 가장 많이 한 연습: <b>${topType[0]}</b>` : ''}${r.chk ? ` · 📍 코트 방문 <b>${r.chk}회</b>` : ''}${fav ? ` · 👑 단골 코트: <b>${fav.court.name}</b>` : ''}</div>
   </div>`;
 }
 function shareRecap() {
@@ -4495,7 +5049,7 @@ function seasonWrapStats() {
   const ms = history.filter(h => (h.date || '').startsWith(yr));
   const wins = ms.filter(h => h.my > h.op).length;
   const wr = ms.length ? Math.round(wins / ms.length * 100) : 0;
-  const cnt = {};
+  const cnt = Object.create(null); /* v1.77 B5 검증: 이름 키 */
   ms.forEach(h => String(h.opp).split('·').forEach(n => { cnt[n] = (cnt[n] || 0) + 1; }));
   const rival = Object.entries(cnt).sort((a, b) => b[1] - a[1])[0] || null;
   const prs = practices.filter(p => (p.date || '').startsWith(yr));
@@ -4540,7 +5094,7 @@ function openWrapped() {
         <div class="wrap-cell"><div class="rv">${s.badges}</div><div class="rl">획득 뱃지</div></div>
       </div>
       <div style="margin-top:10px">
-        ${s.rival ? `<div class="wrap-line"><span>🤜🤛 최다 라이벌</span><b>${s.rival[0]} (${s.rival[1]}경기)</b></div>` : ''}
+        ${s.rival ? `<div class="wrap-line"><span>🤜🤛 최다 라이벌</span><b>${esc(s.rival[0])} (${s.rival[1]}경기)</b></div>` : ''}
         ${s.bestMon ? `<div class="wrap-line"><span>🔥 가장 뜨거웠던 달</span><b>${s.bestMon[0]}월 (${s.bestMon[1]}경기)</b></div>` : ''}
         <div class="wrap-line"><span>🗺️ 정복한 지역</span><b>${s.terr}/${REGIONS.length} 지역</b></div>
         ${s.chk ? `<div class="wrap-line"><span>📍 코트 방문</span><b>${s.chk}회</b></div>` : ''}
@@ -4582,7 +5136,7 @@ function renderPCard() {
       <div class="wrap-cell"><div class="rv">${myStats.wins}-${myStats.matches - myStats.wins}</div><div class="rl">${myStats.matches}전 전적</div></div>
       <div class="wrap-cell"><div class="rv">${d.wr}%</div><div class="rl">승률</div></div>
     </div>
-    <div style="font-size:12px;margin-top:8px;opacity:.92">🎖️ 뱃지 ${d.badges.length}개${d.rival ? ` · 🤜🤛 최고 라이벌 ${d.rival.name} (${d.rival.w}-${d.rival.l})` : ''}</div>
+    <div style="font-size:12px;margin-top:8px;opacity:.92">🎖️ 뱃지 ${d.badges.length}개${d.rival ? ` · 🤜🤛 최고 라이벌 ${esc(d.rival.name)} (${d.rival.w}-${d.rival.l})` : ''}</div>
     <div class="row" style="gap:8px;margin-top:10px">
       <button class="btn wrap-light" style="flex:1" onclick="openMyCard()">명함 크게 보기</button>
       <button class="btn wrap-ghost store-hide" style="flex:1" onclick="shareMyCard()">피드에 공유</button>
@@ -4605,7 +5159,7 @@ function openMyCard() {
         <div class="wrap-cell"><div class="rv">${d.wr}%</div><div class="rl">승률</div></div>
       </div>
       <div style="margin-top:10px">
-        ${d.rival ? `<div class="wrap-line"><span>🤜🤛 최고 라이벌</span><b>${d.rival.name} (${d.rival.w}승 ${d.rival.l}패)</b></div>` : ''}
+        ${d.rival ? `<div class="wrap-line"><span>🤜🤛 최고 라이벌</span><b>${esc(d.rival.name)} (${d.rival.w}승 ${d.rival.l}패)</b></div>` : ''}
         <div class="wrap-line"><span>📐 보정 레벨</span><b>${(typeof ME.cal === 'number' ? ME.cal : ME.ntrp).toFixed(2)}</b></div>
         <div class="wrap-line"><span>🎖️ 획득 뱃지</span><b>${d.badges.length}/${BADGES.length}개</b></div>
       </div>
@@ -4630,9 +5184,9 @@ function openPlayerCard(pid) {
   $('pcard-body').innerHTML = `
     <div class="wrap-card" style="border-radius:14px;padding:18px 14px">
       <div style="text-align:center">
-        <div class="pcard-ava" style="margin:0 auto">${p.emoji}</div>
-        <h3 style="margin:8px 0 0">${p.name}</h3>
-        <div class="wrap-sub" style="margin-top:3px">NTRP ${p.ntrp.toFixed(1)} · ${p.region} · ${p.style}</div>
+        <div class="pcard-ava" style="margin:0 auto">${esc(p.emoji)}</div>
+        <h3 style="margin:8px 0 0">${esc(p.name)}</h3>
+        <div class="wrap-sub" style="margin-top:3px">NTRP ${p.ntrp.toFixed(1)} · ${esc(p.region)} · ${esc(p.style)}</div>
         <div style="margin-top:6px"><span class="badge" style="background:rgba(255,255,255,.2);color:#fff">🏆 통산 랭킹 ${rank}위</span> <span class="badge" style="background:rgba(255,255,255,.2);color:#fff">😊 매너 ${(p.manner || 4.0).toFixed(1)}</span></div>
       </div>
       <div class="wrap-grid">
@@ -4646,7 +5200,7 @@ function openPlayerCard(pid) {
         ${scoutNote(p.name) ? `<div class="wrap-line"><span>📓 내 스카우팅 노트</span><b>${(scoutNote(p.name).tags[0] || '메모 있음')}${scoutNote(p.name).tags.length > 1 ? ' 외 ' + (scoutNote(p.name).tags.length - 1) : ''}</b></div>` : ''}
       </div>
     </div>
-    <button class="btn full outline" onclick="closeModal('pcard');openScout('${p.name}')">스카우팅 노트 ${scoutNote(p.name) ? '수정' : '쓰기'}</button>
+    <button class="btn full outline" data-nm="${esc(p.name)}" onclick="closeModal('pcard');openScout(this.dataset.nm)">스카우팅 노트 ${scoutNote(p.name) ? '수정' : '쓰기'}</button>
     <button class="btn full" onclick="closeModal('pcard');openRequest(${p.id})">매칭 신청하기</button>
     <button class="btn full outline" onclick="closeModal('pcard')">닫기</button>`;
   openModal('pcard');
@@ -5022,7 +5576,7 @@ async function lvRCJoin(code, role) {
   if (lvRC) await lvRCStop(true);
   const chan = client.channel('score:' + code, { config: { presence: { key: role + '-' + Math.random().toString(36).slice(2, 6) }, broadcast: { self: false } } });
   if (role === 'host') {
-    chan.on('broadcast', { event: 'point' }, p => { if (live && !live.done) livePoint(p.payload.side); });
+    chan.on('broadcast', { event: 'point' }, p => { const sd = p && p.payload ? p.payload.side : null; if (live && !live.done && (sd === 0 || sd === 1)) livePoint(sd); }); /* v1.77 B5 검증: score:는 익명 공개 채널 — 쪽은 0·1만(다른 값이면 live.p·ptsTotal에 NaN·엉뚱한 칸이 생겨 점수판이 깨짐) */
     chan.on('broadcast', { event: 'undo' }, () => liveUndo());
     chan.on('broadcast', { event: 'hello' }, () => lvRCPushState());
   } else {
@@ -5472,12 +6026,12 @@ function renderLive() {
       <label>선수 1 (점수판 왼쪽, 우리 쪽)</label>
       <select id="lv-p1" onchange="lvP1Change()"><option value="me">나 — ${esc(ME.name)}</option>${players.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       <label id="lv-opp-lbl">상대 1</label>
-      <select id="lv-opp">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+      <select id="lv-opp">${players.map(p => `<option value="${p.id}">${esc(p.name)} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       <div id="lv-doubles">
         <label id="lv-partner-lbl">내 파트너</label>
-        <select id="lv-partner">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+        <select id="lv-partner">${players.map(p => `<option value="${p.id}">${esc(p.name)} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
         <label>상대 2</label>
-        <select id="lv-opp2">${players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
+        <select id="lv-opp2">${players.map(p => `<option value="${p.id}">${esc(p.name)} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('')}</select>
       </div>
       <button class="btn full" onclick="startLive()">경기 시작</button>
       <div class="dline" style="margin-top:10px">📟 아니면, 다른 폰의 점수판에 <b>리모컨으로 참여</b> — 코트에 안 가도 여기서 탭!</div>
@@ -5496,7 +6050,7 @@ function renderLive() {
       <div style="font-size:34px">${win ? '🏆' : '🎾'}</div>
       <h3 style="margin-top:6px">${win ? '승리!' : '아쉬운 패배'} — 세트 ${myS}:${opS}</h3>
       <div style="margin:8px 0">${liveSetChips()}</div>
-      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}${(live.gT || 6) === 4 ? '⚡4게임제 · ' : ''}${(live.sNeed || 2) === 1 ? '단판 · ' : ''}${live.noAd ? '노애드 · ' : ''}vs ${liveTeams().theirs} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
+      <div class="muted">${live.type === 'd' ? '👥 복식 · ' : ''}${(live.gT || 6) === 4 ? '⚡4게임제 · ' : ''}${(live.sNeed || 2) === 1 ? '단판 · ' : ''}${live.noAd ? '노애드 · ' : ''}vs ${esc(liveTeams().theirs)} · 총 포인트 ${live.ptsTotal[0]} : ${live.ptsTotal[1]} · 경기 기록에 자동 저장했어요</div>
       <button class="btn full" style="margin-top:12px" onclick="closeLive()">확인</button>
     </div>`;
     lvRCPushState();
@@ -5504,12 +6058,12 @@ function renderLive() {
   }
   const disp = liveDisp();
   body.innerHTML = `
-    <div class="muted" style="text-align:center">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${liveTeams().theirs} · ${live.tb ? '🔥 타이브레이크' : (live.sets.length + 1) + '세트'} ${liveStateLabel()}</div>
+    <div class="muted" style="text-align:center">${live.type === 'd' ? '👥 복식 · ' : ''}vs ${esc(liveTeams().theirs)} · ${live.tb ? '🔥 타이브레이크' : (live.sets.length + 1) + '세트'} ${liveStateLabel()}</div>
     <div class="dline">완료 세트: ${liveSetChips()}</div>
     <div class="live-grid">
-      <div><div class="live-name">${live.p1Id ? '' : '⭐ '}${liveTeams().mine}</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
+      <div><div class="live-name">${live.p1Id ? '' : '⭐ '}${esc(liveTeams().mine)}</div><div class="live-pts" id="lv-p0">${disp[0]}</div><div class="muted">게임 ${live.g[0]}</div></div>
       <div style="font-weight:800;color:var(--muted)">:</div>
-      <div><div class="live-name">${liveTeams().theirs}</div><div class="live-pts" id="lv-p1">${disp[1]}</div><div class="muted">게임 ${live.g[1]}</div></div>
+      <div><div class="live-name">${esc(liveTeams().theirs)}</div><div class="live-pts" id="lv-p1">${disp[1]}</div><div class="muted">게임 ${live.g[1]}</div></div>
     </div>
     <div class="row" style="gap:8px">
       <button class="btn pt-btn" onclick="livePoint(0)">+ ${(live.type === 'd' || live.p1Id) ? '우리' : '내'} 포인트</button>
@@ -5795,7 +6349,7 @@ function renderNotifBadge() {
 }
 function openNotifs() {
   $('notif-list').innerHTML = notifs.length ? notifs.map(n =>
-    `<div class="card" style="${n.read ? '' : 'background:#f0f7f2'}"><div style="font-size:13px">${n.msg}</div><div class="muted" style="margin-top:3px">${n.time}</div></div>`
+    `<div class="card" style="${n.read ? '' : 'background:#f0f7f2'}"><div style="font-size:13px">${esc(n.msg)}</div><div class="muted" style="margin-top:3px">${esc(n.time)}</div></div>`
   ).join('') : '<div class="empty">알림이 없어요.</div>';
   openModal('notifs');
   notifs.forEach(n => n.read = true);
@@ -5823,10 +6377,10 @@ function renderFeed() {
   $('home-feed').innerHTML = `<div class="card">` +
     (feed.length ? list.map(f => `
       <div class="feed-item">
-        <div class="feed-ava">${f.emoji}</div>
+        <div class="feed-ava">${esc(f.emoji)}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:12px"><b>${f.who}${f.mine ? ' (나)' : ''}</b> <span class="muted">· ${fmtMD(f.time)}</span></div>
-          <div style="font-size:13px;margin-top:2px">${f.msg}</div>
+          <div style="font-size:12px"><b>${esc(f.who)}${f.mine ? ' (나)' : ''}</b> <span class="muted">· ${fmtMD(f.time)}</span></div>
+          <div style="font-size:13px;margin-top:2px">${esc(f.msg)}</div>
         </div>
         <button class="like-btn ${f.liked ? 'on' : ''}" onclick="toggleLike(${f.id})">${f.likes}</button>
       </div>`).join('') : '<div class="empty">아직 활동이 없어요. 경기를 기록하거나 코트를 예약해보세요!</div>') +
@@ -5894,9 +6448,9 @@ function renderMap() {
   const markers = data.filter(d => d.ch).map(d =>
     `<g class="champ-marker" onclick="openChamp('${d.r.name}')">
        <circle cx="${d.r.mx}" cy="${d.r.my}" r="12" fill="#fff" opacity=".93"></circle>
-       <text x="${d.r.mx}" y="${d.r.my + 4}" font-size="12.5" text-anchor="middle">${d.ch.emoji}</text>
+       <text x="${d.r.mx}" y="${d.r.my + 4}" font-size="12.5" text-anchor="middle">${esc(d.ch.emoji)}</text>
        <text x="${d.r.mx + 11}" y="${d.r.my - 9}" font-size="10" text-anchor="middle">👑</text>
-       <text x="${d.r.mx}" y="${d.r.my + 25}" font-size="9.5" font-weight="700" text-anchor="middle" fill="#1d2b22" stroke="#ffffff" stroke-width="3" paint-order="stroke">${d.r.short} ${d.ch.me ? '⭐' : ''}${d.ch.name}${d.ch.me ? ' (나)' : ''}</text>
+       <text x="${d.r.mx}" y="${d.r.my + 25}" font-size="9.5" font-weight="700" text-anchor="middle" fill="#1d2b22" stroke="#ffffff" stroke-width="3" paint-order="stroke">${d.r.short} ${d.ch.me ? '⭐' : ''}${esc(d.ch.name)}${d.ch.me ? ' (나)' : ''}</text>
      </g>`
   ).join('');
   $('map-area').innerHTML = `<div class="card">
@@ -5905,14 +6459,14 @@ function renderMap() {
       <span class="badge" id="terr-count">⭐ 내 영토 ${myCount}/${REGIONS.length}</span>
     </div>
     <svg class="map-svg" viewBox="0 0 370 312" xmlns="http://www.w3.org/2000/svg">${shapes}<text x="185" y="163" font-size="13" text-anchor="middle" pointer-events="none">🌋</text>${markers}</svg>
-    <div class="map-legend">${Object.values(owners).map(o => `<span class="lg"><span class="sw" style="background:${o.color}"></span>${o.label}</span>`).join('')}</div>
+    <div class="map-legend">${Object.values(owners).map(o => `<span class="lg"><span class="sw" style="background:${o.color}"></span>${esc(o.label)}</span>`).join('')}</div>
     <div class="muted" style="margin-top:8px">지역 랭킹 1위(동네 1짱)의 세력이 그 지역을 차지해요. 경기에서 이겨 포인트를 쌓으면 우리 동네를 정복할 수 있어요! 마커를 탭하면 1짱 프로필이 열려요.</div>
   </div>`;
   $('champ-list').innerHTML = `<div class="card">` + data.map(d => {
     if (!d.ch) return `<div class="terr-chip"><span><b>${d.r.name}</b></span><span class="muted">무주공산</span></div>`;
     return `<div class="terr-chip" onclick="openChamp('${d.r.name}')" style="cursor:pointer">
-      <span>${d.ch.me ? '⭐ ' : ''}<b>${d.r.name}</b> <span class="muted">· ${d.ow.label}</span></span>
-      <span style="white-space:nowrap">👑 ${d.ch.emoji} ${d.ch.name}${d.ch.me ? ' (나)' : ''} <b style="color:var(--green)">${d.ch.pts.toLocaleString()}pt</b></span>
+      <span>${d.ch.me ? '⭐ ' : ''}<b>${d.r.name}</b> <span class="muted">· ${esc(d.ow.label)}</span></span>
+      <span style="white-space:nowrap">👑 ${esc(d.ch.emoji)} ${esc(d.ch.name)}${d.ch.me ? ' (나)' : ''} <b style="color:var(--green)">${d.ch.pts.toLocaleString()}pt</b></span>
     </div>`;
   }).join('') + `</div>`;
 }
@@ -5922,7 +6476,7 @@ function renderHomeMap() {
   $('home-map').innerHTML = `<div class="card">
     <div class="row"><b style="font-size:14px">🗺️ 동네 1짱 현황</b><span class="badge">⭐ 내 영토 ${myCount}/${REGIONS.length}</span></div>
     <div style="margin-top:4px">${data.filter(d => d.ch).map(d =>
-      `<div class="terr-chip"><span>${d.ch.me ? '⭐ ' : ''}${d.r.name}</span><span class="muted">👑 ${d.ch.emoji} ${d.ch.name}${d.ch.me ? ' (나)' : ''}</span></div>`).join('')}</div>
+      `<div class="terr-chip"><span>${d.ch.me ? '⭐ ' : ''}${d.r.name}</span><span class="muted">👑 ${esc(d.ch.emoji)} ${esc(d.ch.name)}${d.ch.me ? ' (나)' : ''}</span></div>`).join('')}</div>
   </div>`;
 }
 function openChamp(region) {
@@ -5945,8 +6499,8 @@ function openChamp(region) {
   const row = (c, i) => `
     <div style="display:flex;align-items:center;gap:7px;padding:7px 10px;border-radius:10px;margin-top:4px;${c.me ? 'background:rgba(47,158,95,.18);outline:1.5px solid rgba(47,158,95,.5)' : 'background:rgba(127,127,127,.08)'}">
       <span style="width:30px;font-weight:800;font-size:${i < 3 ? '16px' : '12px'}">${MEDALS[i] || (i + 1) + '위'}</span>
-      <span style="font-size:17px">${c.emoji}</span>
-      <b style="flex:1;text-align:left">${c.name}${c.me ? ' (나)' : ''}</b>
+      <span style="font-size:17px">${esc(c.emoji)}</span>
+      <b style="flex:1;text-align:left">${esc(c.name)}${c.me ? ' (나)' : ''}</b>
       <span class="muted" style="font-size:11px">NTRP ${c.ntrp.toFixed(1)}</span>
       <b style="min-width:58px;text-align:right">${c.pts.toLocaleString()}pt</b>
     </div>
@@ -5956,7 +6510,7 @@ function openChamp(region) {
   $('champ-body').innerHTML = `
     <div style="text-align:center">
       <h3 style="margin:0">${region} 랭킹</h3>
-      <div class="muted" style="margin-top:3px;font-size:12px">1짱 ${ch.emoji} <b>${ch.name}</b> · ${ow.label} 세력 · 총 ${ranks.length}명 활동 중</div>
+      <div class="muted" style="margin-top:3px;font-size:12px">1짱 ${esc(ch.emoji)} <b>${esc(ch.name)}</b> · ${esc(ow.label)} 세력 · 총 ${ranks.length}명 활동 중</div>
     </div>
     <div style="margin-top:10px">${listHtml}</div>
     ${myIdx === 0 ? '<div class="muted" style="margin-top:10px;text-align:center">이 지역은 내 영토예요. 도전자들로부터 자리를 지키세요!</div>'
@@ -5986,7 +6540,7 @@ function trendCardHtml() {
   });
   const poly = pt.map(p => p.join(',')).join(' ');
   const area = `${pt[0][0]},${H - P} ${poly} ${pt[pt.length - 1][0]},${H - P}`;
-  const dots = pt.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pt.length - 1 ? 4 : 2.5}" fill="${log[i].win ? 'var(--green)' : 'var(--accent)'}" ${i === pt.length - 1 ? 'stroke="var(--card)" stroke-width="2"' : ''}><title>${fmtMD(log[i].date)} vs ${log[i].opp} ${log[i].delta >= 0 ? '+' : ''}${log[i].delta}pt → ${log[i].pts}pt</title></circle>`).join('');
+  const dots = pt.map((p, i) => `<circle cx="${p[0]}" cy="${p[1]}" r="${i === pt.length - 1 ? 4 : 2.5}" fill="${log[i].win ? 'var(--green)' : 'var(--accent)'}" ${i === pt.length - 1 ? 'stroke="var(--card)" stroke-width="2"' : ''}><title>${fmtMD(log[i].date)} vs ${esc(log[i].opp)} ${log[i].delta >= 0 ? '+' : ''}${log[i].delta}pt → ${log[i].pts}pt</title></circle>`).join('');
   const period = vals[vals.length - 1] - vals[0];
   const wins = log.filter(e => e.win).length;
   const recent = ptsLog.slice(-3).reverse();
@@ -6002,7 +6556,7 @@ function trendCardHtml() {
       ${dots}
     </svg>
     <div class="trend-minmax"><span>최저 ${min.toLocaleString()}pt</span><span>🟢 승리 · 🟠 패배 경기</span><span>최고 ${max.toLocaleString()}pt</span></div>
-    <div style="margin-top:8px">${recent.map(e => `<div class="prac-item"><span>${e.win ? '🏆' : '🎾'} vs ${e.opp} <span class="muted">· ${fmtMD(e.date)}</span></span><span class="cal-delta ${e.delta >= 0 ? 'up' : 'down'}">${e.delta >= 0 ? '+' : ''}${e.delta}pt <span class="muted" style="font-weight:400">→ ${e.pts.toLocaleString()}</span></span></div>`).join('')}</div>
+    <div style="margin-top:8px">${recent.map(e => `<div class="prac-item"><span>${e.win ? '🏆' : '🎾'} vs ${esc(e.opp)} <span class="muted">· ${fmtMD(e.date)}</span></span><span class="cal-delta ${e.delta >= 0 ? 'up' : 'down'}">${e.delta >= 0 ? '+' : ''}${e.delta}pt <span class="muted" style="font-weight:400">→ ${e.pts.toLocaleString()}</span></span></div>`).join('')}</div>
     <div class="muted" style="margin-top:8px">경기를 기록할 때마다 포인트 변동이 자동으로 쌓여요. 점을 탭하면 경기 정보가 보여요.</div>
   </div>`;
 }
@@ -6014,7 +6568,7 @@ function renderTrend() {
 
 // ===== 라이벌 & 상대 전적 상세 (v0.24, 전부 파생 계산) =====
 function h2hData() {
-  const rec = {};
+  const rec = Object.create(null); /* v1.77 B5 검증: 상대 이름(서버 닉네임)이 '__proto__'·'constructor'면 games.push에서 멈춰 renderHistory·renderAll이 통째로 멈추던 것 */
   history.forEach(h => {
     String(h.opp).split('·').forEach(n => {
       rec[n] = rec[n] || { name: n, w: 0, l: 0, games: [] };
@@ -6032,10 +6586,10 @@ function renderH2H() {
     const p = players.find(x => x.name === r.name);
     const total = r.w + r.l;
     const lead = r.w > r.l ? '우세' : r.w < r.l ? '열세' : '백중세';
-    return `<div class="card row" onclick="openH2H('${r.name}')" style="cursor:pointer">
+    return `<div class="card row" data-nm="${esc(r.name)}" onclick="openH2H(this.dataset.nm)" style="cursor:pointer">
       <div style="display:flex;gap:12px;align-items:center">
         <div class="avatar">${p ? p.emoji : '🎾'}</div>
-        <div><h3>vs ${r.name} ${i === 0 && total >= 2 ? '<span class="badge orange">🤜🤛 최고 라이벌</span>' : ''} ${scoutNote(r.name) ? '<span title="스카우팅 노트 있음">📓</span>' : ''}</h3>
+        <div><h3>vs ${esc(r.name)} ${i === 0 && total >= 2 ? '<span class="badge orange">🤜🤛 최고 라이벌</span>' : ''} ${scoutNote(r.name) ? '<span title="스카우팅 노트 있음">📓</span>' : ''}</h3>
         <div class="muted">${total}전 ${r.w}승 ${r.l}패 · ${lead} · 최근 ${fmtMD(r.games[0].date)}</div></div>
       </div>
       <span class="badge ${r.w >= r.l ? '' : 'orange'}">${r.w}-${r.l}</span>
@@ -6053,22 +6607,22 @@ function openH2H(name) {
   $('h2h-body').innerHTML = `
     <div style="text-align:center">
       <div class="avatar" style="width:64px;height:64px;font-size:32px;margin:0 auto">${p ? p.emoji : '🎾'}</div>
-      <h3 style="margin:8px 0 0">vs ${name} 맞대결</h3>
-      <div class="muted" style="margin-top:4px">${p ? `NTRP ${p.ntrp.toFixed(1)} · ${p.region} · 😊 매너 ${(p.manner || 4.0).toFixed(1)}` : '프로필 정보가 없는 상대예요'}</div>
+      <h3 style="margin:8px 0 0">vs ${esc(name)} 맞대결</h3>
+      <div class="muted" style="margin-top:4px">${p ? `NTRP ${p.ntrp.toFixed(1)} · ${esc(p.region)} · 😊 매너 ${(p.manner || 4.0).toFixed(1)}` : '프로필 정보가 없는 상대예요'}</div>
       <div style="margin:10px 0 4px"><span class="badge">${total}전 ${r.w}승 ${r.l}패</span> <span class="badge ${wr >= 50 ? '' : 'orange'}">맞대결 승률 ${wr}%</span></div>
       <div style="margin-top:6px">${form} <span class="muted" style="font-size:11px">최근 맞대결 (최신순)</span></div>
       ${top.length ? `<div class="skill-chips" style="justify-content:center">${top.map(([t, n]) => `<span class="chip">상대 강점: ${t} ×${n}</span>`).join('')}</div>` : ''}
       ${scoutBoxHtml(name)}
     </div>
-    <div style="margin-top:10px">${r.games.slice(0, 5).map(h => `<div class="prac-item"><span>${fmtMD(h.date)} ${h.type === 'd' ? '👥 복식' : '🎾 단식'}${h.partner ? ` <span class="muted">(파트너 ${h.partner})</span>` : ''}</span><span class="score-pill ${h.my > h.op ? 'win' : 'lose'}">${h.sets ? h.sets : h.my + ':' + h.op} ${h.my > h.op ? '승' : '패'}</span></div>`).join('')}</div>
-    <button class="btn full outline" style="margin-top:12px" onclick="closeModal('h2h');openScout('${name}','h2h')">스카우팅 노트 ${scoutNote(name) ? '수정' : '쓰기'}</button>
+    <div style="margin-top:10px">${r.games.slice(0, 5).map(h => `<div class="prac-item"><span>${fmtMD(h.date)} ${h.type === 'd' ? '👥 복식' : '🎾 단식'}${h.partner ? ` <span class="muted">(파트너 ${esc(h.partner)})</span>` : ''}</span><span class="score-pill ${h.my > h.op ? 'win' : 'lose'}">${h.sets ? h.sets : h.my + ':' + h.op} ${h.my > h.op ? '승' : '패'}</span></div>`).join('')}</div>
+    <button class="btn full outline" style="margin-top:12px" data-nm="${esc(name)}" onclick="closeModal('h2h');openScout(this.dataset.nm,'h2h')">스카우팅 노트 ${scoutNote(name) ? '수정' : '쓰기'}</button>
     ${p ? `<button class="btn full" onclick="closeModal('h2h');openRequest(${p.id})">${r.w < r.l ? '설욕전' : '리매치'} 신청하기</button>` : ''}
     <button class="btn full outline" onclick="closeModal('h2h')">닫기</button>`;
   openModal('h2h');
 }
 
 // ===== 스카우팅 노트 & 경기 노트 (v0.35, OppoNote·Match Book 스카우팅 모델) =====
-function scoutNote(name) { return oppNotes[name] || null; }
+function scoutNote(name) { return Object.prototype.hasOwnProperty.call(oppNotes, name) ? oppNotes[name] || null : null; } /* v1.77 B5 검증: 닉네임이 constructor·toString이면 Object의 함수가 노트로 나와 플레이어 카드·H2H가 멈추던 것 */
 function scoutBoxHtml(name) {
   const n = scoutNote(name);
   if (!n) return '';
@@ -6080,7 +6634,7 @@ function openScout(name, back) {
   scoutTarget = name; scoutBack = back || null;
   const n = scoutNote(name);
   $('scout-body').innerHTML = `
-    <h3>${name} 스카우팅 노트</h3>
+    <h3>${esc(name)} 스카우팅 노트</h3>
     <div class="muted" style="margin:2px 0 6px">상대의 성향과 나만의 공략법을 남겨두세요. 매칭 신청 때 자동으로 보여드려요. 노트는 나만 볼 수 있어요.</div>
     <label>플레이 성향 태그 (복수 선택)</label>
     <div class="tag-pick" id="scout-tags">${SCOUT_TAGS.map(t =>
@@ -6327,7 +6881,7 @@ function renderPrepModal() {
   const note = ev.opp ? scoutNote(ev.opp) : null;
   $('prep-body').innerHTML = `
     <h3>경기 전 준비 체크리스트</h3>
-    <div class="muted" style="margin-top:2px">${ev.ico} ${ev.title} · ${fmtMD(ev.date)} <span class="badge ${all ? '' : 'orange'}">${prepDday(ev.date)}</span></div>
+    <div class="muted" style="margin-top:2px">${ev.ico} ${esc(ev.title)} · ${fmtMD(ev.date)} <span class="badge ${all ? '' : 'orange'}">${prepDday(ev.date)}</span></div>
     <div class="prep-bar"><div class="prep-fill" style="width:${Math.round(n / PREP_ITEMS.length * 100)}%"></div></div>
     <div class="muted" style="font-size:11px;margin:4px 0 6px">${all ? '🎾 준비 끝! 이제 코트에서 만나요' : n + '/' + PREP_ITEMS.length + ' 완료 — 프로처럼 루틴대로 준비해봐요'}</div>
     ${PREP_ITEMS.map((it, i) => {
@@ -6338,7 +6892,7 @@ function renderPrepModal() {
         <div><div class="pt">${it.ico} ${it.t}</div><div class="pd">${desc}</div></div>
       </div>`;
     }).join('')}
-    ${ev.opp ? scoutBoxHtml(ev.opp) + `<button class="btn full outline" style="margin-top:10px" onclick="closeModal('prep');openScout('${ev.opp}','prep')">${note ? ev.opp + ' 공략 노트 수정' : ev.opp + ' 공략 노트 쓰기'}</button>` : ''}
+    ${ev.opp ? scoutBoxHtml(ev.opp) + `<button class="btn full outline" style="margin-top:10px" data-nm="${esc(ev.opp)}" onclick="closeModal('prep');openScout(this.dataset.nm,'prep')">${esc(ev.opp) + (note ? ' 공략 노트 수정' : ' 공략 노트 쓰기')}</button>` : ''}
     <button class="btn full ${all ? '' : 'outline'}" style="margin-top:${ev.opp ? 8 : 12}px" onclick="closeModal('prep')">${all ? '완료' : '닫기'}</button>`;
 }
 function togglePrep(i) {
@@ -6370,7 +6924,7 @@ function aiInsights() {
     else if (w <= 1) out.push({ ico: '🧊', title: '잠깐 재정비할 타이밍', desc: `최근 ${recent.length}경기 중 ${w}승이에요. 경기보다 기본기 드릴로 리듬을 되찾는 걸 추천해요.`, act: '📚 추천 드릴 보기', fn: `aiGoDrill('')` });
   }
   // 2) 천적 분석 (2패 이상 & 상대 전적 열세)
-  const rec = {};
+  const rec = Object.create(null); /* v1.77 B5 검증: 이름 키 */
   history.forEach(h => {
     if (h.type === 'd') return;
     rec[h.opp] = rec[h.opp] || { w: 0, l: 0 };
@@ -6441,8 +6995,8 @@ function renderInsights() {
     ${list.length ? list.map(it => `<div class="insight-item">
       <span class="insight-ico">${it.ico}</span>
       <div style="flex:1;min-width:0">
-        <b>${it.title}</b>
-        <div class="muted" style="margin-top:2px">${it.desc}</div>
+        <b>${esc(it.title)}</b>
+        <div class="muted" style="margin-top:2px">${esc(it.desc)}</div>
       </div>
       ${it.act ? `<button class="btn small outline" style="flex-shrink:0" onclick="${it.fn}">${it.act}</button>` : ''}
     </div>`).join('') : '<div class="empty">경기와 연습을 기록하면 AI 인사이트가 생성돼요.</div>'}
@@ -6755,16 +7309,17 @@ function renderMyClub() {
   $('my-club-area').innerHTML = c ? `<div class="card">
     <div class="row">
       <div style="display:flex;gap:12px;align-items:center">
-        <div class="club-emblem">${c.emoji}</div>
-        <div><h3>${c.name}</h3><div class="muted">${c.region} · NTRP ${c.level} · 멤버 ${c.members.length + 1}명 · 대항전 ${c.wins}승 ${c.losses}패</div></div>
+        <div class="club-emblem">${esc(c.emoji)}</div>
+        <div><h3>${esc(c.name)}</h3><div class="muted">${esc(c.region)} · NTRP ${esc(c.level)} · 멤버 ${c.members.length + 1}명 · 대항전 ${c.wins}승 ${c.losses}패</div></div>
       </div>
       <button class="btn small outline" onclick="leaveClub()">탈퇴</button>
     </div>
-    <div class="muted" style="margin-top:8px">${c.desc}</div>
+    <div class="muted" style="margin-top:8px">${esc(c.desc)}</div>
     <div class="member-chips">
-      <span class="chip me">⭐ ${ME.name} (나)</span>
-      ${c.members.map(m => `<span class="chip">${m}</span>`).join('')}
+      <span class="chip me">⭐ ${esc(ME.name)} (나)</span>
+      ${tmClubChips(c)}
     </div>
+    <div class="tm-rep-line">${tmReportBtn({ where: '내 클럽 소개·회원 목록', club: c.name })}</div><!-- v1.77: 신고 · 서버 글은 esc -->
   </div>` : '<div class="empty">아직 가입한 클럽이 없어요. 아래에서 우리 동네 클럽에 가입해보세요!</div>';
 }
 function joinClub(id) {
@@ -6797,7 +7352,7 @@ let nameMap = {}; /* v1.71: 기본 매핑 없음 — 공개 코드에서 회원 
   try { const raw = localStorage.getItem('tm-namecfg'); if (raw) { const c = JSON.parse(raw); useRealNames = !!c.on; if (c.map && typeof c.map === 'object') nameMap = c.map; } } catch (e) {}
 })();
 function saveNameCfg() { try { localStorage.setItem('tm-namecfg', JSON.stringify({ on: useRealNames, map: nameMap })); } catch (e) {} }
-function realName(nm) { return (useRealNames && nameMap[nm]) ? nameMap[nm] : nm; }
+function realName(nm) { return (useRealNames && Object.prototype.hasOwnProperty.call(nameMap, nm) && nameMap[nm]) ? nameMap[nm] : nm; } /* v1.77 B5 검증: constructor 같은 이름이 함수로 바뀌지 않게 */
 function isMe(nm) { return nm === ME.name || nm === realName(ME.name); }
 function rosterNames() { // 미니게임 참가자 후보 (실명 옵션 반영 + 중복 제거)
   const seen = new Set(), out = [];
@@ -7124,7 +7679,7 @@ function renderCw() {
       <div class="muted" style="margin-bottom:6px">참가자 선택 (4명 이상) — 선택 순서대로 청·백 번갈아 배정돼요 (나중에 옮길 수 있어요)</div>
       <div id="cw-players">` +
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
-        <input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''}> ${n}${isMe(n) ? ' (나)' : ''}</label>`).join('') +
+        <input type="checkbox" value="${esc(n)}" ${i === 0 ? 'checked' : ''}> ${esc(n)}${isMe(n) ? ' (나)' : ''}</label>`).join('') + /* v1.77: 참가자 이름 esc(저장형 XSS — kdk-players와 같게) */
       `</div>
       <div class="row" style="gap:8px;margin-top:8px">
         <input type="text" id="cw-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')cwAdd()">
@@ -7135,7 +7690,7 @@ function renderCw() {
     return;
   }
   if (cw.stage === 'team') { // 팀 배정 화면 — 이름 탭 = 반대팀으로 이동
-    const chip = (n, team) => `<button type="button" class="tag-btn" style="margin:2px;${team === 'b' ? 'background:#2d5fd0;color:#fff' : 'background:#eee;color:#333'}" onclick="cwMove('${n}')">${n}</button>`;
+    const chip = (n, team) => `<button type="button" class="tag-btn" style="margin:2px;${team === 'b' ? 'background:#2d5fd0;color:#fff' : 'background:#eee;color:#333'}" data-nm="${esc(n)}" onclick="cwMove(this.dataset.nm)">${esc(n)}</button>`;
     el.innerHTML = `<div class="card">
       <div class="muted" style="font-size:12px">이름을 탭하면 반대팀으로 이동해요</div>
       <div style="margin-top:8px"><b>🔵 청팀 (${cw.blue.length})</b><div>${cw.blue.map(n => chip(n, 'b')).join('') || '<span class="muted">없음</span>'}</div></div>
@@ -7149,7 +7704,7 @@ function renderCw() {
   }
   // 진행 화면
   const t = cwTotals();
-  const opt = (list, sel) => '<option value="">선수</option>' + list.map(n => `<option ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+  const opt = (list, sel) => '<option value="">선수</option>' + list.map(n => `<option ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join(''); /* v1.77 B5: 이름 esc(크롬 새 select 파서는 option 안 태그도 요소로) — 값은 글자 그대로 */
   el.innerHTML = `<div class="card" style="text-align:center">
     <div class="row"><b>⚔️ 청백전</b>
       <span>
@@ -7251,7 +7806,7 @@ async function cwSave() {
   const t = cwTotals();
   const names = [...cw.blue, ...cw.white];
   const idx = n => names.indexOf(n);
-  const stat = {};
+  const stat = Object.create(null); /* v1.77 B5 검증: 이름 키(참가자 닉네임이 '__proto__'면 저장 결과에서 빠지던 것) */
   names.forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
   cw.games.forEach(g => {
     const bWin = g.sb > g.sw;
@@ -7288,7 +7843,7 @@ function renderSs() {
       <div class="muted" style="margin-bottom:6px">참가자 선택 (2명 이상)</div>
       <div id="ss-players">` +
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
-        <input type="checkbox" value="${n}" ${i === 0 ? 'checked' : ''}> ${n}${isMe(n) ? ' (나)' : ''}</label>`).join('') +
+        <input type="checkbox" value="${esc(n)}" ${i === 0 ? 'checked' : ''}> ${esc(n)}${isMe(n) ? ' (나)' : ''}</label>`).join('') + /* v1.77: 참가자 이름 esc(저장형 XSS — kdk-players와 같게) */
       `</div>
       <div class="row" style="gap:8px;margin-top:8px">
         <input type="text" id="ss-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')ssAdd()">
@@ -7299,7 +7854,7 @@ function renderSs() {
     return;
   }
   const st = ssStandings();
-  const opt = (sel) => '<option value="">선수</option>' + ss.names.map(n => `<option ${n === sel ? 'selected' : ''}>${n}</option>`).join('');
+  const opt = (sel) => '<option value="">선수</option>' + ss.names.map(n => `<option ${n === sel ? 'selected' : ''}>${esc(n)}</option>`).join(''); /* v1.77 B5: 이름 esc */
   el.innerHTML = `<div class="card">
     <div class="row"><b>🎾 단식 대전 · ${ss.names.length}명</b>
       <span>
@@ -7324,7 +7879,7 @@ function renderSs() {
   `<button class="btn small outline full" style="margin-top:4px" onclick="ssAddGame()">+ 단식 게임 추가</button>` +
   (st.some(r => r.w + r.l > 0) ? `<div class="card"><b>🏆 순위</b>
     <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th><th>득실</th></tr></thead><tbody>` +
-    st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${r.name}</td><td>${r.w}</td><td>${r.l}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
+    st.map((r, i) => `<tr style="${r.name === ME.name ? 'background:rgba(47,158,95,.12)' : ''}"><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td style="text-align:left">${esc(r.name)}</td><td>${r.w}</td><td>${r.l}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('') +
   `</tbody></table></div>` : '');
   boardPublish('ss');
 }
@@ -7368,7 +7923,7 @@ function ssScore(gi) {
   renderSs();
 }
 function ssStandings() {
-  const stat = {};
+  const stat = Object.create(null); /* v1.77 B5 검증: 이름 키 */
   ss.names.forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
   ss.games.forEach(g => {
     if (g.s1 === null || !g.p1 || !g.p2) return;
@@ -7435,7 +7990,7 @@ async function boardPublishNow(kind) {
   const active = st && (kind !== 'cw' || st.stage === 'play');
   const sv = svClient();
   if (!active) { // 초기화·저장 완료 → 끝난 것으로
-    if (boardIds[kind]) { try { await sv.from('club_boards').update({ status: 'done', updated_at: new Date().toISOString() }).eq('id', boardIds[kind]); } catch (e) {} delete boardIds[kind]; try { localStorage.setItem('tm-board-ids', JSON.stringify(boardIds)); } catch (e) {} }
+    if (boardIds[kind]) { try { const { error } = await sv.from('club_boards').delete().eq('id', boardIds[kind]); if (error) throw error; } catch (e) { try { await sv.from('club_boards').update({ status: 'done', updated_at: new Date().toISOString() }).eq('id', boardIds[kind]); } catch (e2) {} } /* v1.76 C5: 끝난 대진표는 지움(호스트 삭제 정책 009), 실패하면 예전처럼 done */ delete boardIds[kind]; try { localStorage.setItem('tm-board-ids', JSON.stringify(boardIds)); } catch (e) {} }
     return;
   }
   if (!boardShare) return;
@@ -7483,7 +8038,7 @@ async function boardsLoad() {
 function boardsRender() {
   const el = $('club-live-boards'); if (!el) return;
   const me = kdkMyUid();
-  const list = boardsList.filter(b => b.host !== me); // 내 보드는 아래 미니게임 카드에서 편집 중
+  const list = boardsList.filter(b => b.host !== me && !tmBlkHas(b.host)); // 내 보드는 아래 미니게임 카드에서 편집 중 · v1.77 차단: 차단한 회원이 연 보드는 숨김
   if (!list.length) { el.innerHTML = ''; try { uiTidy(); } catch (e) {} return; }
   const ago = t => { const m = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 60000)); return m < 1 ? '방금' : m < 60 ? m + '분 전' : Math.round(m / 60) + '시간 전'; };
   el.innerHTML = list.map(b => {
@@ -7496,6 +8051,7 @@ function boardsRender() {
     return `<div class="card" style="border-left:3px solid var(--court, #1b7a43)">
       <div class="row"><b>🟢 ${esc(b.title)}</b><span class="muted" style="font-size:12px">진행: ${esc(b.host_name || '')} · ${ago(b.updated_at)}</span></div>
       ${body}
+      <div class="tm-rep-line">${tmReportBtn({ where: '지금 진행 중인 경기', club: (typeof myClub === 'function' && myClub() && myClub().name) || '', title: b.title, host: b.host_name || '', date: tmRepDate(b.updated_at), users: b.host ? [{ uid: b.host, nick: b.host_name || '진행한 회원' }] : [] })}${b.host && svLogged() ? tmUserBtn([{ uid: b.host, nick: b.host_name || '진행한 회원' }], '차단', 'tag-btn tm-blk-btn', '지금 진행 중인 경기') : ''}</div><!-- v1.77: 신고 · 차단(진행한 회원 → 회원 창) -->
     </div>`;
   }).join('');
 }
@@ -7503,11 +8059,12 @@ function boardHtmlKdk(st) {
   const names = (st.names || []).map(String), games = st.games || [];
   const seeds = Array.isArray(st.seedNames) ? st.seedNames.map(String) : []; /* v1.65 회원 보기에도 고수 표시 */
   const rows = names.map((name, idx) => ({ name, idx, w: 0, p: 0, gf: 0, ga: 0 }));
-  games.forEach(g => { if (g.sa == null || g.sb == null) return; const aw = g.sa > g.sb; (g.a || []).forEach(i => { if (rows[i]) { rows[i].gf += g.sa; rows[i].ga += g.sb; rows[i].p++; if (aw) rows[i].w++; } }); (g.b || []).forEach(i => { if (rows[i]) { rows[i].gf += g.sb; rows[i].ga += g.sa; rows[i].p++; if (!aw) rows[i].w++; } }); });
+  const at = (i) => (Number.isInteger(i) && i >= 0 && i < rows.length ? rows[i] : null); /* v1.77 B5 검증: 보드 state는 같은 클럽 회원 누구나 씀 — 번호는 정수만('__proto__' 번호면 Array.prototype에 글자 점수가 붙던 것), 점수는 숫자로 */
+  games.forEach(g => { if (!g || g.sa == null || g.sb == null) return; const sa = Number(g.sa) || 0, sb = Number(g.sb) || 0, aw = sa > sb; (Array.isArray(g.a) ? g.a : []).forEach(i => { const r = at(i); if (r) { r.gf += sa; r.ga += sb; r.p++; if (aw) r.w++; } }); (Array.isArray(g.b) ? g.b : []).forEach(i => { const r = at(i); if (r) { r.gf += sb; r.ga += sa; r.p++; if (!aw) r.w++; } }); });
   rows.sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
   const done = games.filter(g => g.sa != null).length;
   return `<div class="muted" style="font-size:12px;margin:4px 0">${names.map((n, i) => esc(kdkLabel(i)) + '=' + kdkNameSeed(n, seeds)).join(' · ')}</div>
-    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sa != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.a || []).map(i => kdkNameSeed(names[i], seeds)).join('·')} <span class="muted">vs</span> ${(g.b || []).map(i => kdkNameSeed(names[i], seeds)).join('·')}</span><b>${g.sa != null ? g.sa + ' : ' + g.sb : '—'}</b></div>`).join('')}</div>
+    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sa != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.a || []).map(i => kdkNameSeed(names[i], seeds)).join('·')} <span class="muted">vs</span> ${(g.b || []).map(i => kdkNameSeed(names[i], seeds)).join('·')}</span><b>${g.sa != null ? esc(g.sa + ' : ' + g.sb) : '—'}</b></div>`).join('')}</div>
     <div class="muted" style="font-size:12px;margin-top:4px">${done}/${games.length}게임 완료</div>
     <table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>득실</th></tr></thead><tbody>${rows.map((r, i) => `<tr style="${r.name === realName(ME.name) ? 'background:rgba(47,158,95,.12)' : ''}"><td>${i + 1}</td><td style="text-align:left">${esc(kdkLabel(r.idx))} ${esc(r.name)}${kdkSeedTag(r.name, seeds)}</td><td>${r.w}</td><td>${r.gf - r.ga > 0 ? '+' : ''}${r.gf - r.ga}</td></tr>`).join('')}</tbody></table>`;
 }
@@ -7516,14 +8073,14 @@ function boardHtmlCw(st) {
   games.forEach(g => { if (g.sb == null) return; if (g.sb > g.sw) bw++; else ww++; });
   return `<div style="font-size:12.5px;margin:4px 0"><b style="color:#2b6cb0">🔵 청</b> ${(st.blue || []).map(esc).join(', ')}<br><b>⚪ 백</b> ${(st.white || []).map(esc).join(', ')}</div>
     <div style="font-size:14px;margin:4px 0"><b>청 ${bw} : ${ww} 백</b> <span class="muted" style="font-size:12px">(게임 승수)</span></div>
-    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sb != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.bp || []).filter(Boolean).map(esc).join('·') || '?'} <span class="muted">vs</span> ${(g.wp || []).filter(Boolean).map(esc).join('·') || '?'}</span><b>${g.sb != null ? g.sb + ' : ' + g.sw : '—'}</b></div>`).join('')}</div>`;
+    <div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.sb != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${(g.bp || []).filter(Boolean).map(esc).join('·') || '?'} <span class="muted">vs</span> ${(g.wp || []).filter(Boolean).map(esc).join('·') || '?'}</span><b>${g.sb != null ? esc(g.sb + ' : ' + g.sw) : '—'}</b></div>`).join('')}</div>`;
 }
 function boardHtmlSs(st) {
-  const games = st.games || []; const stat = {};
+  const games = st.games || []; const stat = Object.create(null); /* v1.77 B5 검증: 이름 키가 '__proto__'여도 Object.prototype에 글자 점수가 붙지 않게(보드 state는 같은 클럽 회원 누구나 씀) · 점수는 숫자로 */
   (st.names || []).forEach(n => stat[n] = { name: n, w: 0, l: 0, gf: 0, ga: 0 });
-  games.forEach(g => { if (g.s1 == null || !g.p1 || !g.p2 || !stat[g.p1] || !stat[g.p2]) return; stat[g.p1].gf += g.s1; stat[g.p1].ga += g.s2; stat[g.p2].gf += g.s2; stat[g.p2].ga += g.s1; if (g.s1 > g.s2) { stat[g.p1].w++; stat[g.p2].l++; } else { stat[g.p2].w++; stat[g.p1].l++; } });
+  games.forEach(g => { if (!g || g.s1 == null || !g.p1 || !g.p2 || !stat[g.p1] || !stat[g.p2]) return; const s1 = Number(g.s1) || 0, s2 = Number(g.s2) || 0; stat[g.p1].gf += s1; stat[g.p1].ga += s2; stat[g.p2].gf += s2; stat[g.p2].ga += s1; if (s1 > s2) { stat[g.p1].w++; stat[g.p2].l++; } else { stat[g.p2].w++; stat[g.p1].l++; } });
   const rows = Object.values(stat).sort((a, b) => b.w - a.w || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
-  return `<div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.s1 != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${esc(g.p1 || '?')} <span class="muted">vs</span> ${esc(g.p2 || '?')}</span><b>${g.s1 != null ? g.s1 + ' : ' + g.s2 : '—'}</b></div>`).join('')}</div>
+  return `<div style="font-size:12.5px">${games.map((g, gi) => `<div class="row" style="padding:3px 0;border-top:1px dashed var(--line)"><span class="badge ${g.s1 != null ? '' : 'gray'}" style="margin-right:6px">게임${gi + 1}</span><span style="flex:1">${esc(g.p1 || '?')} <span class="muted">vs</span> ${esc(g.p2 || '?')}</span><b>${g.s1 != null ? esc(g.s1 + ' : ' + g.s2) : '—'}</b></div>`).join('')}</div>
     ${rows.some(r => r.w + r.l > 0) ? `<table style="width:100%;margin-top:6px;font-size:12.5px"><thead><tr><th>순위</th><th style="text-align:left">이름</th><th>승</th><th>패</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td style="text-align:left">${esc(r.name)}</td><td>${r.w}</td><td>${r.l}</td></tr>`).join('')}</tbody></table>` : ''}`;
 }
 function kdkMyUid() { return window.__svTestClient ? '00000000-test' : (TMAuth.session && TMAuth.session.user ? TMAuth.session.user.id : null); }
@@ -7564,7 +8121,7 @@ async function svLoadKdkHistory() {
     const me = kdkMyUid();
     svKdkEvents = data.map(ev => ({
       cid: ev.id, date: ev.played_on, club: ev.club || '클럽', place: ev.place || '',
-      note: ev.note || '', results: ev.results || [], mine: ev.created_by === me
+      note: ev.note || '', results: Array.isArray(ev.results) ? ev.results.filter(r => r && typeof r === 'object') : [], mine: ev.created_by === me /* v1.77 B5: results는 배열·객체만(아무 jsonb나 들어올 수 있음) */
     }));
     renderKdkHistory();
     renderClubRank();
@@ -7635,15 +8192,15 @@ function kdkGoneName(nm) { return /^탈퇴한 회원#/.test(String(nm == null ? 
 function clubRankData(kind, period) {
   if (kind === undefined) kind = clubRankKind;
   const events = clubRankEvents(kind, period);
-  const agg = {};
+  const agg = Object.create(null); /* v1.77 B5 검증: kdk_events 이름은 로그인 회원 누구나 정함 — '__proto__'·'constructor' 이름이면 모든 회원 폰에서 Object.prototype에 w·l·pts 칸이 생기던 것 */
   events.forEach(ev => (ev.results || []).forEach(r => {
     if (!r || !r.name || kdkGoneName(r.name)) return; /* v1.72: 탈퇴한 회원은 집계·순위에서 뺌 */
     const a = agg[r.name] || (agg[r.name] = { name: r.name, pts: 0, w: 0, l: 0, gd: 0, ev: 0 });
     a.ev++;
-    a.w += r.w || 0;
-    a.l += r.l || 0;
-    a.gd += (r.gf || 0) - (r.ga || 0);
-    a.pts += 10 + (r.w || 0) * 10; // 참가 +10, 승당 +10
+    a.w += Number(r.w) || 0; /* v1.77 B5: 숫자만 — 문자열이면 0에 이어 붙어 '0<태그>'가 HTML로 들어가던 것(kdk_events는 로그인 회원 누구나 넣고 모두가 읽음) */
+    a.l += Number(r.l) || 0;
+    a.gd += (Number(r.gf) || 0) - (Number(r.ga) || 0);
+    a.pts += 10 + (Number(r.w) || 0) * 10; // 참가 +10, 승당 +10
   }));
   return Object.values(agg).sort((x, y) => y.pts - x.pts || y.w - x.w || y.gd - x.gd);
 }
@@ -7740,19 +8297,22 @@ document.addEventListener('DOMContentLoaded', renderClubRank);
 function renderClubList() {
   const q = ($('club-q').value || '').trim().toLowerCase();
   const region = $('club-region').value;
-  const list = clubs.filter(c =>
+  const blkHid = clubs.filter(c => tmBlkClubHidden(c)).length; /* v1.77 차단: 차단한 회원이 만든 클럽은 숨김(내 클럽은 보임) — 가입 거절은 안 함 */
+  const list = clubs.filter(c => !tmBlkClubHidden(c) &&
     (!region || c.region === region) &&
     (!q || c.name.toLowerCase().includes(q) || c.desc.toLowerCase().includes(q) || c.level.includes(q)));
   $('club-count').textContent = (q || region)
     ? `🔎 ${list.length}개 클럽이 검색됐어요`
-    : `전체 ${clubs.length}개 클럽 — 이름·소개·레벨로 검색해보세요`;
+    : `전체 ${clubs.length - blkHid}개 클럽 — 이름·소개·레벨로 검색해보세요`;
+  if (blkHid) $('club-count').textContent += ' · 차단한 회원이 만든 클럽 ' + blkHid + '개는 숨겼어요'; /* v1.77 차단 */
   $('club-list').innerHTML = list.length ? list.map(c => {
     const mine = myClubId === c.id;
     return `<div class="card row">
       <div style="display:flex;gap:12px;align-items:center">
-        <div class="club-emblem">${c.emoji}</div>
-        <div><h3>${c.name} ${mine ? '<span class="badge">내 클럽</span>' : ''}</h3>
-        <div class="muted">${c.region} · NTRP ${c.level} · 멤버 ${c.members.length + (mine ? 1 : 0)}명 · 대항전 ${c.wins}승 ${c.losses}패</div></div>
+        <div class="club-emblem">${esc(c.emoji)}</div>
+        <div><h3>${esc(c.name)} ${mine ? '<span class="badge">내 클럽</span>' : ''}</h3>
+        <div class="muted">${esc(c.region)} · NTRP ${esc(c.level)} · 멤버 ${c.members.length + (mine ? 1 : 0)}명 · 대항전 ${c.wins}승 ${c.losses}패</div>
+        <div style="margin-top:4px">${tmReportBtn({ where: '클럽 둘러보기', club: c.name })}</div></div><!-- v1.77: 신고 · 서버 글은 esc -->
       </div>
       ${mine ? '' : `<button class="btn small" onclick="joinClub(${c.id})">가입</button>`}
     </div>`;
@@ -7772,8 +8332,8 @@ function renderLadder() {
       const canChallenge = myIdx > 0 && !me && i < myIdx && myIdx - i <= 2;
       const cls = i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : i === 2 ? 'rank-3' : '';
       return `<div class="ladder-row ${me ? 'me' : ''}">
-        <span><span class="lrank ${cls}">${i + 1}위</span> ${i === 0 ? '👑 ' : ''}${me ? '⭐ ' + n + ' (나)' : n}</span>
-        ${canChallenge ? `<button class="btn small" onclick="openLadder('${n}')">도전</button>` : me && myIdx === 0 ? '<span class="badge">래더 1위!</span>' : ''}
+        <span><span class="lrank ${cls}">${i + 1}위</span> ${i === 0 ? '👑 ' : ''}${me ? '⭐ ' + esc(n) + ' (나)' : esc(n)}</span>
+        ${canChallenge ? `<button class="btn small" data-nm="${esc(n)}" onclick="openLadder(this.dataset.nm)">도전</button>` : me && myIdx === 0 ? '<span class="badge">래더 1위!</span>' : ''}
       </div>`;
     }).join('')}
   </div>`;
@@ -7913,10 +8473,10 @@ function renderHome() {
     if (c) items.push(`<div class="card row"><div><h3>${c.name} 코치 레슨</h3><div class="muted">${l.date} · ${l.slot} ${wxMini(l.date)}</div></div><div style="text-align:right"><span class="badge">레슨 확정</span><div style="margin-top:6px">${prepBtn('l:' + l.coachId + ':' + l.date + ':' + l.slot)}</div></div></div>`);
   });
   if (!tmStoreOn()) received.filter(r => r.status === 'accepted').forEach(r => { /* v1.72c: 스토어판엔 매칭 없음 */
-    items.push(`<div class="card row"><div><h3>${r.from} 님과 매칭</h3><div class="muted">${r.date} · ${r.msg}</div></div><div style="text-align:right"><span class="badge">매칭 확정</span><div style="margin-top:6px">${prepBtn('m:' + r.id)}</div></div></div>`);
+    items.push(`<div class="card row"><div><h3>${esc(r.from)} 님과 매칭</h3><div class="muted">${esc(r.date)} · ${esc(r.msg)}</div></div><div style="text-align:right"><span class="badge">매칭 확정</span><div style="margin-top:6px">${prepBtn('m:' + r.id)}</div></div></div>`);
   });
   if (!tmStoreOn()) sent.forEach(r => { /* v1.72c */
-    items.push(`<div class="card row"><div><h3>${r.name} 님과 매칭</h3><div class="muted">${r.date} · ${r.msg}</div></div><span class="badge orange">수락 대기중</span></div>`);
+    items.push(`<div class="card row"><div><h3>${esc(r.name)} 님과 매칭</h3><div class="muted">${esc(r.date)} · ${esc(r.msg)}</div></div><span class="badge orange">수락 대기중</span></div>`);
   });
   if (!tmStoreOn()) openMatches.filter(m => m.joined.includes(ME.name)).forEach(m => { /* v1.72c */
     const c = courts.find(c => c.id === m.courtId);
@@ -8009,7 +8569,7 @@ function renderRematch() {
   $('home-rematch').innerHTML = `<div class="card row">
     <div style="display:flex;gap:12px;align-items:center">
       <div class="avatar">${c.p.emoji}</div>
-      <div><h3>vs ${c.p.name} <span class="badge ${win ? '' : 'orange'}">${win ? '최근 승리' : '최근 패배'}</span></h3>
+      <div><h3>vs ${esc(c.p.name)} <span class="badge ${win ? '' : 'orange'}">${win ? '최근 승리' : '최근 패배'}</span></h3>
       <div class="muted">${c.h.date} · ${c.h.my}:${c.h.op} ${win ? '승 — 리벤지 기회를 줄까요?' : '패 — 설욕전 어때요?'}</div></div>
     </div>
     <button class="btn small" onclick="startRematch(${c.p.id}, ${win})">리매치</button>
@@ -8035,7 +8595,7 @@ function renderStats() {
   const wr = myStats.matches ? Math.round(myStats.wins / myStats.matches * 100) : 0;
   const form = history.slice(0, 5).map(h =>
     h.my > h.op ? '<span class="form-dot w">승</span>' : '<span class="form-dot l">패</span>').join('');
-  const rec = {};
+  const rec = Object.create(null); /* v1.77 B5 검증: 이름 키 */
   history.forEach(h => {
     rec[h.opp] = rec[h.opp] || { w: 0, l: 0 };
     if (h.my > h.op) rec[h.opp].w++; else rec[h.opp].l++;
@@ -8047,7 +8607,7 @@ function renderStats() {
       <div style="text-align:right"><div class="muted">최근 폼 (최신순)</div><div style="margin-top:4px">${form || '<span class="muted">기록 없음</span>'}</div></div>
     </div>
     ${rivals.length ? `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:6px">
-      ${rivals.map(([n, r]) => `<div class="row" style="margin-top:4px"><span style="font-size:13px">vs ${n}</span><span class="muted">${r.w}승 ${r.l}패</span></div>`).join('')}
+      ${rivals.map(([n, r]) => `<div class="row" style="margin-top:4px"><span style="font-size:13px">vs ${esc(n)}</span><span class="muted">${r.w}승 ${r.l}패</span></div>`).join('')}
     </div>` : ''}
   </div>`;
 }
@@ -8200,6 +8760,7 @@ function vcLoad(k, ev) {
   document.querySelectorAll('.vc-rate').forEach(b => b.classList.toggle('sel', b.dataset.r === '1'));
   $('vc-player').style.display = 'block';
   vcRenderSync();
+  try { tmReportClipShow(null); } catch (e) {} /* v1.77: 내 파일을 열면 상대 클립 신고 줄 숨김 */
   toast(k === 'a' ? '🅰 영상 A를 불러왔어요' : '🅱 영상 B를 불러왔어요');
   ev.target.value = '';
 }
@@ -8276,13 +8837,13 @@ function svRenderSlots() {
   box.innerHTML = svNeededSlots().map(k => {
     const s = svSlots[k];
     return s
-      ? `<span class="badge" style="margin:2px">${svSlotLabel(k)}: ${s.nick} <a onclick="svClearSlot('${k}')" style="cursor:pointer;font-weight:800">✕</a></span>`
+      ? `<span class="badge" style="margin:2px">${svSlotLabel(k)}: ${esc(s.nick)} <a onclick="svClearSlot('${k}')" style="cursor:pointer;font-weight:800">✕</a></span>`
       : `<span class="tag-btn" style="margin:2px;opacity:.65">${svSlotLabel(k)}: 검색해서 선택</span>`;
   }).join('');
 }
 function svClient() { return window.__svTestClient || TMAuth.client; }
 // ── v1.22 비밀번호 재설정 링크 처리 ──
-function openNewPw() { try { closeModal('auth'); } catch (e) {} const a = $('newpw-1'), b = $('newpw-2'), m = $('newpw-msg'); if (a) a.value = ''; if (b) b.value = ''; if (m) m.textContent = ''; openModal('newpw'); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+function openNewPw() { try { closeModal('auth'); } catch (e) {} const a = $('newpw-1'), b = $('newpw-2'), m = $('newpw-msg'); if (a) a.value = ''; if (b) b.value = ''; if (m) m.textContent = ''; openModal('newpw'); try { window.history.replaceState(null, '', location.pathname); } catch (e) {} } /* v1.77: 앱 변수 history(최근 경기 배열)가 가려 재설정 링크 해시가 안 지워지던 것 → window.history */
 async function newPwDo() {
   const a = ($('newpw-1') || {}).value || '', b = ($('newpw-2') || {}).value || '', m = $('newpw-msg');
   if (a.length < 6) { if (m) m.textContent = '6자 이상으로 해 주세요'; return; }
@@ -8301,7 +8862,7 @@ async function adminTouch() {
     const row = $('admin-row'); if (row) row.style.display = adminIs ? '' : 'none';
   } catch (e) {}
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) adminTouch(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { adminTouch(); try { tmTermsGate(); } catch (e) {} } }); /* v1.76 C6: 캠을 끄고 돌아오면 재확인 */
 function adminOpen() { if (!adminIs) { toast('관리자 계정이 아니에요'); return; } openModal('admin'); adminLoad(); }
 // v1.72: 관리자 표 [계정 삭제(요청 처리)] — 카톡 등으로 삭제를 요청한 회원. 탈퇴 표시가 없는 회원은 닉네임을 그대로 다시 입력해야 진행(오삭제 방지).
 //   처리는 운영자 삭제(acctDelOperator → 운영자 비밀번호 → delete-account target_user_id). 관리자 계정은 서버가 거절('admin')
@@ -8388,12 +8949,14 @@ async function svSearch() {
       .select('id, nickname, ntrp, region, elo_pts').ilike('nickname', '%' + q + '%')
       .is('deleted_at', null).limit(5);
     if (error) throw error;
-    const list = (data || []).filter(p => p.id !== svMyId());
-    if (!list.length) { box.innerHTML = '<span class="muted" style="font-size:12px">검색 결과가 없어요 — 상대도 가입해야 검색돼요</span>'; return; }
-    box.innerHTML = list.map(p =>
-      `<button type="button" class="tag-btn" style="margin:2px" onclick='svPick(${JSON.stringify(p.id)}, ${JSON.stringify(p.nickname)})'>${p.nickname} · NTRP ${p.ntrp} · ${p.elo_pts}pt</button>`).join('');
-  } catch (e) { box.innerHTML = '<span class="muted" style="font-size:12px">검색 실패: ' + (e.message || e) + '</span>'; }
+    const all = (data || []).filter(p => p.id !== svMyId()), list = all.filter(p => !tmBlkHas(p.id)), bn = all.length - list.length; /* v1.77 차단: 차단한 회원은 검색에서 뺌 */
+    if (!list.length) { box.innerHTML = '<span class="muted" style="font-size:12px">' + (bn ? '검색 결과가 없어요 — 차단한 회원은 검색에서 빠져요' : '검색 결과가 없어요 — 상대도 가입해야 검색돼요') + '</span>'; return; }
+    svSearch.hits = list.map(p => ({ id: p.id, nick: String(p.nickname == null ? '' : p.nickname) })); /* v1.77: onclick에는 번호만 — 닉네임이 속성·HTML에 그대로 들어가던 것(저장형 XSS) */
+    box.innerHTML = list.map((p, i) =>
+      `<button type="button" class="tag-btn" style="margin:2px" onclick="svPickAt(${i})">${esc(p.nickname)} · NTRP ${esc(p.ntrp)} · ${esc(p.elo_pts)}pt</button>`).join('') + (bn ? `<div class="tm-blk-note">차단한 회원 ${bn}명은 검색에서 빠졌어요</div>` : '');
+  } catch (e) { box.innerHTML = '<span class="muted" style="font-size:12px">검색 실패: ' + esc(e.message || e) + '</span>'; }
 }
+function svPickAt(i) { const h = (svSearch.hits || [])[i]; if (h) svPick(h.id, h.nick); } /* v1.77: 검색 결과 번호 → 선수 자리 */
 function svPick(id, nick) {
   if (Object.values(svSlots).some(s => s && s.id === id)) { toast('이미 선택한 선수예요'); return; }
   const empty = svNeededSlots().find(k => !svSlots[k]);
@@ -8425,7 +8988,7 @@ async function svReport() {
     toast(`📤 ${kind === 'doubles' ? '복식' : '단식'} 제출 완료 — 상대편이 승인하면 랭킹에 반영돼요`);
     svKindChange(); $('sv-sets').value = ''; $('sv-opp').value = ''; $('sv-opp-list').innerHTML = '';
     svRefresh();
-  } catch (e) { toast('제출 실패: ' + (e.message || e)); }
+  } catch (e) { toast(/함께 기록할 수 없는/.test(String((e && e.message) || '')) ? '이 경기에는 함께 기록할 수 없는 회원이 있어요' : '제출 실패: ' + (e.message || e)); } /* v1.77 차단: 서버(016) 글 그대로 */
 }
 async function svRefresh() {
   const box = $('sv-pending');
@@ -8437,8 +9000,11 @@ async function svRefresh() {
     if (error) throw error;
     if (!data || !data.length) { box.innerHTML = '승인 기다리는 경기가 없어요'; return; }
     const me = svMyId();
-    box.innerHTML = data.map(m => {
+    const rows = data.filter(m => !(m.match_players || []).some(p => p.player_id && p.player_id !== me && tmBlkHas(p.player_id))); /* v1.77 차단: 차단한 회원이 든 대기 경기는 뺌(차단 때 서버가 취소함) */
+    if (!rows.length) { box.innerHTML = '승인 기다리는 경기가 없어요'; return; }
+    box.innerHTML = rows.map(m => {
       const mine = m.reporter_id === me;
+      const others = (m.match_players || []).filter(p => p.player_id && p.player_id !== me && p.profiles && p.profiles.nickname).map(p => ({ uid: p.player_id, nick: p.profiles.nickname })); /* v1.77: [신고·차단] */
       const nick = p => esc((p && p.profiles && p.profiles.nickname) || '탈퇴한 회원'); /* v1.72: 탈퇴(묘비) 프로필은 안 보임 */
       const t1 = (m.match_players || []).filter(p => p.team === 1).map(nick).join('·');
       const t2 = (m.match_players || []).filter(p => p.team === 2).map(nick).join('·');
@@ -8447,11 +9013,11 @@ async function svRefresh() {
       const btns = mine
         ? `<button type="button" class="tag-btn" onclick="svCancel('${m.id}')">제출 취소</button>`
         : `<button type="button" class="btn small" style="padding:4px 10px" onclick="svConfirm('${m.id}')">승인</button> <button type="button" class="tag-btn" onclick="svRejectM('${m.id}')">거절</button>`;
-      return `<div class="card" style="padding:10px;margin-top:6px"><b>${oppName}</b> · ${m.played_at} · ${setsTxt}
+      return `<div class="card" style="padding:10px;margin-top:6px"><b>${oppName}</b> · ${esc(m.played_at)} · ${esc(setsTxt)}
         <span class="muted">${mine ? '(내가 제출 — 상대 승인 대기)' : '(상대가 제출 — 내 승인 필요)'}</span>
-        <div style="margin-top:6px">${btns}</div></div>`;
+        <div style="margin-top:6px">${btns}${others.length ? ' ' + tmUserBtn(others, '신고·차단', 'tag-btn tm-blk-btn', '승인 대기함') : ''}</div></div>`;
     }).join('');
-  } catch (e) { box.innerHTML = '불러오기 실패: ' + (e.message || e); }
+  } catch (e) { box.innerHTML = '불러오기 실패: ' + esc(e.message || e); }
 }
 async function svConfirm(id) {
   try {
@@ -8460,7 +9026,7 @@ async function svConfirm(id) {
     toast('✅ 승인 완료 — 서버 ELO에 반영됐어요');
     if (!window.__svTestClient) await TMAuth.refreshMyProfile();
     svRenderStats(); svRefresh();
-  } catch (e) { toast('승인 실패: ' + (e.message || e)); }
+  } catch (e) { toast(/함께 기록할 수 없는/.test(String((e && e.message) || '')) ? '이 경기에는 함께 기록할 수 없는 회원이 있어요 — 거절해 주세요' : '승인 실패: ' + (e.message || e)); } /* v1.77 차단 */
 }
 async function svRejectM(id) {
   try {
@@ -10791,7 +11357,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const POSE_EDGES = [[5,7],[7,9],[6,8],[8,10],[5,6],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
 const AI_COACH_ENABLED = false; // Claude 코칭 리포트 — API 비용 때문에 베타 동안 잠금
 let poseDet = null, poseOn = false, poseRAF = null, poseKp = null;
-let coachTags = {}; // 상대별 포인트 태그 누적 (메모리)
+let coachTags = Object.create(null); // 상대별 포인트 태그 누적 (메모리) · v1.77 B5 검증: 상대 이름 키(constructor 같은 이름이면 lvTagCommit이 멈춰 라이브 경기 마무리가 끊기던 것)
 function poseStatus(t) { const el = $('pose-status'); if (el) el.textContent = t; }
 async function poseLoad() {
   if (window.__poseTestDetector) { poseDet = window.__poseTestDetector; return; }
@@ -10913,7 +11479,7 @@ function renderCoachData() {
   Object.keys(coachTags).forEach(opp => {
     const r = coachTags[opp];
     const f = b => Object.keys(b).map(t => TAG_LABEL[t] + ' ' + b[t]).join(' · ');
-    const line = ['vs ' + opp, f(r.my) ? '내 득점 포인트(' + f(r.my) + ')' : '', f(r.op) ? '실점 포인트(' + f(r.op) + ')' : ''].filter(Boolean).join(' — ');
+    const line = ['vs ' + esc(opp), f(r.my) ? '내 득점 포인트(' + f(r.my) + ')' : '', f(r.op) ? '실점 포인트(' + f(r.op) + ')' : ''].filter(Boolean).join(' — ');
     parts.push('🏷️ ' + line);
   });
   el.innerHTML = parts.length
@@ -10969,9 +11535,10 @@ async function mrEnter(code) {
   mrChan.on('broadcast', { event: 'clip' }, p => mrOnClip(p.payload));
   mrChan.on('presence', { event: 'sync' }, () => {
     mrPeers = Object.keys(mrChan.presenceState()).length; mrRoomInfo();
+    try { tmBlkRoomCheck(); } catch (e) {} /* v1.77 차단: 차단한 회원이 들어오면 안내 */
   });
   await new Promise((res, rej) => mrChan.subscribe(st => {
-    if (st === 'SUBSCRIBED') { mrChan.track({ at: Date.now() }); res(); }
+    if (st === 'SUBSCRIBED') { mrChan.track({ at: Date.now(), uid: svMyId() || '' }); try { tmBlkRoomCheck(); } catch (e) {} res(); } /* v1.77 차단: 접속 표시에 uid(앱이 적는 값 — 안내에만) */
     else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
   }));
   $('mr-room').style.display = 'block'; mrRoomInfo();
@@ -11159,9 +11726,10 @@ function mrStartRec() {
 }
 function mrChallenge() {
   if (!mrChan) return;
-  mrChan.send({ type: 'broadcast', event: 'challenge', payload: { at: Date.now(), by: (TMAuth.profile && TMAuth.profile.nickname) || ME.name } });
+  mrChan.send({ type: 'broadcast', event: 'challenge', payload: { at: Date.now(), by: (TMAuth.profile && TMAuth.profile.nickname) || ME.name, uid: svMyId() || '' } }); /* v1.77 차단: 받는 쪽이 차단한 회원의 챌린지를 무시 */
 }
 async function mrOnChallenge(p) {
+  if (p && p.uid && tmBlkHas(p.uid)) return; /* v1.77 차단: 차단한 회원의 챌린지는 무시(클립을 올리지 않음) */
   if (mrBusy) return; mrBusy = true;
   toast(`🚨 ${p.by} 챌린지! 클립을 준비하고 있어요…`);
   mrClips = { at: p.at, mine: null, theirs: null };
@@ -11223,11 +11791,13 @@ async function mrTryOpen() {
     });
     await Promise.all([setSync(a, 'a', c.mine.endMs), setSync(b, 'b', c.theirs.endMs)]);
     vcRenderSync();
+    try { tmReportClipShow(mrCode || '-', c.at); } catch (e) {} /* v1.77: 상대 클립 신고 줄 */
     mrStatus('⚖️ 두 앵글 준비 완료! 아래 비디오 챌린지 뷰어에서 함께 돌려보세요 (미세 조정은 B ◀▶)');
     toast('⚖️ 판독 준비 완료 — 챌린지 순간에 맞춰 열렸어요');
     $('vc-player').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
-    mrStatus('상대 클립 다운로드 실패: ' + (e.message || e));
+    const em = String((e && (e.message || e.error)) || e || ''), es = Number((e && (e.status || e.statusCode)) || 0); /* v1.77 차단: 차단 사이면 서버가 클립을 막음 */
+    mrStatus(([400, 401, 403, 404].includes(es) || /not.?found|denied|unauthori|forbidden|row-level|policy/i.test(em)) ? '이 회원의 클립은 받을 수 없어요' : '상대 클립 다운로드 실패: ' + (e.message || e));
   }
 }
 
@@ -11639,7 +12209,7 @@ function ccRenderGate() {
     }).catch(() => {});
   }
 }
-const CONSENT_VER = '2026-10-22'; /* v1.71: 문구 고침 — 클립·중계 화면은 캠 코드 등록 계정·운영자만(014c), 서버 회사 국외, 학습 사진은 올린 캠 계정·운영자(012) → 2026-09-28 판 동의는 다시 받음 */ // v1.52 동의 문구 판(문구를 바꾸면 날짜를 올려 다시 받음)
+const CONSENT_VER = '2026-10-26'; /* v1.76: 문구 고침 — 학습 사진 서버 업로드 삭제(C3)·PC로 옮기기·클립 보유 기간·중계 화면 저장 안 함(처리방침 1.0판 2장) → 2026-10-22 판 동의는 다시 받음 */ /* v1.71: 문구 고침 — 클립·중계 화면은 캠 코드 등록 계정·운영자만(014c), 서버 회사 국외, 학습 사진은 올린 캠 계정·운영자(012) → 2026-09-28 판 동의는 다시 받음 */ // v1.52 동의 문구 판(문구를 바꾸면 날짜를 올려 다시 받음)
 function consentGet() { try { return JSON.parse(localStorage.getItem('tm-consent') || 'null'); } catch (e) { return null; } }
 function ccUid() { try { return (TMAuth.session && TMAuth.session.user && TMAuth.session.user.id) || (TMAuth.storedUid ? TMAuth.storedUid() : '') || ''; } catch (e) { return ''; } } // v1.57: 인터넷이 없어 세션을 못 살려도 저장된 계정
 function ccAuthOk() { try { return !!(serverMode() && (TMAuth.isLoggedIn || (TMAuth.storedUid && TMAuth.storedUid()))); } catch (e) { return false; } } // v1.57: 클럽캠 녹화는 저장된 로그인 계정이면 됨(서버 일은 로그인이 살아나면)
@@ -12363,7 +12933,7 @@ function ccNetUi(gen) { // v1.57: 중계 상태를 캠 화면에
   if (info) info.textContent = off ? '캠 코드 ' + ccCode + (noLogin ? ' — 로그인이 풀려 중계는 멈춤(녹화는 계속)' : ' — 중계 연결 중(녹화는 계속)') : '📡 캠 코드 ' + ccCode + ' — 내 폰에서 이 코드로 👀 보기';
   const msg = noLogin ? '🔴 녹화 중 — 로그인이 풀려 실시간 보기·판정 전송은 멈춰 있어요(이 폰에서 다시 로그인하면 연결돼요). 영상은 이 폰에 그대로 쌓여요'
     : off ? '🔴 녹화 중 — 인터넷·중계 연결이 안 돼 실시간 보기·판정 전송은 멈춰 있어요(저절로 다시 연결해요). 영상은 이 폰에 그대로 쌓여요'
-    : '🔴 녹화+중계 중 — 영상은 이 폰에 ' + CC_SEG + '초 단위로 쌓여요 (서버 업로드 없음). 화면은 켜둔 채 두세요';
+    : '🔴 녹화+중계 중 — 영상은 이 폰에 ' + CC_SEG + '초 단위로 쌓여요 (전체 영상은 서버에 올리지 않아요). 화면은 켜둔 채 두세요';
   const cur = (($('cc-cam-status') || {}).textContent || '');
   if (!ccSpaceStopped && (!cur || cur === ccNetUi._last || /^(🔴 )?녹화(\+중계)? (중|재개|계속)/.test(cur))) { ccStatus(msg); ccNetUi._last = msg; } // v1.57b: '저장 공간 가득' 같은 다른 상태는 덮지 않음
 }
@@ -13221,6 +13791,7 @@ function clSampleDayKey() { const d = new Date(); return 'tm-clsample-' + d.getF
 function clSampleCount() { try { return parseInt(localStorage.getItem(clSampleDayKey()) || '0', 10) || 0; } catch (e) { return 0; } }
 function clSampleBump() { const n = clSampleCount() + 1; try { localStorage.setItem(clSampleDayKey(), String(n)); } catch (e) {} clSampleN = n; const el = $('cl-sample-n'); if (el) el.textContent = n; return n; }
 async function clSampleUpload(pts, bi, tw, th, v, vd, shot, mC) { // 바운스 앞뒤 프레임 6장 + 메타 → storage (학습 데이터, 라벨 초안 포함)
+  return; /* v1.76 C3: 학습 사진 업로드 끔 — clips 버킷은 영상 형식만 받아 사진·json은 늘 거부됐음(train/ 0개). 학습 자료는 PC로 옮긴 원본 영상만(처리방침 2-2) */
   if (tmStoreOn()) return; /* v1.71: 스토어 앱에서는 학습 사진을 올리지 않음 */
   if (!clSampleOn || clSampleBusy || !ccChan || ccOffline() || !svClient() || !clRing.length) return; // v1.57: 중계가 없으면(인터넷 없음) 건너뜀
   if (!ccSessionOk('alltrain')) return; // v1.52 '모두 AI 학습 이용에도 동의했어요'를 확인한 날만
@@ -14621,8 +15192,8 @@ function renderInbox() {
     return `<div class="card row">
       <div style="display:flex;gap:12px;align-items:center">
         <div class="avatar">${p ? p.emoji : '🎾'}</div>
-        <div><h3>${r.from} ${r.status === 'accepted' ? '<span class="badge">확정</span>' : ''}</h3>
-        <div class="muted">${r.date} · ${r.msg}</div></div>
+        <div><h3>${esc(r.from)} ${r.status === 'accepted' ? '<span class="badge">확정</span>' : ''}</h3>
+        <div class="muted">${esc(r.date)} · ${esc(r.msg)}</div></div>
       </div>
       ${r.status === 'pending' ? `<div style="display:flex;gap:6px;flex-direction:column">
         <button class="btn small" onclick="acceptReq(${r.id})">수락</button>
@@ -14630,7 +15201,7 @@ function renderInbox() {
     </div>`;
   }).join('') : '<div class="empty">받은 신청이 없어요.</div>';
   $('sent-list').innerHTML = sent.length ? sent.map(s =>
-    `<div class="card row"><div><h3>${s.name}</h3><div class="muted">${s.date} · ${s.msg}</div></div><span class="badge orange">대기중</span></div>`
+    `<div class="card row"><div><h3>${esc(s.name)}</h3><div class="muted">${esc(s.date)} · ${esc(s.msg)}</div></div><span class="badge orange">대기중</span></div>`
   ).join('') : '<div class="empty">보낸 신청이 없어요.</div>';
 }
 function acceptReq(id) {
@@ -14708,7 +15279,7 @@ function renderTourney() {
       <div class="muted" style="margin:12px 0 6px">참가자 선택 (4명 또는 8명)</div>
       <div id="t-players">` +
       all.map((n, i) => `<label style="display:inline-flex;align-items:center;gap:5px;margin:3px 10px 3px 0;font-size:13px;cursor:pointer">
-        <input type="checkbox" value="${n}" ${i < 4 ? 'checked' : ''} onchange="updateTCount()"> ${n}${isMe(n) ? ' (나)' : ''}</label>`).join('') +
+        <input type="checkbox" value="${esc(n)}" ${i < 4 ? 'checked' : ''} onchange="updateTCount()"> ${esc(n)}${isMe(n) ? ' (나)' : ''}</label>`).join('') + /* v1.77: 참가자 이름 esc(저장형 XSS — kdk-players와 같게) */
       `</div>
       <div class="row" style="gap:8px;margin-top:8px">
         <input type="text" id="t-add" placeholder="참가자 이름 직접 추가" style="flex:1" onkeydown="if(event.key==='Enter')tAddPlayer()">
@@ -14721,9 +15292,9 @@ function renderTourney() {
     tLoadServer(); // 로그인 상태면 서버 가입자들을 목록에 추가 (☁️ 표시)
     return;
   }
-  let html = `<div class="card row"><h3>${tourney.name}</h3><button class="btn small outline" onclick="resetTourney()">대회 종료</button></div>`;
+  let html = `<div class="card row"><h3>${esc(tourney.name)}</h3><button class="btn small outline" onclick="resetTourney()">대회 종료</button></div>`;
   if (tourney.champion) {
-    html += `<div class="card" style="text-align:center;background:#f0f7f2"><div style="font-size:34px">🏆</div><h3>우승: ${tourney.champion}</h3><div class="muted">축하합니다!</div></div>`;
+    html += `<div class="card" style="text-align:center;background:#f0f7f2"><div style="font-size:34px">🏆</div><h3>우승: ${esc(tourney.champion)}</h3><div class="muted">축하합니다!</div></div>`;
   }
   tourney.rounds.forEach((rd, r) => {
     const cnt = rd.length * 2;
@@ -14731,7 +15302,7 @@ function renderTourney() {
     rd.forEach((m, i) => {
       const ready = m.p1 && m.p2 && !m.winner;
       const line = (p, s, sid) => `<div class="row" style="margin-top:4px">
-        <span>${m.winner === p ? '🏆 ' : ''}<b>${p || '<span class="muted">대기 중</span>'}</b></span>
+        <span>${m.winner === p ? '🏆 ' : ''}<b>${p ? esc(p) : '<span class="muted">대기 중</span>'}</b></span>
         ${ready ? `<input type="number" id="${sid}" min="0" max="7" placeholder="0" style="width:64px">`
                 : (m.winner ? `<span class="score-pill ${m.winner === p ? 'win' : ''}">${s}</span>` : '')}
       </div>`;
@@ -15209,9 +15780,10 @@ function renderRank() {
       rec = `${p.wins}승 ${p.matches - p.wins}패`;
     }
     return `<tr style="${me ? 'background:#f0f7f2' : ''}">
-      <td class="${cls}">${i + 1}</td><td>${me ? '⭐ ' : ''}${p.name}${me ? ' (나)' : ''}</td>
+      <td class="${cls}">${i + 1}</td><td>${me ? '⭐ ' : ''}${me ? esc(p.name) : tmNameHtml(p.uid, p.name, '랭킹')}${me ? ' (나)' : ''}</td>
       <td>${p.ntrp.toFixed(1)}</td><td>${rec}</td><td><b>${val.toLocaleString()}</b></td></tr>`;
   }).join('');
+  try { tmBlkRankNote(); } catch (e) {} /* v1.77 차단: 빠진 수 · 이름을 누르면 신고·차단 */
   renderTrend(); // v0.25: 랭킹 갱신 시 포인트 추이도 갱신
 }
 function renderHistory() {
@@ -15219,8 +15791,8 @@ function renderHistory() {
     const win = h.my > h.op;
     return `<div class="card">
       <div class="row">
-        <div><h3>vs ${h.opp} ${h.type === 'd' ? '<span class="badge orange">복식</span>' : ''}</h3>
-        <div class="muted">${h.date}${h.partner ? ' · 파트너 ' + h.partner : ''}${h.sets ? ' · 세트 ' + h.my + ':' + h.op : ''}${h.pstat ? ' · ' + h.pstat : ''}</div></div>
+        <div><h3>vs ${esc(h.opp)} ${h.type === 'd' ? '<span class="badge orange">복식</span>' : ''}</h3>
+        <div class="muted">${h.date}${h.partner ? ' · 파트너 ' + esc(h.partner) : ''}${h.sets ? ' · 세트 ' + h.my + ':' + h.op : ''}${h.pstat ? ' · ' + h.pstat : ''}</div></div>
         <span class="score-pill ${win ? 'win' : 'lose'}">${h.sets ? h.sets : h.my + ' : ' + h.op} ${win ? '승' : '패'}</span>
       </div>
       ${h.note ? `<div class="mnote" onclick="openMatchNote(${i})" title="탭해서 수정">📝 ${h.note}</div>` : `<button type="button" class="tag-btn" style="margin-top:8px" onclick="openMatchNote(${i})">경기 노트 남기기</button>`}
@@ -15312,7 +15884,7 @@ function saveMatch() {
 
 // ===== 초기화 =====
 function renderAll() {
-  const oppOptions = players.map(p => `<option value="${p.id}">${p.name} (NTRP ${p.ntrp.toFixed(1)})</option>`).join('');
+  const oppOptions = players.map(p => `<option value="${p.id}">${esc(p.name)} (NTRP ${p.ntrp.toFixed(1)})</option>`).join(''); /* v1.77: 서버 닉네임 esc(저장형 XSS) */
   $('rec-opp').innerHTML = oppOptions;
   $('rec-partner').innerHTML = oppOptions;
   $('rec-opp2').innerHTML = oppOptions;
