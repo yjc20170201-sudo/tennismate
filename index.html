@@ -128,6 +128,8 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   /* v1.71: 스토어 앱(TWA)에서 숨기는 것 — 개인정보위 답변 전(10/22 결정): 클럽캠·학습 사진 업로드·커뮤니티 게시판·지난 기록 이관. 다시 켤 땐 해당 요소의 store-hide만 빼면 됨(함수 가드도 함께) */
   html.store-app .store-hide, body.store-app .store-hide { display: none !important; }
   html.store-app .more-row:has(+ .more-row.store-hide:last-child) { border-bottom: none; }
+  /* v1.78: 크롬(안드로이드·스토어 앱) 당겨서 새로고침 끄기 — 맨 위에서 아래로 당기면 앱 전체가 새로 열려 홈으로 가고 진행 중이던 점수·녹화·하이라이트가 사라졌음(10/28 폴드, 판독 탭). 크롬 140부터 html 값, 그 전엔 body 값을 화면 전체에 씀 → 둘 다. contain = 새로고침만 막고 끝에 닿은 표시는 그대로, 세로만(가로는 그대로). 모든 모드(웹·스토어 앱·캠 폰 크롬 탭) — 일을 잃는 건 같음. 아이폰 사파리는 이 값으로 당겨서 새로고침을 막지 못함(WebKit 275947). 손 새로고침은 더보기 › 설정 '버전' 줄(tmManualReload) */
+  html, body { overscroll-behavior-y: contain; }
   body {
     font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', -apple-system, sans-serif;
     background: var(--bg); color: var(--text);
@@ -704,6 +706,20 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 .tm-rep-line > * + * { margin-left: 6px; }
 .tm-blk-row { gap: 8px; padding: 6px 0; border-top: 1px dashed var(--border); }
 #blocks-body #blk-q { min-width: 0; }
+/* v1.78 가로 넘침·머리말(10/28 폴드 판독 탭 신고 조사 — 360·384·408px, 웹·스토어 앱, 로그인 전·뒤 108가지 상태):
+   A 공백 없는 긴 낱말은 줄 안에서 끊음 — 내 영상 하이라이트 '#mh-files'에 고른 파일 이름(VID_…_Export.mp4 같은 50자↑)이 그대로 나가 화면이 531px로 넓어지고 아래 탭 막대의 랭킹·더보기가 화면 밖으로 밀렸음.
+     상태 줄(코덱 이름 등)·서버 글도 같은 위험이라 main 전체에. break-word는 넘칠 때만 끊고 보통 줄바꿈·폭 계산은 그대로. body에 overflow-x:hidden은 쓰지 않음(넘침을 숨기기만 하고 시험이 못 잡음). */
+main { overflow-wrap: break-word; }
+/* B 머리말을 float → flex(보이는 자리는 그대로: 오른쪽부터 이름표·알림·다크모드, 왼쪽 제목) — float라 닉네임이 길면(20자까지 됨) 제목 칸이 줄어 '테니스메이트'가 한 글자씩 세로로 쪼개지고 머리말이 55→190px로 커졌음,
+     360px에선 '테니스왕' 넉 자만 돼도 두 줄. 이제 제목은 한 줄 그대로, 모자라면 이름표만 줄고 끝이 …(누르면 프로필) */
+header { display: flex; flex-direction: row-reverse; align-items: flex-start; }
+header h1 { flex: none; margin-right: auto; padding-right: 8px; white-space: nowrap; }
+header .notif-bell { flex: none; }
+header .profile-chip { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* C 줄(.row) 안 입력칸은 기본 최소 폭(글자 칸 크기) 밑으로 안 줄어 큰 글자 폰에서 줄을 화면 밖으로 밀었음(클럽 참가자 추가) — 체크·라디오·날짜는 그대로.
+     .vj-ctrl은 줄바꿈하는 줄이라 min-width:0을 주면 줄바꿈 대신 찌그러짐(랭킹 탭 경기 기록 날짜 '2026-10-2'로 잘림 — 검토에서 발견) → 폭 상한만(매치 방 코드) */
+.row > input:not([type=checkbox]):not([type=radio]):not([type=date]) { min-width: 0; }
+.vj-ctrl > input:not([type=checkbox]):not([type=radio]) { max-width: 100%; }
 </style>
 </head>
 <body>
@@ -1522,7 +1538,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <div class="more-row" id="privacy-row" style="display:none" onclick="tmOpenUrl(POLICY_URLS.privacy)"><div><b>개인정보 처리방침</b><div class="muted">어떤 정보를 왜 모으고 얼마나 보관하는지</div></div><span class="chev">›</span></div>
       <div class="more-row" id="acctdel-row" style="display:none" onclick="acctDelEntry()"><div><b>계정 삭제</b><div class="muted">계정과 서버에 올린 영상 지우기 · 남는 기록 안내</div></div><span class="chev">›</span></div><!-- v1.72 -->
       <div class="more-row" onclick="openLicenses()"><div><b>오픈소스 라이선스</b><div class="muted">앱에 쓰인 모델·라이브러리의 저작권 고지</div></div><span class="chev">›</span></div>
-      <div class="more-row" style="cursor:default"><div><b>버전</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타</div></div></div>
+      <div class="more-row" id="reload-row" onclick="tmManualReload()"><div><b>버전 · 새로 불러오기</b><div class="muted">테니스메이트 <span id="hd-ver"></span> · 제주 SBC 베타 · 누르면 앱을 새로 불러와요</div></div><span class="chev">›</span></div><!-- v1.78: 당겨서 새로고침을 꺼서 손으로 새로 불러오는 자리 -->
     </div>
   </div>
 </main>
@@ -2359,7 +2375,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.77';
+const APP_VERSION = 'v1.78';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -2901,6 +2917,17 @@ function fmtMD(s) { const d = dateObj(s); return (d.getMonth() + 1) + '월 ' + d
 // v1.71: 스토어 앱(TWA) 가드 — 판별은 머리 스크립트의 tmStoreApp()(?src=twa·referrer, sessionStorage 'tm-store')
 function tmStoreOn() { try { return !!(window.tmStoreApp && window.tmStoreApp()); } catch (e) { return false; } }
 function tmStoreBlocked(silent) { if (!tmStoreOn()) return false; if (!silent) { try { toast('스토어 앱에서는 아직 준비 중인 기능이에요'); } catch (e) {} } return true; }
+function tmZoomReset() { /* v1.78: 손가락으로 벌려 확대한 채(visualViewport.scale > 1)면 1배로 — 확대된 화면은 오른쪽이 잘려 '화면이 옆으로 넘친다'처럼 보임(10/28 폴드 판독 탭 화면 = 1.15배 확대와 똑같음, 넘침은 없었음). 스토어 앱엔 되돌릴 단추가 없고 당겨서 새로고침(예전엔 이것이 확대를 풀었음)도 이제 막음. 크롬(Blink)은 viewport의 initial-scale 값이 바뀌면 배율을 그 값으로 되돌림 → 잠깐 1.0001로 바꿨다가 두 프레임 뒤 원래 값으로. maximum-scale은 넣지 않음(확대는 계속 됨 — 글자가 11~13px라 확대를 막으면 안 됨). 확대 안 했으면 아무것도 안 함 */
+  try {
+    const vv = window.visualViewport; if (!vv || !(vv.scale > 1.01)) return false;
+    const m = document.querySelector('meta[name="viewport"]'); if (!m) return false;
+    const c0 = m.getAttribute('content') || '';
+    if (!/initial-scale=1(\.0)?(\s*,|\s*$)/.test(c0)) return false; /* 이미 바꾸는 중(1.0001)이면 그대로 — 앞 호출이 원래 값으로 돌려놓음 */
+    m.setAttribute('content', c0.replace(/initial-scale=1(\.0)?/, 'initial-scale=1.0001'));
+    requestAnimationFrame(() => requestAnimationFrame(() => { try { m.setAttribute('content', c0); } catch (e) {} }));
+    return true;
+  } catch (e) { return false; }
+}
 function showTab(name, btn) {
   if ((name === 'board' || name === 'match' || name === 'tourney') && tmStoreBlocked()) return; /* v1.71: 커뮤니티 게시판 · v1.72: 매칭·대회(데모 화면)도 스토어 앱에서 막음 */
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
@@ -2910,7 +2937,14 @@ function showTab(name, btn) {
   const owner = ['home', 'club', 'judge', 'rank'].includes(name) ? name : 'more';
   const b = (btn && btn.dataset && btn.dataset.tab) ? btn : document.querySelector('nav button[data-tab="' + owner + '"]');
   if (b) b.classList.add('active');
+  try { sessionStorage.setItem('tm-tab', name); } catch (e) {} /* v1.78: 뜻하지 않은 새로고침 뒤 이 탭으로(tmTabRestore) — sessionStorage라 앱을 새로 열면 사라짐 */
+  tmZoomReset(); /* v1.78 */
   window.scrollTo(0, 0);
+}
+function tmManualReload() { /* v1.78: 더보기 '버전' 줄 — 진행 중(__tmBusy: 녹화·경기·미니게임·하이라이트)이면 한 번 더 묻고, 자동 업데이트와 같이 ?u=로 캐시 건너뛰기(되살리기가 이 탭으로 데려옴) */
+  let busy = false; try { busy = !!(window.__tmBusy && window.__tmBusy()); } catch (e) {}
+  if (busy && !confirm('경기·녹화·하이라이트가 진행 중이에요. 새로 불러오면 진행 중인 내용이 사라져요. 그래도 새로 불러올까요?')) return;
+  try { location.replace(location.pathname + '?u=' + Date.now() + location.hash); } catch (e) { location.reload(); }
 }
 function openModal(n) { $('modal-' + n).classList.add('open'); }
 function closeModal(n) { $('modal-' + n).classList.remove('open'); }
@@ -3607,7 +3641,7 @@ function renderAuth(view) {
 }
 async function authDo(action) {
   if (!serverMode() || authBusy) return;
-  if (!TMAuth.client) { toast('서버에 아직 연결되지 않았어요 — 인터넷을 확인하고 잠시 뒤 다시 눌러 주세요 (계속 안 되면 앱을 새로고침)'); return; } // v1.70b: 연결 전·실패 때 개발자용 오류 대신
+  if (!TMAuth.client) { toast('서버에 아직 연결되지 않았어요 — 인터넷을 확인하고 잠시 뒤 다시 눌러 주세요 (계속 안 되면 더보기 › 설정 › 버전 줄을 눌러 새로 불러오기)'); return; } // v1.70b: 연결 전·실패 때 개발자용 오류 대신
   if (action === 'signup' && !authTermsOk()) return; // v1.71: 만 14세·약관 동의를 체크하기 전엔 가입 요청을 보내지 않음
   authBusy = true;
   try {
@@ -4135,7 +4169,7 @@ async function initServerAuthRun(retry) {
     if (TMAuth.storedUid && TMAuth.storedUid()) { // v1.57: 이 폰에 로그인했던 계정 — 인터넷이 없어 못 붙은 것. 30초마다·인터넷이 돌아오면 다시(녹화만 하던 클럽캠이 붙게)
       console.warn('[v1.57] 서버 연결 실패 — 다시 시도', e);
       if (!retry) toast('인터넷이 안 돼 서버에 연결하지 못했어요 — 연결되면 다시 시도해요');
-      else if (initServerAuth._n >= 4 && navigator.onLine !== false && !initServerAuth._told) { initServerAuth._told = true; try { ccLog('init-stuck', initServerAuth._n + '번 실패'); } catch (x) {} toast(ccChan && ccStream ? '서버 연결이 계속 안 돼요 — 녹화를 끈 뒤 앱을 새로고침해 주세요' : '서버 연결이 계속 안 돼요 — 앱을 새로고침해 주세요'); } // v1.57e: 라이브러리 일부가 실패로 기억되면 새로고침해야 풀림(녹화 중인 캠은 스스로 새로고침하지 않음)
+      else if (initServerAuth._n >= 4 && navigator.onLine !== false && !initServerAuth._told) { initServerAuth._told = true; try { ccLog('init-stuck', initServerAuth._n + '번 실패'); } catch (x) {} toast(ccChan && ccStream ? '서버 연결이 계속 안 돼요 — 녹화를 끈 뒤 앱을 새로 불러와 주세요' : '서버 연결이 계속 안 돼요 — 더보기 › 설정 › 버전 줄을 눌러 새로 불러와 주세요'); } // v1.57e: 라이브러리 일부가 실패로 기억되면 새로고침해야 풀림(녹화 중인 캠은 스스로 새로고침하지 않음)
       clearTimeout(initServerAuth._t); initServerAuth._t = setTimeout(() => initServerAuth(true), 30000);
       if (!initServerAuth._on) { initServerAuth._on = true; window.addEventListener('online', () => { if (!TMAuth.client) { clearTimeout(initServerAuth._t); initServerAuth(true); } }); }
       try { ccRenderGate(); } catch (x) {}
@@ -5867,8 +5901,7 @@ function lvCamToJudge(i) { // 🤖 클립을 비디오 판독 센터로 (AI 궤�
   vjRenderMarks(); vjRenderCalls(); $('vj-result').innerHTML = '';
   aiClear();
   closeModal('live'); // 경기 데이터(live)는 그대로 살아 있음
-  const rankBtn = document.querySelector("nav button[onclick*=\"showTab('rank'\"]");
-  if (rankBtn) showTab('rank', rankBtn);
+  showTab('judge'); /* v1.78: 판독 센터는 v0.69부터 판독 탭 — 예전 코드가 랭킹 탭으로 보내 가져온 클립이 안 보였음 */
   if (live && !live.done) $('back-to-live').style.display = 'block';
   setTimeout(() => { const p = $('vj-player'); if (p) p.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
   toast('🤖 판독 센터로 가져왔어요 — AI 궤적 분석·인아웃 판정을 써보세요');
@@ -11062,7 +11095,7 @@ async function aiAnalyzeDeep(more, anchor) { // v1.55 anchor = 챌린지 바운�
       return;
     }
     // v1.70b: 예전엔 여기서 TrackNet(tracknet.js·tn-weights.bin)으로 대신 돌렸으나, 그 가중치가 라이선스 없는 NCTU 원본으로 확인돼 뺌
-    aiStatus('공 탐지 모델을 불러오지 못했어요' + (wasbErr ? ' (' + wasbErr + ')' : '') + ' — 인터넷을 확인하고 다시 눌러 주세요. 계속 안 되면 앱을 새로고침해 주세요.');
+    aiStatus('공 탐지 모델을 불러오지 못했어요' + (wasbErr ? ' (' + wasbErr + ')' : '') + ' — 인터넷을 확인하고 다시 눌러 주세요. 계속 안 되면 더보기 › 설정 › 버전 줄을 눌러 새로 불러와 주세요.');
   } catch (e) {
     aiStatus('정밀 추적 실패: ' + (e.message || e));
   } finally {
@@ -15921,6 +15954,24 @@ function init() {
   svRenderGate(); // v0.43 서버 경기 게이트
 }
 init();
+// v1.78: 뜻하지 않은 새로고침(메뉴 새로고침·자동 업데이트 ?u=·크롬이 내려 둔 탭 다시 열기·다른 페이지 갔다 뒤로) 뒤엔 보던 탭으로.
+//   같은 탭 세션(sessionStorage 'tm-tab')만 · 주소로 새로 연 것(앱 시작·메일 링크·계정 삭제 안내 ?open=)은 홈 그대로 · 클럽캠 자동 재시작(tm-cc-autostart·tm-cc-running)은 그쪽이 판독 탭으로 데려감
+//   · 스토어 앱에서 숨긴 탭(매칭·커뮤니티·대회)으로는 안 감. 진행 중이던 내용(점수·녹화)은 메모리에만 있어 되살리지 못함 — 그래서 당겨서 새로고침부터 막음(CSS).
+function tmTabRestore() {
+  let name = ''; try { name = sessionStorage.getItem('tm-tab') || ''; } catch (e) { return ''; }
+  if (!name || name === 'home' || !/^[a-z]+$/.test(name) || !document.getElementById('tab-' + name)) return ''; /* showTab은 없는 이름이면 모든 탭을 끈 채 끝나므로 먼저 확인 */
+  let nav = null; try { nav = (performance.getEntriesByType && performance.getEntriesByType('navigation')[0]) || null; } catch (e) {}
+  const typ = nav ? String(nav.type || '') : '', url0 = nav ? String(nav.name || '') : ''; /* name = 머리 스크립트가 ?u=·?src=twa를 지우기 전 주소 */
+  if (!(typ === 'reload' || typ === 'back_forward' || document.wasDiscarded === true || /[?&]u=\d+(&|#|$)/.test(url0))) return '';
+  if (/[#?&](access_token|refresh_token|error|error_code|error_description|type|open)=/.test(url0)) return ''; /* 메일 링크·재설정·계정 삭제 안내 */
+  try { if (tmMailLink && (tmMailLink.type || tmMailLink.err || tmMailLink.other)) return ''; } catch (e) {}
+  try { if (acctDelWant) return ''; } catch (e) {}
+  try { if (sessionStorage.getItem('tm-cc-autostart') === '1' || sessionStorage.getItem('tm-cc-running') === '1') return ''; } catch (e) {}
+  if ((name === 'board' || name === 'match' || name === 'tourney') && tmStoreOn()) return ''; /* showTab의 스토어 가드보다 먼저(안내 토스트 없이) */
+  showTab(name);
+  return name;
+}
+try { tmTabRestore(); } catch (e) {}
 </script>
 </body>
 </html>
