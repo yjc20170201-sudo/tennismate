@@ -1663,7 +1663,10 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       <select id="admin-days" onchange="adminLoad()" style="width:auto"><option value="7">최근 7일</option><option value="30" selected>최근 30일</option><option value="90">최근 90일</option><option value="365">1년</option></select>
       <span class="muted" id="admin-status" style="font-size:12px"></span>
     </div>
-    <div class="section-title" style="margin-top:10px">가입자 <span id="admin-n" class="muted" style="font-weight:400;font-size:12px"></span></div>
+    <div class="section-title" style="margin-top:10px">플레이 앱으로 연 회원 <span id="admin-app-n" class="muted" style="font-weight:400;font-size:12px"></span></div>
+    <div id="admin-app" style="display:flex;flex-wrap:wrap;gap:6px;font-size:13px"></div>
+    <div class="muted" style="font-size:11px;margin-top:4px">구글은 누가 [테스터 되기]를 눌렀는지 알려 주지 않아요. 인원 수는 플레이 콘솔 대시보드에서 보고, 여기에는 v1.81부터 플레이 앱을 열고 로그인한 회원이 나와요(둘러보기는 안 남아요). 접속 기록은 하루 한 줄이라, 같은 날 크롬·PC로도 열면 그날은 빠질 수 있어요.</div>
+    <div class="section-title" style="margin-top:14px">가입자 <span id="admin-n" class="muted" style="font-weight:400;font-size:12px"></span></div>
     <div style="overflow-x:auto"><table class="admin-tbl" id="admin-users"></table></div>
     <div class="section-title" style="margin-top:14px">접속 기록 <span class="muted" style="font-weight:400;font-size:12px">(v1.19부터 기록 · 하루 한 행, 앱을 열 때마다 횟수)</span></div>
     <div style="overflow-x:auto"><table class="admin-tbl" id="admin-visits"></table></div>
@@ -2375,7 +2378,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.80';
+const APP_VERSION = 'v1.81';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -9153,10 +9156,13 @@ async function newPwDo() {
 document.addEventListener('DOMContentLoaded', () => { try { if (/type=recovery/.test(location.hash) || /type=recovery/.test(location.search)) setTimeout(openNewPw, 1200); } catch (e) {} }); // 이벤트를 놓쳐도 주소로 판단
 // ── v1.19 관리자 모드 ──
 let adminIs = false, adminTouched = 0;
+// v1.81: 비공개 테스트 — 구글은 누가 [테스터 되기]를 눌렀는지 알려 주지 않음 → 플레이 앱(TWA)으로 연 접속은 접속 기록 앱 버전 칸에 'v1.81 앱'.
+//   그 접속이 어느 판인지만 남김 — 폰에 '전에 앱을 열었음'을 기억하지 말 것(폰 기억은 같은 폰 다른 계정까지 잡고, 처리방침의 '앱 버전'을 넘어섬).
+function adminAppMark() { return tmStoreOn() ? ' 앱' : ''; }
 async function adminTouch() {
   try {
     if (!serverMode() || !TMAuth.isLoggedIn) return;
-    if (Date.now() - adminTouched > 600000) { adminTouched = Date.now(); svClient().rpc('touch_visit', { p_ua: navigator.userAgent.slice(0, 200), p_ver: APP_VERSION }).then(() => {}, () => {}); } // 접속 기록(10분에 한 번만)
+    if (Date.now() - adminTouched > 600000) { adminTouched = Date.now(); svClient().rpc('touch_visit', { p_ua: navigator.userAgent.slice(0, 200), p_ver: APP_VERSION + adminAppMark() }).then(() => {}, () => {}); } /* 접속 기록(10분에 한 번만) · v1.81: 플레이 앱이면 ' 앱' */
     const { data } = await svClient().rpc('is_admin'); adminIs = data === true;
     const row = $('admin-row'); if (row) row.style.display = adminIs ? '' : 'none';
   } catch (e) {}
@@ -9186,6 +9192,21 @@ function adminDelReq(uid, btn) {
 }
 const adminFmt = t => { if (!t) return '—'; const d = new Date(t); const p = n => String(n).padStart(2, '0'); return d.getMonth() + 1 + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
 const adminAgo = t => { if (!t) return ''; const m = Math.round((Date.now() - new Date(t)) / 60000); return m < 60 ? m + '분 전' : m < 1440 ? Math.round(m / 60) + '시간 전' : Math.round(m / 1440) + '일 전'; };
+// v1.81: 접속 기록 중 앱 버전이 ' 앱'으로 끝나는 것(플레이 앱으로 연 날)을 회원별로 — 닉네임 · 그런 날 수 · 마지막 접속, 최근 순.
+//   admin_visits는 최근 500줄까지만 주므로(010) 500줄이면 숫자가 모자랄 수 있다고 붙임.
+function adminAppRender(visits, days) {
+  const box = $('admin-app'), nEl = $('admin-app-n'); if (!box) return;
+  const all = visits || [], by = {};
+  all.forEach(x => {
+    if (!x || !/ 앱$/.test(String(x.app_ver || ''))) return;
+    const k = x.user_id || x.nickname; const o = by[k] || (by[k] = { nick: x.nickname, days: 0, last: '' });
+    o.days++; if (String(x.last_at || '') > o.last) o.last = String(x.last_at || '');
+  });
+  const list = Object.values(by).sort((a, b) => b.last.localeCompare(a.last));
+  if (nEl) nEl.textContent = list.length + '명 (최근 ' + days + '일' + (all.length >= 500 ? ' · 최근 접속 500건 안에서' : '') + ')';
+  box.innerHTML = list.length ? list.map(o => '<span class="badge" style="font-size:12px">' + esc(o.nick || '이름 없음') + ' · ' + o.days + '일 · ' + adminAgo(o.last) + '</span>').join('')
+    : '<span class="muted">아직 없어요 — 플레이 앱을 열고 로그인한 회원이 여기에 나와요</span>';
+}
 async function adminLoad() {
   const st = $('admin-status'); if (st) st.textContent = '불러오는 중…';
   try {
@@ -9199,6 +9220,7 @@ async function adminLoad() {
       users.map((x, i) => '<tr' + (x.deleted ? ' style="opacity:.5"' : '') + '><td class="dim">' + (i + 1) + '</td><td><b>' + esc(x.nickname) + '</b>' + (x.deleted ? ' <span class="badge">탈퇴</span> <button type="button" class="tag-btn" onclick="acctDelOperator(\'' + esc(x.id) + '\', this)">삭제 마무리</button>' : adminDelBtn(x)) + '</td><td>' + esc(x.email) + '</td><td class="dim">' + adminFmt(x.created_at) + '</td><td class="dim">' + adminFmt(x.last_sign_in_at) + '</td><td>' + (x.visit_days ? x.visit_days + '일 · ' + x.visit_n + '회' : '<span class="dim">—</span>') + '</td><td class="dim">' + (x.last_visit ? adminFmt(x.last_visit) + ' (' + adminAgo(x.last_visit) + ')' : '—') + '</td><td class="dim">' + esc(x.ntrp) + '</td><td class="dim">' + esc(x.region) + '</td><td class="dim">' + esc(x.clubs) + '</td></tr>').join('');
     $('admin-visits').innerHTML = '<tr><th>닉네임</th><th>날짜</th><th>처음</th><th>마지막</th><th>횟수</th><th>버전</th><th>기기</th></tr>' +
       (visits.length ? visits.map(x => '<tr><td><b>' + esc(x.nickname) + '</b></td><td class="dim">' + esc(x.seen_on) + '</td><td class="dim">' + adminFmt(x.first_at).slice(-5) + '</td><td class="dim">' + adminFmt(x.last_at).slice(-5) + '</td><td>' + x.n + '</td><td class="dim">' + esc(x.app_ver) + '</td><td class="dim">' + esc(adminUa(x.ua)) + '</td></tr>').join('') : '<tr><td colspan="7" class="dim">아직 기록이 없어요 — v1.19 이후 접속부터 쌓여요</td></tr>');
+    adminAppRender(visits, days); /* v1.81 */
     if (st) st.textContent = adminFmt(Date.now()) + ' 기준';
   } catch (e) { if (st) st.textContent = '불러오기 실패: ' + (e.message || e); }
 }
