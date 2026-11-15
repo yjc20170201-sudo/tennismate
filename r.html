@@ -55,7 +55,7 @@
     <button onclick="location.reload()">끊기</button>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js"></script>
 <script>
 var SB_URL = 'https://ssibxgplavavsqemqrej.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaWJ4Z3BsYXZhdnNxZW1xcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDkwNzAsImV4cCI6MjEwMzY4NTA3MH0.SU5gZ8lIT8qdQNF0t8EnYRpD_GA7QFF3KohOsNlvc6U';
@@ -131,8 +131,8 @@ function onState(p) {
   $('games').innerHTML = '게임 <span class="g0">' + g0 + '</span> - <span class="g1">' + g1 + '</span>';
   $('pts').innerHTML = '<span class="p0">' + esc(d0) + '</span><span class="colon">:</span><span class="p1">' + esc(d1) + '</span>';
   $('state').textContent = p.done ? '경기 종료' : p.tb ? '🔥 타이브레이크' : (d0 === '40' && d1 === '40') ? '듀스' : (d0 === 'Ad' || d1 === 'Ad') ? '어드밴티지' : '';
-  $('btn-us').textContent = '🟢 ' + esc(String(p.n0 || '우리'));
-  $('btn-them').textContent = '🔴 ' + esc(String(p.n1 || '상대'));
+  $('btn-us').textContent = '🟢 ' + String(p.n0 || '우리'); /* v1.82: textContent는 글자 그대로 넣음 — esc()를 겹치면 &가 &amp;로 보임 */
+  $('btn-them').textContent = '🔴 ' + String(p.n1 || '상대');
   // 게임이 넘어갔으면 진동 길게 + "게임" 먼저 말하기
   var gameWon = last && (g0 !== last.g0 || g1 !== last.g1) && !p.done;
   var setWon = last && String(p.sets || '') !== String(last.sets || '');
