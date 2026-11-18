@@ -1159,7 +1159,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-judge">
     <div class="section-title" id="mh-sec">내 영상 하이라이트</div>
     <div class="card" id="mh-card">
-      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 타수·길이 순으로 고르고, 화면이 공을 따라가며 먼 코트는 크게 확대하는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 서브도 찾아 표시해요. 타수는 공이 네트 너머로 오간 횟수를 화면으로 센 추정치라 먼 공을 놓치면 조금 적게 나올 수 있어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
+      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 세로로 찍은 영상은 화면을 위·아래로 나눠 봐서 분석이 더 걸려요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 타수·길이 순으로 고르고, 화면이 공을 따라가며 먼 코트는 크게 확대하는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 서브도 찾아 표시해요. 타수는 공이 네트 너머로 오간 횟수를 화면으로 센 추정치라 먼 공을 놓치면 조금 적게 나올 수 있어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
       <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">경기 영상 고르기 (여러 개 가능)
         <input type="file" id="mh-file" accept="video/*" multiple style="display:none" onchange="mhPick(event)">
       </label>
@@ -1173,6 +1173,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
         <select id="mh-min" style="flex:1;min-width:130px" onchange="mhEdPreselect()"><option value="0" selected>타수 제한 없음</option><option value="3">3타 이상 랠리만</option><option value="5">5타 이상 랠리만</option><option value="7">7타 이상 랠리만</option><option value="10">10타 이상 랠리만</option></select>
       </div>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-audio" checked> 원래 소리(타구음) 넣기</label>
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-relook" checked onchange="mhRlSet(this)"> 공 궤적 다듬기 (만들기 전에 고른 랠리를 다시 봐서 공 꼬리가 덜 끊겨요 · 랠리 길이의 1~2배 더 걸려요)</label><!-- v1.83 -->
       <div class="row" style="gap:6px;margin-top:10px">
         <button type="button" class="btn" id="mh-go" style="flex:1" disabled onclick="mhGo()">하이라이트 만들기</button>
         <button type="button" class="btn outline" id="mh-stop" style="flex:0 0 auto;display:none" onclick="mhStopNow()">멈추기</button>
@@ -2394,7 +2395,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.82';
+const APP_VERSION = 'v1.83';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -10741,6 +10742,7 @@ function mhScoreCalc() { // 포인트 승자 → 점수(시간 순, 모든 랠�
 }
 let mhPvT1 = 0, mhPvT0 = 0, mhPvDt = 1 / 30;
 function mhEdPlay(i) { // 미리 보기 + 프레임 단위 보기
+  if (mhBusy) { toast('만드는 중이에요 — 끝난 뒤(또는 멈춘 뒤) 미리 보기를 눌러 주세요'); return; } /* v1.83 */
   if (!mhEd) return; const x = mhEd.rows[i], v = $('mh-pv'), c = $('mh-pvc'); if (!v) return;
   v.style.display = 'block'; if (c) c.style.display = 'flex';
   mhFree(v, false); // v1.43 분석·만들기 요소가 쥔 재생기를 놓음
@@ -10805,7 +10807,7 @@ async function mhRecOpen(m, file) { // 찍으면서 모은 표본으로 바로 �
   const go = $('mh-go'); if (go) go.disabled = false; const rs = $('mh-rsave'); if (rs) rs.style.display = '';
   await mhGo(); // 분석은 이미 됨 → 편집 화면만
 }
-async function mhRecOpenSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; mhStatus('지난 녹화 여는 중…', null); try { await mhRecOpen(m, await mhRecFile(m)); } catch (e) { mhStatus('열지 못했어요: ' + ((e && e.message) || e), null); } }
+async function mhRecOpenSess(sess) { if (mhBusy) { toast('만드는 중이에요 — 멈춘 뒤 다시 열어 주세요'); return; } /* v1.83 */ const m = mhRecOld.find(x => x.sess === sess); if (!m) return; mhStatus('지난 녹화 여는 중…', null); try { await mhRecOpen(m, await mhRecFile(m)); } catch (e) { mhStatus('열지 못했어요: ' + ((e && e.message) || e), null); } }
 async function mhRecSaveSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; try { const fl = await mhRecFile(m); const r = await ccExportFiles([fl], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { m.saved = r === 'shared' ? true : 'dl'; await mhRput('sess', m); await mhRecCheck(); } } catch (e) { toast('저장하지 못했어요: ' + ((e && e.message) || e)); } }
 async function mhRecSaveCur() { if (!mhRecCur) return; const r = await ccExportFiles([mhRecCur.file], '테니스 녹화'); if (r !== 'cancel' && r !== 'none') { mhRecCur.m.saved = r === 'shared' ? true : 'dl'; try { await mhRput('sess', mhRecCur.m); } catch (e) {} await mhRecCheck(); } }
 async function mhRecDelSess(sess) { const m = mhRecOld.find(x => x.sess === sess); if (!m) return; if (!confirm(mhRecLabel(m) + ' 녹화를 폰의 앱 저장 공간에서 지울까요?' + (m.saved === 'dl' ? ' 다운로드 폴더(내 파일 › 다운로드)에 파일이 있는지 먼저 확인해 주세요 — 지우면 되돌릴 수 없어요.' : m.saved ? '' : ' 아직 사진첩에 저장하지 않았어요 — 지우면 되돌릴 수 없어요.'))) return; try { await mhRdel(sess); } catch (e) {} await mhRecCheck(); }
@@ -10847,11 +10849,11 @@ async function mhRecGo(camP, au) {
   const step = (now, md) => {
     if (mhRec !== R || R.stopping) return;
     const mt = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime, t = (now - R.t0p) / 1000;
-    if (R.ready && !R.busy) {
+    if (R.ready && !R.busy && !mhInf) { /* v1.83: 아직 안 끝난 공 인식이 있으면 부르지 않음(mhInf) — 녹화는 그대로 */
       if (R.k > 0 && (mt - R.lastMt > 0.05 || mt <= R.lastMt)) R.k = 0;
-      try { R.pool[R.k].getContext('2d').drawImage(v, 0, 0, 512, 288); R.ts[R.k] = t; R.lastMt = mt; R.k++; } catch (e) { R.k = 0; }
+      try { if (R.k === 0) R.asp = R.aspOff || v.videoWidth !== vw || v.videoHeight !== vh ? null : (R.asp0 !== undefined ? R.asp0 : (R.asp0 = mhAspNew(vw, vh))); /* v1.83: 세로로 든 폰 등 16:9가 아닌 카메라 영상은 조각으로(mhScan과 같은 도우미). 16:9·크기가 바뀐 경우는 옛 줄 그대로 */ if (R.asp) { mhAspGrab(R.asp, v, R.k); R.aspBad = 0; } else R.pool[R.k].getContext('2d').drawImage(v, 0, 0, 512, 288); R.ts[R.k] = t; R.lastMt = mt; R.k++; } catch (e) { R.k = 0; if (R.asp && (R.aspBad = (R.aspBad || 0) + 1) >= 3) { mhAspOff(R.asp, e); R.asp = null; R.aspOff = true; } }
       if (R.k === 3) { R.k = 0; R.busy = true; const tt = R.ts.slice();
-        WASB.detectFrames(R.pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() }).then(res => { const q = mhPickBall(res, tt, vw, R.band); if (q) m.samples.push(q); }).catch(() => {}).finally(() => { R.busy = false; }); }
+        mhInf++; /* v1.83 */ (R.asp ? mhAspRun(R.asp, aiModelThr()) : WASB.detectFrames(R.pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() })).then(res => { const q = mhPickBall(res, tt, vw, R.band); if (q) m.samples.push(q); }).catch(() => {}).finally(() => { R.busy = false; mhInf--; }); }
     }
     v.requestVideoFrameCallback(step);
   };
@@ -10941,10 +10943,90 @@ function mhPickBall(res, tt, vw, band) { // 3장 묶음에서 "움직이는 공"
   const p = best.p, m = p.reduce((q, r) => [q[0] + r[0] / p.length, q[1] + r[1] / p.length, q[2] + r[2] / p.length], [0, 0, 0]);
   return { t: m[0], x: m[1], y: m[2], pts: p, n: p.length };
 }
+// ── v1.83 화면 비율에 맞춘 공 인식(mhAsp*): 세로로 찍은 영상·16:9보다 넓은 영상을 모델 입력(512×288)에 통째로 눌러 넣지 않음(16:9와 가로 4:3·정사각은 아래 실측대로 v1.82처럼 눌러 넣음) ──
+//   v1.82까지는 어떤 영상이든 drawImage(v, 0, 0, 512, 288) → 1080×1920 세로 영상은 가로 2.1배·세로 6.7배로 찌그러져(12px 공이 5.7×1.8px) 공을 거의 못 찾았음(같은 장면에서 묶음 재현율 59~76% → 같은 배율이면 86~94%).
+//   규칙(2026-11-16 실측): 모델은 '긴 변이 512칸'인 크기의 공에 맞춰져 있음 → 세로 영상은 가로·세로 같은 배율로 그린 조각을 넣는다.
+//   · 16:9(±3%)               → null: v1.82와 똑같이(같은 화소가 모델에 들어감 — 부르는 쪽이 옛 줄을 그대로 씀)
+//   · 가로 4:3·3:2·16:10·정사각 → null: 여기도 v1.82처럼 통째로 눌러 넣음. 검토 때 재 보니(동의한 날 영상으로 만든 4:3·정사각 4개, 기준 공이 있는 묶음 중 맞게 찾은 비율)
+//       통째로 눌러 넣기 91·96·99·96% / 같은 배율로 통째(공이 0.75배로 작아짐) 83·93·98·99% / 긴 변 512칸 두 줄(모델 2번) 98·95·96·92% — 눌러 넣기가 가장 고르고 모델도 한 번
+//   · 16:9보다 넓은 화면(20:9 등) → 통째로 한 장, 같은 배율(위아래 검은 여백). 모델 1번(실측 97% = 눌러 넣기와 같음)
+//   · 세로(폭/높이 < 0.9)      → 배율 = 512/높이, 조각 = 폭 전체 × 높이의 56.25%, 위·아래 두 줄(높이의 12.5% 겹침). 좌우 검은 여백. 모델 2번(지금 모델 파일은 배치 1 고정이라 한 번에 못 묶음). 실측 64~77% → 89~93%
+//   좌표: 조각 캔버스 3장을 WASB.detectFrames(cv, P.aw, P.ah)에 주면 '조각 원점에서 잰 원본 px'(v1.60 반 픽셀 규칙 포함)로 나오므로 x + P.ox, y + P.oy + (그 줄의 y0)만 더함 — wasb.js는 그대로.
+//   쓰는 곳: 본 분석(mhScan — 줄 전부)·공 궤적 다듬기(mhRlScan — 공을 따라가는 한 줄, 놓치면 줄 전부)·앱으로 찍기(mhRecGo — 줄 전부). 판독 센터·클럽캠 라이브·챌린지는 이 길을 쓰지 않음.
+//   숨은 끄기: localStorage 'tm-mh-asp' = '0'이면 어떤 영상이든 v1.82처럼 통째로(mhAspOn).
+//   규칙·값을 바꾸면 deploy/tests/mhasp183_unit_test.mjs(fixtures_portrait183.json)·aspect183_test.mjs.
+function mhAspPlan(vw, vh) { // 원본 크기 → 조각 계획(null = v1.82처럼 통째로: 16:9와 가로 4:3·정사각 등)
+  vw = +vw; vh = +vh; if (!(vw > 0 && vh > 0)) return null;
+  var a = vw / vh; if (a >= 0.9 && a <= (16 / 9) * 1.03) return null;
+  var s, th, rows;
+  if (a >= 0.9) { s = Math.min(512 / vw, 288 / vh); th = vh; rows = [0]; } /* 16:9보다 넓은 화면: 통째로(위아래 여백) */
+  else { s = 512 / vh; th = 288 / s; rows = [0, vh - th]; } /* 세로: th = 0.5625·vh */
+  var dw = vw * s, dh = th * s, dx = (512 - dw) / 2, dy = (288 - dh) / 2;
+  return { s: s, th: th, rows: rows, dw: dw, dh: dh, dx: dx, dy: dy, aw: 512 / s, ah: 288 / s, ox: -dx / s, oy: -dy / s, R: Math.max(8, Math.max(vw, vh) * 0.006), m: 1.5 / s, vw: vw, vh: vh };
+}
+function mhAspDraw(g, v, P, y0) { g.drawImage(v, 0, y0, P.vw, P.th, P.dx, P.dy, P.dw, P.dh); } // 조각 하나(g = 512×288 캔버스, y0 = 원본에서 조각 위쪽). 여백은 캔버스를 만들 때 한 번 검게
+function mhAspRowFor(P, y) { return Math.max(0, Math.min(P.vh - P.th, y - P.th / 2)); } // 공 높이 y를 가운데에 둔 조각의 위쪽 y
+function mhAspMerge(P, per, y0s) { // 조각별 detectFrames 결과(per[i] = 길이 3) → 원본 좌표로 합친 res[3] = [{ cands }] (mhPickBall에 그대로). 여백 경계 m px 안은 버림 · 반경 R 안은 같은 공(확신 높은 쪽) · 확신 높은 순
+  var res = [{ cands: [] }, { cands: [] }, { cands: [] }], i, q, k, j;
+  for (i = 0; i < per.length; i++) for (q = 0; q < 3; q++) {
+    var cs = per[i] && per[i][q] && per[i][q].cands ? per[i][q].cands : [], out = res[q].cands;
+    for (k = 0; k < cs.length; k++) {
+      var x = cs[k].x + P.ox, y = cs[k].y + P.oy + y0s[i]; if (x < 0 || x > P.vw - 1 || y < 0 || y > P.vh - 1) continue;
+      if (P.dx > 0 && (x < P.m || x > P.vw - 1 - P.m)) continue; /* 좌우 여백(세로 영상) — 여백이 없는 쪽의 화면 가장자리 공은 버리지 않음 */
+      if (P.dy > 0 && (y < P.m || y > P.vh - 1 - P.m)) continue; /* 위아래 여백(16:9보다 넓은 원본) */
+      for (j = 0; j < out.length; j++) if (Math.sqrt((out[j].x - x) * (out[j].x - x) + (out[j].y - y) * (out[j].y - y)) <= P.R) break;
+      if (j === out.length) out.push({ x: x, y: y, conf: cs[k].conf }); else if (cs[k].conf > out[j].conf) { out[j].x = x; out[j].y = y; out[j].conf = cs[k].conf; }
+    }
+  }
+  for (q = 0; q < 3; q++) res[q].cands.sort(function (p, r) { return r.conf - p.conf; });
+  return res;
+}
+async function mhAspDetect(P, tiles, thr) { // 3장 묶음 하나: tiles = [{ y0, cv: [c0, c1, c2] }] → 합친 res. 모델은 조각마다 한 번
+  var per = [], y0s = [], i;
+  for (i = 0; i < tiles.length; i++) { per.push(await WASB.detectFrames(tiles[i].cv, P.aw, P.ah, { all: true, topk: 3, thr: thr })); y0s.push(tiles[i].y0); }
+  return mhAspMerge(P, per, y0s);
+}
+const mhAspBad = {}; // 조각 그리기가 거듭 실패해 통째로 본 영상 크기('폭x높이' → 이유) — 완성 줄에 남김. 같은 크기를 다시 시도하면 지움
+function mhAspOn() { try { return localStorage.getItem('tm-mh-asp') !== '0'; } catch (e) { return true; } } // 숨은 끄기(설정 화면에는 없음): localStorage 'tm-mh-asp' = '0'이면 조각을 쓰지 않고 어떤 영상이든 v1.82처럼 통째로 — 어떤 폰에서 조각이 말썽이거나 세로 영상 분석이 너무 오래 걸릴 때 되돌리는 길
+function mhAspNew(vw, vh) { // 영상(크기)마다: 계획 + 줄마다 캔버스 3장. 16:9면(또는 숨은 끄기) null = 부르는 쪽이 v1.82 줄을 그대로 씀
+  if (!mhAspOn()) return null;
+  const P = mhAspPlan(vw, vh); if (!P) return null; delete mhAspBad[P.vw + 'x' + P.vh];
+  const mk = () => { const c = document.createElement('canvas'); c.width = 512; c.height = 288; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 512, 288); return c; };
+  return { P, slots: P.rows.map(() => ({ y0: 0, cv: [mk(), mk(), mk()] })), n: 0, tri: 0, runs: 0, bad: 0 };
+}
+function mhAspGrab(A, v, k, rows) { // 묶음의 k번째 장을 조각 캔버스에. k = 0에서 이번 묶음에 볼 줄을 정함(rows = 원본 y0 배열, 없으면 계획의 줄 전부)
+  if (k === 0) { const ys = rows && rows.length ? rows : A.P.rows; A.n = Math.min(ys.length, A.slots.length); for (let i = 0; i < A.n; i++) A.slots[i].y0 = ys[i]; }
+  for (let i = 0; i < A.n; i++) mhAspDraw(A.slots[i].cv[k].getContext('2d'), v, A.P, A.slots[i].y0);
+}
+function mhAspRun(A, thr) { A.tri++; A.runs += A.n; return mhAspDetect(A.P, A.slots.slice(0, A.n), thr); } // 모은 묶음을 모델로(조각 수만큼) → 합친 res
+function mhAspOff(A, e) { try { mhAspBad[A.P.vw + 'x' + A.P.vh] = String((e && (e.name || e.message)) || e || '오류').slice(0, 30); console.warn('mh asp off', e); } catch (x) {} return null; } // 조각 그리기가 거듭 실패(원본의 일부만 그리기를 못 하는 브라우저) → 이 영상은 예전처럼 통째로(부르는 쪽이 받은 null을 계획 자리에 넣음)
+function mhAspPrev(A, s) { // 분석 중 미리보기: 공을 찾은 조각(없으면 첫 조각) + 그 조각 안에서의 공 자리
+  const P = A.P; let i = 0; if (s) for (let q = 0; q < A.n; q++) if (s.y >= A.slots[q].y0 && s.y <= A.slots[q].y0 + P.th) { i = q; break; }
+  mhPrevDraw(A.slots[i].cv[2], s ? { x: (s.x - P.ox) * P.s, y: (s.y - A.slots[i].y0 - P.oy) * P.s } : null, 512, 288);
+}
+function mhAspDiag(sel) { // 완성 줄: 16:9가 아닌 영상을 어떻게 봤는지(16:9 영상뿐이면 빈 글자 — 완성 줄은 v1.82 그대로)
+  let rows = 0, bad = '';
+  (sel || []).forEach(q => { const P = q && q.F ? mhAspPlan(q.F.vw, q.F.vh) : null; if (!P) return; rows = Math.max(rows, P.rows.length); bad = bad || mhAspBad[P.vw + 'x' + P.vh] || ''; });
+  if (!rows) return '';
+  if (!mhAspOn()) return '화면 비율 맞추기 끔(통째로 봄)';
+  if (bad) return '조각 보기 실패(' + bad + ') → 통째로 봄';
+  const st = mhRlStat;
+  return (rows > 1 ? '세로 영상 조각 ' + rows + '줄' : '넓은 화면 비율 맞춰 봄') + (st && st.aspTri > 0 ? ' · 묶음당 ' + (st.aspRuns / st.aspTri).toFixed(1) + '번' : '');
+}
+// ── v1.83 공 인식을 겹쳐 부르지 않기(mhInf): 내 영상 하이라이트가 부른 공 인식 가운데 아직 안 끝난 것의 수. 0이 아니면 새로 부르지 않음 ──
+//   왜: WebGPU(onnxruntime-web 1.19.2)는 도는 중에 또 부르면 둘 다 오류('Session mismatch'·'Session already started')가 나고, 그다음 호출에서 페이지가 영영 멈춤(검토 실측 — wasm은 줄을 서서 괜찮음).
+//   v1.82는 분석 때만 공 인식을 불러 영상 여러 개를 분석할 때만 그럴 틈이 있었는데, 다듬기가 랠리마다·만들 때마다 부르면서 늦게 끝나는 추론 하나(발열·GPU 멈춤·가려졌다 돌아옴)나 GPU 장치를 잃은 뒤의 두 번째 만들기에서 페이지가 얼어붙었음.
+//   영영 안 끝나는 추론(GPU 장치를 잃음)이면 mhInf가 0으로 돌아오지 않음 → 그 뒤로는 공 인식을 부르지 않고(다듬기는 '공 인식이 멈춤', 분석은 그 영상에 안내) 하이라이트는 분석 표본으로 계속 만들어짐. 앱을 새로 불러오면 풀림.
+//   세는 곳: mhScan·mhRlScan·mhRecGo(부를 때 +1, 끝나면 −1). 판독 센터·클럽캠 라이브·챌린지의 호출은 그대로(세지 않음).
+let mhInf = 0;
+function mhInfWait(ms, stop) { // 앞서 부른 공 인식이 끝나기를 ms까지 기다림 → 끝났으면 true, 아직이면 false(stop()이 참이면 바로 false). 던지지 않음
+  return new Promise(res => { const t0 = performance.now(), chk = () => { if (!(mhInf > 0)) return res(true); let s = false; try { s = !!(stop && stop()); } catch (e) {} if (s || performance.now() - t0 >= ms) return res(false); setTimeout(chk, 100); }; chk(); });
+}
 function mhScan(v, dur, band, onProg) { // 소리 없이 배속 재생하며 연속 3장 → 모델 → 움직이는 공 표본들
   const W = WASB.W || 512, Hh = WASB.H || 288, vw = v.videoWidth, vh = v.videoHeight;
   const pool = [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = W; c.height = Hh; return c; });
   const samples = []; let k = 0, busy = false, rate = 1.5, tri = 0, rej = 0, errs = 0, lastAdj = performance.now(), lastVT = 0, lastTri = 0, lastCb = performance.now();
+  let A = mhAspNew(vw, vh), aspBad = 0, dupNow = -1, dupT = -1, rateCap = 4; /* v1.83: 16:9가 아닌 원본(세로 등)은 같은 배율의 조각으로 — 줄 전부를 묶음마다. 16:9면 null = 아래 옛 줄 그대로. dup* = 같은 프레임을 두 번 받지 않기(아래). rateCap = 배속의 위(재생이 멈추면 아래 지킴이가 낮춤) */
   const ts = [0, 0, 0];
   v.muted = true; v.playbackRate = rate;
   return new Promise(resolve => {
@@ -10957,20 +11039,21 @@ function mhScan(v, dur, band, onProg) { // 소리 없이 배속 재생하며 연
       if (fin) return; lastCb = performance.now();
       if (mhStop) return finish();
       const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime;
-      if (!busy) {
+      if (now === dupNow && t === dupT) return; dupNow = now; dupT = t; /* v1.83: 5초 넘게 프레임이 안 와 아래 지킴이가 콜백을 한 번 더 걸면 콜백이 둘이 되어 같은 프레임을 두 번 받음 → 3장이 영영 안 모여 남은 영상에서 공을 하나도 못 찾던 문제(v1.82부터). 두 번째 것은 여기서 끝나 다시 걸리지 않으므로 콜백은 다시 하나 */
+      if (!busy && !mhInf) { /* v1.83: 앞서 부른 공 인식(앞 영상의 마지막 추론 등)이 아직 안 끝났으면 부르지 않음 — 겹치면 WebGPU에서 페이지가 얼어붙음 */
         if (k > 0 && (t - ts[k - 1] > 0.05 || t <= ts[k - 1])) { k = 0; rej++; } // 연속 프레임이 아니면(배속이 빨라 건너뜀) 처음부터
-        try { pool[k].getContext('2d').drawImage(v, 0, 0, W, Hh); ts[k] = t; k++; } catch (e) { k = 0; }
+        try { if (A) { mhAspGrab(A, v, k); aspBad = 0; } else pool[k].getContext('2d').drawImage(v, 0, 0, W, Hh); ts[k] = t; k++; } catch (e) { k = 0; if (A && ++aspBad >= 3) A = mhAspOff(A, e); /* v1.83: 조각 그리기가 잇달아 3번 실패 → 이 영상은 예전처럼 통째로 */ }
         if (k === 3) {
-          k = 0; busy = true; tri++; const tt = ts.slice();
-          WASB.detectFrames(pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() }).then(res => { const s = mhPickBall(res, tt, vw, band); if (s) samples.push(s); mhPrevDraw(pool[2], s, vw, vh); })
-            .catch(e => { if (++errs <= 3) console.warn('mh detect', e); }).finally(() => { busy = false; });
+          k = 0; busy = true; mhInf++; /* v1.83 */ tri++; const tt = ts.slice();
+          const A1 = A; /* v1.83 */ (A1 ? mhAspRun(A1, aiModelThr()) : WASB.detectFrames(pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() })).then(res => { const s = mhPickBall(res, tt, vw, band); if (s) samples.push(s); if (A1) mhAspPrev(A1, s); else mhPrevDraw(pool[2], s, vw, vh); })
+            .catch(e => { if (++errs <= 3) console.warn('mh detect', e); }).finally(() => { busy = false; mhInf--; /* v1.83 */ });
         }
       }
       const wall = performance.now();
       if (wall - lastAdj > 2500) { // 배속 조절: 영상 1초당 3장 묶음 1.8개 이상(랠리 판단에 충분), 여유 있으면 최대 4배속
         const dv = t - lastVT, got = tri - lastTri, tps = dv > 0.2 ? got / dv : 3;
         if ((tps < 1.8 || rej > got * 3) && rate > 0.5) rate = Math.max(0.5, rate * 0.75);
-        else if (tps > 3.2 && rej <= got && rate < 4) rate = Math.min(4, rate * 1.3);
+        else if (tps > 3.2 && rej <= got && rate < rateCap) rate = Math.min(rateCap, rate * 1.3); /* v1.83: 위는 rateCap(처음 4 = v1.82와 같음) */
         try { v.playbackRate = rate; } catch (e) {}
         lastAdj = wall; lastVT = t; lastTri = tri; rej = 0;
       }
@@ -10982,7 +11065,7 @@ function mhScan(v, dur, band, onProg) { // 소리 없이 배속 재생하며 연
     v.addEventListener('ended', () => setTimeout(finish, 400), { once: true });
     wd = setInterval(() => { // 화면이 꺼졌다 돌아오면 재생 재개, 5초 넘게 프레임이 안 오면 재생 다시
       if (fin) return;
-      if (document.visibilityState === 'visible' && (v.paused || performance.now() - lastCb > 5000) && !v.ended) { v.play().catch(() => {}); if (performance.now() - lastCb > 5000) { lastCb = performance.now(); v.requestVideoFrameCallback(step); } }
+      if (document.visibilityState === 'visible' && (v.paused || performance.now() - lastCb > 5000) && !v.ended) { const stuck = !v.paused && !v.seeking && v.readyState < 3 && performance.now() - lastCb > 5000; /* v1.83: 재생 중인데 5초 넘게 프레임이 없고 받아 둔 장면도 없음 = 디코더가 배속을 못 따라가 멈춤(60장 영상을 2~4배속으로 볼 때 — play()로는 안 풀림, v1.82부터) */ v.play().catch(() => {}); if (performance.now() - lastCb > 5000) { lastCb = performance.now(); if (stuck) { rateCap = Math.max(1, Math.min(rateCap, rate) * 0.6); rate = Math.min(rate, rateCap); k = 0; try { v.playbackRate = rate; v.currentTime = v.currentTime + 0.05; } catch (e) {} } /* 배속의 위를 낮추고 제자리에서 0.05초 건너뛰면 다시 흐름 — 멈추지 않는 영상에서는 이 줄이 돌지 않음 */ v.requestVideoFrameCallback(step); } }
     }, 1500);
     mhPlaying = true; v.requestVideoFrameCallback(step); v.play().catch(() => {});
   });
@@ -11206,6 +11289,7 @@ function mhTrailBuild(samples, vw, vh, opts) { // 랠리마다 한 번(mhRender)
   extr(N[N.length - 1], N[N.length - 1].t, N[N.length - 1].t1 + o.extF, false);
   P.t0 = t0; P.n = n; P.xs = xs; P.ys = ys; P.w = w; P.run = run; return P;
 }
+const mhTrSK = new Float32Array(160), mhTrSA = new Float32Array(160); /* v1.83: 꼬리 창 안 칸마다 그 칸이 든 조각의 남길 비율·끝난 뒤 시간(mhTrailDrawD — 장면마다 새로 만들지 않음) */
 function mhTrailAt(P, t, out) { // 시각 t의 보간 위치(out[0] = x, out[1] = y, out[2] = 확신 0~1) — 궤적이 없는 시각이면 false
   var f = (t - P.t0) / P.dt, i = Math.floor(f + 1e-6), fr = f - i; if (fr < 0) fr = 0;
   if (!(i >= 0) || i >= P.n || !P.w[i]) { if (i + 1 >= 0 && i + 1 < P.n && P.w[i + 1] && fr > 0.5) { out[0] = P.xs[i + 1]; out[1] = P.ys[i + 1]; out[2] = P.w[i + 1] / 255; return true; } return false; }
@@ -11217,6 +11301,7 @@ const mhTrMX = new Float32Array(160), mhTrMY = new Float32Array(160), mhTrHd = n
 function mhTrailDraw(g, P, t, X, Y, u) { // 장면마다: 최근 0.6초의 꼬리(오래될수록 가늘고 옅게)를 정확히 시각 t의 공 위치까지 + 머리 점. X·Y = 원본 px → 캔버스 px, u = OW / 720.
   // 프레임당 새 배열·글자 만들기·getImageData 없음, 긋기는 최대 7번 + 머리 점 1번. 캔버스 상태(선 모양·굵기·색·투명도)는 save/restore로 그대로 돌려놓음. 머리를 그렸으면 true
   if (!P || !P.n || !(u > 0)) return false;
+  if (P.drain > 0) return mhTrailDrawD(g, P, t, X, Y, u); /* v1.83: 표에 drain이 있으면(공 궤적 다듬기 켬) 끝난 꼬리를 빨리 거두는 쪽으로 — 없으면 아래 v1.82 그대로 */
   var len = 0.6, K = 7, wMin = 1.6 * u, wMax = 7 * u, dt = P.dt, n = P.n;
   var ih = Math.floor((t - P.t0) / dt + 1e-6); if (!(ih >= 0)) return false; if (ih > n - 1) ih = n - 1;
   var i0 = Math.ceil((t - len - P.t0) / dt); if (i0 < 0) i0 = 0; if (i0 > ih) return false;
@@ -11235,6 +11320,51 @@ function mhTrailDraw(g, P, t, X, Y, u) { // 장면마다: 최근 0.6초의 꼬�
       g.beginPath(); var open = false, pr = 0, cnt = 0;
       for (i = s; i < m; i++) {
         var q = i0 + i; if (!w[q]) { open = false; continue; }
+        if (!open || run[q] !== pr) { g.moveTo(mhTrMX[i], mhTrMY[i]); open = true; pr = run[q]; } else { g.lineTo(mhTrMX[i], mhTrMY[i]); cnt++; }
+      }
+      if (head) { if (open && w[ih] && run[ih] === pr) { g.lineTo(hx, hy); cnt++; } else if (!cnt) { g.moveTo(hx, hy); g.lineTo(hx + 0.01, hy); cnt++; } }
+      if (cnt) g.stroke();
+    }
+    if (head) { g.globalAlpha = ga * (0.35 + 0.6 * mhTrHd[2]); g.beginPath(); g.arc(hx, hy, wMax * 0.5, 0, 6.2832); g.fill(); }
+  } finally { g.restore(); }
+  return head;
+}
+function mhTrailDrawD(g, P, t, X, Y, u) { // v1.83 P.drain(초)이 있을 때의 mhTrailDraw: 궤적이 끝난 조각(공을 놓친 뒤 남은 꼬리)을 끝점 쪽으로 빨아들이며 옅게 → drain초 안에 사라짐(v1.82는 0.6초 동안 그 자리에 얼어 있다 툭 사라졌음)
+  // 꼬리 창(최근 0.6초)을 뒤에서 앞으로 훑어 조각으로 나눔(빈칸이 2칸 넘게 이어지면 다른 조각). 지금 시각까지 빈칸이 2칸 이하인 조각 = 살아 있음 = v1.82와 똑같이 그림(이어진 자리·짧은 끊김은 그대로라 깜빡임 없음).
+  // 끝난 조각은 남길 비율 k = 1 − (끝난 뒤 시간 − 2칸) / drain: 겹쳐 긋기마다 시작을 (끝 + 2칸) − 0.6·k·(7−j)/7로 당김, 머리가 없으면(길 끝) 전체 투명도에도 k. 다 빠진 조각은 다시 나타나지 않음.
+  // 프레임당 새 배열·글자 만들기·getImageData 없음, 긋기는 최대 7번 + 머리 점 1번, 캔버스 상태는 save/restore로 그대로. 머리를 그렸으면 true
+  var DR = +P.drain, len = 0.6, K = 7, wMin = 1.6 * u, wMax = 7 * u, dt = P.dt, n = P.n, gc = 2, GR = gc * dt;
+  var ih = Math.floor((t - P.t0) / dt + 1e-6); if (!(ih >= 0)) return false; if (ih > n - 1) ih = n - 1;
+  var i0 = Math.ceil((t - len - P.t0) / dt); if (i0 < 0) i0 = 0; if (i0 > ih) return false;
+  if (ih - i0 > 150) i0 = ih - 150;
+  var xs = P.xs, ys = P.ys, w = P.w, run = P.run, i, j, q, m = ih - i0 + 1, any = false;
+  var head = mhTrailAt(P, t, mhTrHd), hx = 0, hy = 0;
+  if (head) { hx = X(mhTrHd[0]); hy = Y(mhTrHd[1]); }
+  var hole = Math.round((t - (P.t0 + ih * dt)) / dt), segK = 1, segA = 0, seen = false, fade = 1, age; if (hole < 0) hole = 0;
+  for (i = m - 1; i >= 0; i--) { // 칸마다: 그 칸이 든 조각의 남길 비율(mhTrSK)과 '조각 끝 + 2칸'이 지금보다 몇 초 전인지(mhTrSA, 0 = 살아 있음)
+    q = i0 + i;
+    if (!w[q]) { hole++; mhTrSK[i] = 0; continue; }
+    if (!seen || hole > gc) { // 이 칸이 조각의 마지막 칸
+      age = t - (P.t0 + q * dt);
+      if (!seen && hole <= gc) { segK = 1; segA = 0; }
+      else { segK = 1 - (age - GR) / DR; if (segK < 0) segK = 0; if (segK > 1) segK = 1; segA = age - GR; if (segA < 1e-6) segA = 1e-6; }
+      if (!seen && !head) fade = segK;
+      seen = true;
+    }
+    hole = 0; mhTrSK[i] = segK; mhTrSA[i] = segA;
+    if (segK > 0) { mhTrMX[i] = X(xs[q]); mhTrMY[i] = Y(ys[q]); any = true; }
+  }
+  if (!any && !head) return false;
+  g.save();
+  try {
+    var ga = g.globalAlpha * fade; g.strokeStyle = '#d4e94e'; g.fillStyle = '#d4e94e'; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (j = 0; j < K; j++) {
+      var fr = len * (K - j) / K, sN = Math.ceil((t - fr - P.t0) / dt); // 살아 있는 조각의 시작 격자 = v1.82와 같은 식
+      g.globalAlpha = ga * 0.24; g.lineWidth = wMin + (wMax - wMin) * j / (K - 1);
+      g.beginPath(); var open = false, pr = 0, cnt = 0;
+      for (i = 0; i < m; i++) {
+        q = i0 + i; var k = mhTrSK[i];
+        if (!w[q] || !(k > 0) || q < (mhTrSA[i] === 0 ? sN : Math.ceil((t - mhTrSA[i] - fr * k - P.t0) / dt - 1e-6))) { open = false; continue; }
         if (!open || run[q] !== pr) { g.moveTo(mhTrMX[i], mhTrMY[i]); open = true; pr = run[q]; } else { g.lineTo(mhTrMX[i], mhTrMY[i]); cnt++; }
       }
       if (head) { if (open && w[ih] && run[ih] === pr) { g.lineTo(hx, hy); cnt++; } else if (!cnt) { g.moveTo(hx, hy); g.lineTo(hx + 0.01, hy); cnt++; } }
@@ -11273,7 +11403,7 @@ function mhPath(F, r, zmax) { // 세로 창 중심(원본 px): 공 위치 보간
 }
 function mhPathAt(p, t, arr) { const a = arr || p.xs; return a[Math.max(0, Math.min(a.length - 1, Math.round((t - p.t0) / p.dt)))]; }
 function mhRRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-let mhSrcMode = 'el', mhBlackN = 0, mhVfUsed = false, mhDrawErr = '';
+let mhSrcMode = 'el', mhBlackN = 0, mhVfUsed = false, mhDrawErr = '', mhTrHeadN = 0, mhTrDrawN = 0; /* v1.83: 공 자국 머리를 그린 장 / 그린 랠리 장(완성 줄의 '자국 n%') */
 function mhDraw(g, v, OW, OH, vert, t, path, trail, i, total, r) { /* v1.82: trail = mhTrailBuild가 만든 공 궤적 표(없으면 null) — v1.81까지는 표본 배열 */
   const vw = v.videoWidth || 16, vh = v.videoHeight || 9, u = OW / 720;
   g.fillStyle = '#000'; g.fillRect(0, 0, OW, OH);
@@ -11286,7 +11416,7 @@ function mhDraw(g, v, OW, OH, vert, t, path, trail, i, total, r) { /* v1.82: tra
   else { const fr = aiFitRect(vw, vh, OW, OH) || { x: 0, y: 0, w: OW, h: OH }; try { g.drawImage(src, fr.x, fr.y, fr.w, fr.h); } catch (e) { mhDrawErr = (e && e.name) || 'draw'; } X = x => fr.x + x * fr.w / vw; Y = y => fr.y + y * fr.h / vh; }
   if (vf) { try { vf.close(); } catch (e) {} }
   // 공 자국(v1.82): 최근 0.6초를 이어진 꼬리로 — 궤적 표(mhTrailBuild, 랠리마다 한 번)에서 지금 시각 t의 공 위치까지. 표가 없으면(null) 아무것도 그리지 않음(옛 점·선으로 돌아가지 않음)
-  if (trail) { try { mhTrailDraw(g, trail, t, X, Y, u); } catch (e) { trail.n = 0; mhDrawErr = 'trail ' + ((e && e.name) || ''); } } /* 그리다 오류면 이 랠리의 자국만 끔(장면 그리기·녹화는 계속) */
+  mhTrDrawN++; if (trail) { try { if (mhTrailDraw(g, trail, t, X, Y, u)) { const hx = X(mhTrHd[0]), hy = Y(mhTrHd[1]); if (hx >= 0 && hx <= OW && hy >= 0 && hy <= OH) mhTrHeadN++; /* 화면(잘라 낸 창) 안에 보이는 머리만 셈 — 창 밖에 그려진 머리까지 세면 완성 줄의 자국 %가 보이는 것보다 큼 */ } } catch (e) { trail.n = 0; mhDrawErr = 'trail ' + ((e && e.name) || ''); } } /* 그리다 오류면 이 랠리의 자국만 끔(장면 그리기·녹화는 계속) */
   // 제목 칩
   const title = 'RALLY ' + (r.no || i + 1), sub = (r.shots != null ? r.shots + '타 · ' : '') + Math.round(r.dur) + '초 랠리';
   g.font = 'bold ' + Math.round(30 * u) + 'px sans-serif'; const tw = g.measureText(title).width; g.font = Math.round(20 * u) + 'px sans-serif'; const sw = g.measureText(sub).width;
@@ -11313,6 +11443,245 @@ function mhCard(g, OW, OH, lines, p) { // 제목·끝 카드: [text, size, color
   const tot = lines.reduce((a, l) => a + l[1] * u * 1.5, 0); let y = OH / 2 - tot / 2 + lines[0][1] * u;
   g.textAlign = 'center'; lines.forEach(l => { g.fillStyle = l[2]; g.globalAlpha = Math.min(1, 0.2 + (p || 1) * 1.5); g.font = 'bold ' + Math.round(l[1] * u) + 'px sans-serif'; g.fillText(l[0], OW / 2, y); y += l[1] * u * 1.5; }); g.globalAlpha = 1; g.textAlign = 'left';
 }
+// ── v1.83 공 궤적 다듬기(촘촘히 다시 보기, mhRl*): 분석(mhScan)은 영상 1초에 3장 묶음을 1.8~3.2번만 봐서(빠른 폰일수록 배속을 올림) 공 자국이 랠리의 절반쯤에만 있었음(폰 실측 45~55%).
+//   만들기 직전·녹화기를 만들기 전에 고른 랠리만 소리 없이 다시 재생하며 묶음을 1초에 약 6번 → 그 표본으로 궤적 표(mhRlTable → mhTrailBuild). 랠리 찾기·타수·화면 따라가기(mhPath)·편집 화면은 분석 표본(F.samples) 그대로.
+//   다 본 랠리는 다시 본 표본만 씀(분석 표본과 섞지 않음 — 섞어도 0~2%p뿐이고, 앱으로 찍은 영상은 분석 표본의 시계가 파일 시각과 어긋날 수 있음). 못 본 랠리는 분석 표본 그대로.
+//   어떤 실패(시간 한도·화면 가려짐·영상 열기·재생 멈춤·느린 폰·오류)에도 던지지 않고 남은 랠리는 분석 표본으로 — 하이라이트는 늘 만들어짐. 새로 '눌러 주세요'를 묻지 않음. 끄면(tm-mh-relook '0') v1.82와 똑같이 동작.
+//   값의 근거: 동의한 날 클럽캠 4개 13랠리의 프레임별 공 위치와 비교(2026-11-16) — 1초에 묶음 1.9번 43% → 4.3번 83~89% → 6번 85~94% → 7~10번 93~97%(공이 날고 있는 장면 중 자국 머리가 있는 비율).
+//   규칙(검토 뒤 고침): (1) 한 번 느렸다고 다음 만들기까지 건너뛰지 않음 — 느린지는 그때그때 재생하며 잰 값으로만 판단(지난번에 잰 값으로 미리 막지 않음)
+//   (2) 한 랠리·한 영상의 문제(그 자리에 프레임이 없음·열기 실패·재생 멈춤)는 그 랠리·그 영상만 건너뜀 (3) 걸어 둔 프레임 콜백은 늘 하나 (4) 화면이 가려진 채로는 녹화를 시작하지 않음(돌아오면 한 번만 이어서 다듬고 만듦)
+//   (5) 촘촘히 봤는데도 공이 없던 묶음이 잇달아 cutN번인 틈은 잇지 않음(놓인 공·신발 사이를 건너가는 가짜 자국 — 듬성할 땐 몰라서 이었던 것).
+//   규칙·값을 바꾸면 deploy/tests/mhrelook183_unit_test.mjs·relook183_test.mjs.
+const mhRlDef = {
+  tps: 6,        // 목표: 영상 1초에 3장 묶음 6번(폰이 빠르면 배속을 올려 기다림을 줄이고, 느리면 배속을 낮춤 — 단 시간 한도 안에 끝낼 배속 아래로는 안 내림)
+  tpsMin: 2.8,   // 랠리 하나를 다 보고도 이보다 듬성하면 그 랠리는 쓰지 않고 다듬기를 그만둠(이 폰은 느림 — 분석 때와 다를 바 없음)
+  slowW: 6000,   // 더 못 낮출 배속에서 이만큼(ms) 재고도 tpsMin에 못 미치면 바로 '느린 폰'(첫 랠리를 끝까지 보고 나서야 버리지 않음 — 느린 폰이 만들 때마다 첫 랠리 길이의 2배를 헛되이 기다리던 문제)
+  tpsUse: 4.5,   // 시간 한도에 맞추려고 배속을 floorK 위로 올리는 것은 촘촘함이 이만큼 지켜질 때까지만(실측: 4.2번 이상이면 자국 +13~18%p, 3.4번이면 분석 표본과 다를 바 없음 — 그 사이가 벼랑이라 조금 여유를 둠 — 고른 랠리가 길어 6분 한도가 걸리면 전부를 듬성하게 보느라 한도를 다 쓰고 얻는 것이 없었음)
+  floorK: 0.6,   // 한도에 맞추려는 배속 올리기가 조건 없이 되는 위(보통의 한도 = 랠리 길이 × budK에서 나오는 0.5~0.56 바로 위 — 여기까지는 예전 그대로)
+  infWait: 4000, // 앞서 부른 공 인식이 아직 안 끝났으면 다음 랠리를 보기 전에 이만큼(ms)까지 기다림 — 그래도 안 끝나면 '공 인식이 멈춤'(겹쳐 부르지 않음, mhInf)
+  rMin: 0.3, rMax: 1.5, // 배속 범위(1.5배 넘으면 프레임을 건너뛰고, 60장 영상은 재생이 멈추기도 함)
+  pre: 0.35, post: 0.15, // 랠리 앞·뒤로 더 보는 시간(초)
+  budK: 2, budPer: 1.5, budMin: 20, budMax: 360, // 시간 한도(초) = 볼 랠리 길이 × budK + 랠리마다 budPer, 최소·최대. 남은 영상 ÷ 남은 시간보다 느리게 재생하지 않음(느린 폰도 한도 안에 끝까지 — 대신 덜 촘촘). 단 floorK 위로는 tpsUse가 지켜질 때만 — 그래서 한도 안에 못 보는 랠리는 '시간 한도'로 분석 표본 그대로
+  stall: 4000,   // 프레임이 이만큼(ms) 안 오면 재생을 한 번 다시, 또 안 오면 포기
+  hang: 8000,    // 모델 한 번이 이만큼(ms) 안 끝나면 기다리지 않고 그만둠(멈춘 추론)
+  minGap: 0.025, // 50장 넘는 원본: 이보다 붙은 프레임은 건너뜀(3장 묶음이 30장 영상처럼 약 0.067초에 걸치게 — 느린 먼 공을 놓치지 않음)
+  lost: 0.5,     // 세로 영상: 공을 본 지 이만큼(초) 지나면 놓친 것 → 분석 표본의 높이(힌트)나 줄 전부로
+  hintT: 1.5,    // 힌트로 쓸 분석 표본의 시간 거리(초)
+  sweep: 6,      // 세로 영상: 묶음 이만큼마다 한 번은 줄 전부(다른 물체를 따라가고 있어도 빠져나오게)
+  cutN: 3,       // 표본 둘 사이에 '봤는데 공이 없던' 묶음이 이만큼 이상이고 두 표본이 cutD보다 멀면 그 틈은 잇지 않음(mhRlTable)
+  cutP: 0.02,    //   단, 공이 거기 있는데도 그만큼 잇달아 놓칠 가능성이 이 값 아래일 때만 — 공을 잘 못 찾는 영상·랠리는 빈 묶음이 증거가 못 되므로 더 많이 비어야 끊음(0.08이던 것을 낮춤: 놓침은 서로 독립이 아니라 몰려서 옴 — 창문 앞 높은 공은 2초 내내 안 잡힘)
+  cutD: 0.07,    //   그리고 두 표본 사이 거리가 긴 변의 이 비율 이상일 때만 — 공이 있는데도 못 잡는 자리(서브 토스 꼭대기·울타리 앞·라켓 앞)는 그 사이 공이 거의 안 움직임(검토 때 본 진짜 공 3~78px, 빈 코트를 건너간 가짜 103~337px @1280)
+  drain: 0.2     // 궤적이 끝난 뒤 남은 꼬리가 끝점으로 빨려 들어 사라지는 시간(초) — mhTrailDraw의 P.drain
+};
+let mhRlRate = 0, mhRlMs = 0, mhRlStat = null, mhRlBuf = null, mhRlUsedN = 0; // (mhRlUsedN = 이번에 만들며 다시 본 표본으로 궤적 표를 만든 랠리 수 — 완성 줄) · 다음 랠리 시작 배속(0 = 모름, 한 번의 만들기 안에서만 이어 씀) · 바로 앞 랠리에서 잰 모델 한 번 시간(ms, 중앙값 — 늦게 끝난 한 번에 흔들리지 않게) · 마지막 다듬기 결과(완성 줄) · 캔버스(영상 크기가 같으면 다시 씀)
+function mhRlOn() { const e = $('mh-relook'); if (e) return !!e.checked; try { return localStorage.getItem('tm-mh-relook') !== '0'; } catch (x) { return true; } }
+function mhRlSet(el) { try { localStorage.setItem('tm-mh-relook', el && el.checked ? '1' : '0'); } catch (e) {} }
+document.addEventListener('DOMContentLoaded', () => { const e = $('mh-relook'); if (e) { try { e.checked = localStorage.getItem('tm-mh-relook') !== '0'; } catch (x) {} } });
+function mhRlT(k) { return (mhRlMs || ((window.WASB && WASB.avgMs) || 250) + 20) * (k || 1) / 1000; } // 묶음 하나 처리 시간(초): 이번 만들기에서 잰 값 → 분석 때 잰 값(WASB.avgMs + 준비 20ms) → 모르면 0.27초. k = 묶음당 모델 횟수(세로 영상은 1보다 큼). 시작 배속을 어림하는 데만 씀(느린 폰 판단에는 안 씀)
+function mhRlRate0(tps, k) { const o = mhRlDef; return Math.max(o.rMin, Math.min(o.rMax, (1 / (tps || o.tps) - 0.1) / mhRlT(k))); } // 묶음 주기(영상 시각) ≈ 배속 × 처리 시간 + 3장(0.1초) — 시작값일 뿐, 재생하며 잰 값으로 고침
+function mhRlBufs(vw, vh) { // 캔버스 두 벌(추론에 넘긴 벌은 끝날 때까지 건드리지 않고, 그동안 다른 벌에 다음 3장을 미리 모음). 16:9가 아니면 조각 캔버스(mhAspNew) 두 벌
+  const key = vw + 'x' + vh; if (mhRlBuf && mhRlBuf.key === key) return mhRlBuf;
+  const mk3 = () => [0, 1, 2].map(() => { const c = document.createElement('canvas'); c.width = 512; c.height = 288; return c; }), a0 = mhAspNew(vw, vh);
+  return (mhRlBuf = { key, mk3, asp: a0 ? [a0, mhAspNew(vw, vh)] : null, pools: a0 ? null : [mk3(), mk3()] });
+}
+function mhRlScan(v, a, b, band, ctl) { // 구간 [a, b]를 소리 없이 재생하며 연속 3장 묶음을 거의 붙여서 → { ok, why, samples, miss(공이 없던 묶음의 시각), tri, runs, sec(프레임이 있던 영상 시간), tps, tpsLow(더 못 낮출 배속으로 본 동안의 촘촘함, 없으면 0), rate, use, wall }. ctl = { rate, use(앞 랠리에서 잰 '한도 때문에 올려도 되는 배속'), tps, abort() → '' | 이유, onProg(t), hint(t) → 공 높이 | null, floor(t) → 시간 한도 안에 끝내려면 필요한 최소 배속 }. 절대 거부(reject)하지 않음
+  const o = mhRlDef, vw = v.videoWidth, vh = v.videoHeight, tgt = ctl.tps || o.tps, B = mhRlBufs(vw, vh), samples = [], missT = [], msL = [], ts = [0, 0, 0], w0 = performance.now();
+  let asp = B.asp; const P = asp ? asp[0].P : null, multi = !!(P && P.rows.length > 1);
+  const floorOf = t => { let f = 0; try { f = ctl.floor ? ctl.floor(t) : 0; } catch (e) {} return f > 0 && isFinite(f) ? Math.min(o.rMax, f) : 0; }; // 시간 한도 안에 끝내려면 이 배속 이상
+  let use = Math.min(o.rMax, Math.max(o.floorK, ctl.use || mhRlRate0(o.tpsUse, multi ? 1.3 : 1))); // 시간 한도 때문에 올려도 되는 배속의 위: floorK까지는 늘, 그 위로는 촘촘함 tpsUse가 지켜지는 배속까지만(재생하며 잰 값으로 고침)
+  let pi = 0, k = 0, busy = false, bs0 = 0, tri = 0, runs = 0, rej = 0, errs = 0, aspBad = 0, rate = Math.max(o.rMin, Math.min(o.rMax, Math.max(ctl.rate || mhRlRate0(tgt, multi ? 1.3 : 1), Math.min(floorOf(a), use)))), lastAdj = w0, lastVT = -1, lastTri = 0, lastCb = w0, tA = -1, tZ = -1, retried = false, fast = false, lastT = -1, gen = 0, closed = false;
+  let lowW = -1, lowTri = 0, lowV = 0, lowGap = 0, gapV = 0, lastGap = 0, infEnd = 0, infDur = 0; // low* = 더 못 낮출 배속으로 보기 시작한 때(벽시계·묶음 수·영상 시각·빈 자리) · gapV = 프레임이 없던 영상 시간의 합(앱으로 찍은 영상 첫머리의 빈 자리 등 — 촘촘함을 잴 때 뺌) · inf* = 마지막 추론이 끝난 때·걸린 시간
+  let ly = null, lvy = 0, lt = -1e9, miss = 0; // 세로 영상에서 공 따라가기: 마지막으로 본 공의 높이·세로 속도·시각, 잇달아 못 본 묶음 수
+  const rowsFor = t => { // 이번 묶음에 볼 줄: 방금 본 공(0.5초 안) 높이의 한 줄 → 분석 표본의 높이(힌트)의 한 줄(세 번에 한 번은 줄 전부) → 모르면 줄 전부(null)
+    if (!multi || (tri + 1) % o.sweep === 0) return null;
+    if (ly != null && t - lt <= o.lost && t > lt - 0.2) return [mhAspRowFor(P, ly + lvy * Math.max(0, Math.min(0.3, t - lt)))];
+    let hy = null; try { hy = ctl.hint ? ctl.hint(t) : null; } catch (e) {}
+    return hy != null && isFinite(hy) && miss % 3 !== 2 ? [mhAspRowFor(P, hy)] : null;
+  };
+  v.muted = true; try { v.playbackRate = rate; } catch (e) {}
+  return new Promise(resolve => {
+    let fin = false, wd = null;
+    const reg = () => { const g = ++gen; v.requestVideoFrameCallback((now, md) => { if (g === gen) step(now, md); }); }; // 걸어 둔 프레임 콜백은 늘 하나: 다시 걸면 앞의 것은 무효(둘이 같이 돌면 같은 프레임을 두 번 받아 3장이 영영 안 모임)
+    const onEnd = () => setTimeout(() => finish(''), 300);
+    const finish = why => {
+      if (fin) return; fin = true; gen++; clearInterval(wd); v.removeEventListener('ended', onEnd); try { v.pause(); } catch (e) {}
+      const t0 = performance.now(), done = () => { closed = true; const sec = tA >= 0 ? Math.max(0, tZ - tA - gapV) : 0; if (msL.length >= 3) { msL.sort((p, q) => p - q); mhRlMs = msL[msL.length >> 1]; } const lv = lowW >= 0 ? tZ - lowV - (gapV - lowGap) : 0; resolve({ ok: !why, why: why || '', samples, miss: missT, tri, runs, sec, tps: sec > 0.5 ? tri / sec : 0, tpsLow: lv > 2 ? (tri - lowTri) / lv : 0, rate, use, wall: (performance.now() - w0) / 1000, asp: !!asp }); };
+      const wait = () => { if (!busy || why === 'hang' || performance.now() - t0 > 3000) done(); else setTimeout(wait, 40); }; wait(); // 돌고 있는 마지막 추론을 기다림(3초까지, 멈춘 추론은 안 기다림). 그래도 안 끝난 추론은 mhInf에 남아 있어, 다음 랠리는 그것이 끝날 때까지(infWait) 공 인식을 부르지 않음
+    };
+    const submit = () => { // 모은 3장을 모델로 넘기고, 모으는 벌을 바꿈(추론이 메인 스레드를 안 막는 폰에서는 그동안 다음 3장이 모임 → 끝나자마자 이어서)
+      const kit = asp ? asp[pi] : null, pool = kit ? null : B.pools[pi], nr = kit ? Math.max(1, kit.n) : 1; pi ^= 1; k = 0; busy = true; mhInf++; tri++; runs += nr; const tt = ts.slice(), s0 = bs0 = performance.now(); let p;
+      try { p = kit ? mhAspRun(kit, aiModelThr()) : WASB.detectFrames(pool, vw, vh, { all: true, topk: 3, thr: aiModelThr() }); } catch (e) { p = Promise.reject(e); }
+      p.then(res => { if (closed) return; /* 결과를 넘긴 뒤 늦게 끝난 추론은 버림 */ const s = mhPickBall(res, tt, vw, band); if (s) { samples.push(s); lvy = ly != null && s.t > lt && s.t - lt < 0.6 ? (s.y - ly) / (s.t - lt) : 0; ly = s.y; lt = s.t; miss = 0; } else { miss++; missT.push(tt[1]); } try { if (kit) mhAspPrev(kit, s); else mhPrevDraw(pool[2], s, vw, vh); } catch (e) {} })
+        .catch(e => { if (++errs <= 2) console.warn('mh relook', e); })
+        .finally(() => { busy = false; mhInf--; infEnd = performance.now(); infDur = infEnd - s0; if (!fin && document.visibilityState === 'visible') msL.push((performance.now() - s0) / nr); /* 끝난 뒤·가려진 동안 늦게 끝난 추론은 속도로 세지 않음 */ if (!fin && k === 3 && !mhInf) submit(); });
+    };
+    const step = (now, md) => {
+      if (fin) return; const pcb = lastCb; lastCb = performance.now();
+      const why = ctl.abort(); if (why) return finish(why);
+      const t = md && isFinite(md.mediaTime) ? md.mediaTime : v.currentTime;
+      if (tA < 0) { if (t < a - 1.5 || b - t < 0.8 * (b - a)) return finish('seek'); /* 첫 프레임이 구간보다 한참 앞이거나, 너무 늦어 구간의 80%도 못 볼 자리(그 자리에 프레임이 없는 영상 — 앱으로 찍은 영상의 첫머리 등) → 이 랠리만 건너뜀. 조금 늦은 시작은 받음 */ tA = t; lastVT = t; try { v.playbackRate = rate; } catch (e) {} /* 재생이 시작되면 배속을 1로 되돌리는 브라우저 대비 */ } tZ = t;
+      if (lastT >= 0 && t - lastT > 0.5 && !(infEnd > pcb && infDur >= 0.7 * (lastCb - pcb))) gapV += t - lastT; // 영상 시각이 0.5초 넘게 건너뜀 = 그 사이 프레임이 없는 영상(앱으로 찍은 영상의 첫머리 등) → 촘촘함을 잴 때 그 시간은 뺌(그런 빈 자리 때문에 '느린 폰'으로 보여 전부를 그만두던 것). 메인 스레드를 막는 추론이 그만큼 걸린 것(콜백이 추론 시간만큼 늦음)은 빈 자리가 아님
+      if (lastT >= 0 && t > lastT + 0.004 && t - lastT < 0.02) fast = true; lastT = t; // 원본이 50장 넘는지(이웃 프레임 간격 0.02초 미만을 한 번이라도 봄)
+      if (k < 3 && !(fast && k > 0 && t > ts[k - 1] && t - ts[k - 1] < o.minGap)) {
+        if (k > 0 && (t - ts[k - 1] > 0.05 || t <= ts[k - 1])) { k = 0; rej++; } // 연속 프레임이 아니면 처음부터(mhScan과 같은 규칙)
+        try { if (asp) { mhAspGrab(asp[pi], v, k, k === 0 ? rowsFor(t) : null); aspBad = 0; } else B.pools[pi][k].getContext('2d').drawImage(v, 0, 0, 512, 288); ts[k] = t; k++; }
+        catch (e) { k = 0; if (asp && ++aspBad >= 3) { mhAspOff(asp[0], e); asp = B.asp = null; if (!B.pools) B.pools = [B.mk3(), B.mk3()]; B.key = ''; } /* 조각 그리기가 잇달아 3번 안 됨 → 이 구간은 예전처럼 통째로(다음 구간에서는 캔버스를 새로 만들어 조각을 다시 시도 — 완성 줄과 어긋나지 않게) */ }
+        if (k === 3 && !busy && !mhInf) submit();
+      }
+      const wall = performance.now();
+      if ((wall - lastAdj > 1500 && tri - lastTri >= 5) || wall - lastAdj > 3000) { // 배속 조절: 영상 1초에 묶음 tgt번(0.85~1.25배 안이면 그대로) — 묶음 5개 이상 본 뒤에만(짧게 재면 흔들림)
+        const dv = t - lastVT - (gapV - lastGap), got = tri - lastTri;
+        if (dv > 0.15) { const d = got / dv, q = d / tgt, r0 = rate;
+          use = Math.min(o.rMax, Math.max(o.floorK, r0 * d / o.tpsUse)); /* 촘촘함은 배속에 거의 반비례 → tpsUse가 지켜지는 배속(막는 추론이면 실제보다 낮게 어림 = 조심스러운 쪽) */
+          const fl = Math.min(floorOf(t), use); /* 한도에 맞추려는 배속: floorK까지는 늘, 그 위로는 촘촘함이 지켜질 때만 */
+          if (r0 <= Math.max(o.rMin, fl) * 1.05) { if (lowW < 0) { lowW = lastAdj; lowTri = lastTri; lowV = lastVT; lowGap = lastGap; } const lv = t - lowV - (gapV - lowGap); if (wall - lowW >= o.slowW && lv > 0.5 && (tri - lowTri) / lv < o.tpsMin && !(busy && wall - bs0 > 3000)) return finish('slow'); } else lowW = -1; /* 더 못 낮출 배속으로 slowW(6초) 넘게 보고도 그동안의 촘촘함이 tpsMin에 못 미침 = 이 폰은 지금 느림 → 랠리 끝까지 기다리게 하지 않음(재생하며 잰 값으로만 판단, 한 구간씩이 아니라 모아서 — 구간마다 3~4묶음뿐이라 구간별 값은 흔들림. 추론 하나가 3초 넘게 도는 중이면 판단을 미룸 — 멈춘 추론은 아래 지킴이가 '공 인식이 멈춤'으로) */
+          if (rej > got * 2 && rate > o.rMin) rate = Math.max(o.rMin, rate * 0.8);
+          else if (q < 0.85 && rate > o.rMin) rate = Math.max(o.rMin, rate * Math.max(q < 0.6 ? 0.4 : 0.75, Math.pow(q, 0.8))); /* 목표의 0.6배도 안 되면(폰이 갑자기 느려짐) 한 번에 크게 낮춤 */
+          else if (q > 1.25 && rej <= got && rate < o.rMax) rate = Math.min(o.rMax, rate * Math.min(1.3, Math.pow(q, 0.8)));
+          rate = Math.max(rate, fl); /* 느린 폰: 촘촘함보다 한도 안에 끝내기가 먼저(다 못 본 랠리는 통째로 버려지므로) — 단 floorK 위로는 tpsUse가 지켜질 때만(전부를 쓸모없이 듬성하게 보느니 볼 수 있는 랠리만 제대로) */
+          try { v.playbackRate = rate; } catch (e) {} }
+        lastAdj = wall; lastVT = t; lastTri = tri; lastGap = gapV; rej = 0;
+      }
+      if (ctl.onProg) ctl.onProg(t);
+      if (errs > 8) return finish('err');
+      if (v.ended || t >= b - 0.02) return finish('');
+      reg();
+    };
+    v.addEventListener('ended', onEnd);
+    wd = setInterval(() => { // 콜백이 안 와도 멈춤·가려짐·시간 한도·멈춘 추론을 알아챔 + 프레임이 안 오면 한 번 다시 재생, 또 안 오면 포기
+      if (fin) return; const why = ctl.abort(); if (why) return finish(why);
+      const nw = performance.now();
+      if (busy && nw - bs0 > o.hang) return finish('hang');
+      if (nw - lastCb > o.stall) { if (retried) return finish('stall'); retried = true; lastCb = nw; v.play().catch(() => {}); try { reg(); } catch (e) { finish('stall'); } }
+    }, 500);
+    try { reg(); } catch (e) { return finish('norvfc'); }
+    v.play().catch(() => {});
+  });
+}
+function mhRlClean(S, vw, vh, ay) { // 촘촘한 표본에서 '느린 것끼리만 이어진 토막'을 뺌(천천히 구르는 공·신발·떨리는 놓인 물체). 듬성할 땐 외톨이라 mhTrailBuild가 버리던 것이 촘촘해지면 저희끼리 이어져 가짜 꼬리가 됨(실측: 머리가 공에서 423px → 25px). 어떤 오류에도 받은 그대로
+  //   랠리 하나의 촘촘한 표본에는 mhDropStatic을 쓰지 않음 — 실측에서 버린 42개 중 26개가 진짜 공이었고 얻는 것이 없었음
+  try {
+    const o = mhTrDef, W = Math.max(+vw || 0, +vh || 0), H = +vh || 0, A = [], keep = []; let drop = 0;
+    S.forEach(s => { const nd = mhTrNodes([s])[0]; if (!nd) return; const sp = Math.hypot(nd.vx, nd.vy); if (sp > o.vmax * W) keep.push(s); /* 불가능한 속도는 mhTrailBuild가 버림 — 여기선 잇기 판단에서만 뺌 */ else A.push({ s, n: nd, slow: sp < o.isoMin * W }); });
+    A.sort((p, q) => p.n.t - q.n.t);
+    for (let i = 0, j; i < A.length; i = j + 1) {
+      j = i; while (j + 1 < A.length && mhTrLink(A[j].n, A[j + 1].n, W, H, o, ay || 0).m) j++; // mhTrailBuild와 같은 잇기 판정
+      if (j > i && A.slice(i, j + 1).every(q => q.slow)) { drop += j - i + 1; continue; } // 외톨이(j === i)는 mhTrailBuild 규칙(3장·빠름)에 맡김
+      for (let q = i; q <= j; q++) keep.push(A[q].s);
+    }
+    keep.sort((p, q) => p.t - q.t); keep.dropped = drop; return keep;
+  } catch (e) { return S; }
+}
+function mhRlTable(D, miss, vw, vh, ay) { // 촘촘히 다시 본 표본 → 궤적 표. 표본 둘 사이에 '봤는데 공이 없던' 묶음(miss = 그 시각들, 오름차순)이 M번(보통 cutN = 3) 이상이고 두 표본이 긴 변의 cutD(7%) 넘게 떨어져 있으면 그 틈은 잇지 않음:
+  //   토막마다 mhTrailBuild(잇는 규칙은 v1.82 그대로) → 같은 1/60초 격자의 표 하나로 합침(조각 번호는 안 겹치게). 그런 틈이 없으면 mhTrailBuild 한 번 그대로. 어떤 오류에도 mhTrailBuild(전체)
+  //   왜: 듬성한 분석 표본은 사이에 공이 있었는지 모르니 0.75초까지 꺾임으로 이음. 촘촘히 보고도 0.3~0.5초 동안 아무것도 없었다면 같은 공의 바운스·타구가 아니라 다른 물체(놓인 공·신발·그물 기둥)일 때가 많음 —
+  //   동의한 날 영상의 합성 세로·4:3·정사각 7개 실행: 기준 공도 모델 후보도 없는 자리의 머리 1065 → 690장(−35%), 공이 있는 장면의 덮임 92.6 → 92.3%. 뺀 머리 48장을 눈으로 봄: 날고 있는 공 위 2장·네트 밑에 멈춘 공 근처 9장·흐릿해 모름 3장·나머지 34장은 공이 아님(신발·몸·빈 코트·울타리).
+  //   가로 4개 실행(같은 표본으로 견줌): 그런 머리 346 → 122장, 덮임 98.2→98.0·98.8→98.2·96.1→93.6·96.8→96.6%.
+  //   끊는 데 필요한 빈 묶음 수 M은 이 랠리에서 공을 얼마나 잇달아 찾았는지에 맞춤: p = 공을 찾은 묶음 바로 다음 묶음도 찾은 비율, (1 − p)^M ≤ cutP가 되는 가장 작은 M(적어도 cutN).
+  //   동의한 날 영상의 모든 랠리는 p 0.63~0.91 → M = 3. 주인의 하이라이트 사본(멀리서 손으로 든 세로 영상, 공을 묶음 7개에 하나꼴로만 찾음)은 p 0.2~0.5 → M 4~12라 거의 끊지 않음
+  //   — 거기서는 빈 묶음이 '공 없음'이 아니라 '못 찾음'이라, 3으로 끊으면 자국이 없던 시간의 덮임이 14.1 → 11.4%로 줄었음(5번 실행 평균).
+  //   두 번째 검토 뒤 고침(가로 영상 6개 실행을 눈으로 본 결과): 빈 묶음 3번만으로 끊으면 진짜 공도 그만큼 끊김 — 서브 토스 꼭대기(공이 거의 멈춰 '움직이는 공'으로 안 잡힘)·울타리나 밝은 창 앞·라켓 앞. 끊긴 20곳 중 진짜 공 10·옳게 끊음 5.
+  //   그런 자리는 두 표본 사이가 가까움(3~78px @1280), 빈 코트를 건너간 가짜는 멂(103~337px) → 긴 변의 cutD(7%) 넘게 떨어진 틈만 끊음. 그리고 cutP 0.08 → 0.02(잘 못 찾는 랠리는 4~6번 비어야).
+  //   같은 표본으로 견줌 — 가로 빠른 실행 6개 덮임: 규칙 없음 95.0 / 고치기 전 93.0 / 지금 94.7%, 느린 폰 흉내 4개: 95.1 / 93.8 / 94.7%(공 둘이 나는 영상 89.5 / 83.2 / 88.1%). 세로·4:3 7개의 '기준 공도 후보도 없는 자리의 머리': 1065 / 690 / 944장 — 가까운 가짜(놓인 공 옆·신발)는 다시 남음.
+  const all = () => mhTrailBuild(D, vw, vh, { acc: ay });
+  try {
+    let M = mhRlDef.cutN; if (!miss || !miss.length || !(M > 0) || !D || D.length < 6) return all(); // 표본이 6개 미만이면 얼마나 잘 찾는지 알 수 없음 → 끊지 않음
+    const S = D.slice().sort((p, q) => p.t - q.t), G = [[S[0]]], far = (mhRlDef.cutD || 0) * Math.max(+vw || 0, +vh || 0); let j = 0, hh = 0;
+    for (let i = 0; i + 1 < S.length; i++) { while (j < miss.length && miss[j] <= S[i].t) j++; if (!(j < miss.length && miss[j] < S[i + 1].t)) hh++; }
+    { const p = hh / S.length; if (!(p > 0)) return all(); if (p < 1) M = Math.max(M, Math.ceil(Math.log(mhRlDef.cutP) / Math.log(1 - p) - 1e-9)); }
+    j = 0;
+    for (let i = 1; i < S.length; i++) { while (j < miss.length && miss[j] <= S[i - 1].t) j++; let c = 0; for (let q = j; q < miss.length && miss[q] < S[i].t; q++) c++; if (c >= M && Math.hypot(S[i].x - S[i - 1].x, S[i].y - S[i - 1].y) >= far) G.push([]); G[G.length - 1].push(S[i]); }
+    if (G.length === 1) return all();
+    const T = G.map(g => mhTrailBuild(g, vw, vh, { acc: ay })).filter(P => P && P.n > 0); if (!T.length) return mhTrailBuild([], vw, vh, { acc: ay });
+    const dt = T[0].dt; let t0 = Infinity, t1 = -Infinity; T.forEach(P => { if (P.t0 < t0) t0 = P.t0; if (P.t0 + P.n * dt > t1) t1 = P.t0 + P.n * dt; });
+    const n = Math.round((t1 - t0) / dt) + 1, xs = new Float32Array(n), ys = new Float32Array(n), w = new Uint8Array(n), run = new Uint16Array(n), R = { t0: t0, dt: dt, n: n, xs: xs, ys: ys, w: w, run: run, nodes: 0, dropped: 0, fast: 0, ay: ay, arcs: 0, kinks: 0, breaks: T.length - 1, cuts: G.length - 1 }; let base = 0;
+    T.forEach(P => { const off = Math.round((P.t0 - t0) / dt); let mx = 0;
+      for (let i = 0; i < P.n; i++) { if (!P.w[i]) continue; const q = off + i; if (q < 0 || q >= n) continue; xs[q] = P.xs[i]; ys[q] = P.ys[i]; w[q] = P.w[i]; run[q] = P.run[i] + base; if (P.run[i] > mx) mx = P.run[i]; }
+      base += mx + 1; R.nodes += P.nodes; R.dropped += P.dropped; R.fast += P.fast; R.arcs += P.arcs; R.kinks += P.kinks; R.breaks += P.breaks; });
+    return R;
+  } catch (e) { try { return all(); } catch (x) { return null; } }
+}
+function mhRlValid(r) { const q = r && r.rl; return !!(q && q.t0 === r.t0 && q.t1 === r.t1 && q.samples); }
+function mhRlRec(F) { try { return !!(mhRecCur && F && mhFiles[F.fi] === mhRecCur.file); } catch (e) { return false; } } // 앱으로 찍은 영상인가 — 분석 표본이 녹화 시계 기준이라 파일 시각과 어긋날 수 있음
+function mhRlFor(F, r) { // 이 랠리의 공 자국에 쓸 촘촘한 표본(끝까지 다 본 랠리만) — 없으면 null = 분석 표본 그대로. 다시 본 것이 분석 때보다 눈에 띄게 적으면(0.8배 미만) 쓰지 않음.
+  //   앱으로 찍은 영상은 0.5배만 넘으면 다시 본 것을 씀: 찍으면서 모은 표본은 폰이 빠르면 다시 본 것만큼 촘촘할 수 있지만 시계가 달라 공에서 벗어남(실측: 0.4초 어긋나면 머리가 148px 벗어남)
+  if (!mhRlValid(r)) return null; const q = r.rl;
+  return q.samples.length >= 2 && q.samples.length >= (mhRlRec(F) ? 0.5 : 0.8) * q.sparseN ? q.samples : null;
+}
+function mhRlDiag() { // 완성 줄: 몇 개 랠리를 다듬었는지(그중 덜 썼으면 몇 개만 썼는지) · 얼마나 촘촘히·얼마나 걸렸는지 · 랠리 장면 중 공 자국 머리가 있던 비율 — 폰 화면 사진만으로 무슨 일이 있었는지 알 수 있게. 꺼져 있으면 빈 글자(완성 줄은 v1.82 그대로)
+  const st = mhRlStat; if (!st || !st.on) return '';
+  const WHY = { budget: '시간 한도', hidden: '화면이 가려짐', slow: '폰이 느려 건너뜀', open: '영상 열기 실패', size: '영상 크기 다름', stall: '재생 멈춤', seek: '그 자리에 영상 없음', short: '끝까지 못 봄', norvfc: '이 브라우저는 안 됨', nomodel: '공 인식 모델을 못 불러옴', err: '공 인식 오류', hang: '공 인식이 멈춤', stop: '멈춤' };
+  const why = st.why ? (WHY[st.why] || (/^err/.test(st.why) ? '오류 ' + st.why.slice(4, 40) : st.why)) : '';
+  return '공 궤적 ' + st.done + '/' + st.n + '개 다듬음' + (why && st.done < st.n ? '(' + why + ')' : '') + (mhRlUsedN < st.done ? ' · ' + mhRlUsedN + '개만 씀' : '') + (st.tps ? ' · 1초에 ' + st.tps.toFixed(1) + '번 · 묶음 ' + Math.round(st.ms) + 'ms · ' + Math.round(st.wall) + '초' : '') + (mhTrDrawN > 0 ? ' · 자국 ' + Math.round(100 * mhTrHeadN / mhTrDrawN) + '%' : '');
+}
+async function mhRelookAll(sel) { // 만들기 직전(녹화기·캔버스를 만들기 전): 고른 랠리마다 촘촘히 다시 봄 → r.rl. 절대 던지지 않음
+  const o = mhRlDef, st = mhRlStat = { on: mhRlOn(), n: sel.length, done: 0, why: '', wall: 0, tps: 0, ms: 0, aspTri: 0, aspRuns: 0, skip: 0 };
+  if (!st.on) return st;
+  const todo = sel.filter(q => !mhRlValid(q.r) && q.r.t1 - q.r.t0 > 0.5); st.done = sel.filter(q => mhRlValid(q.r)).length; // 앞서 다 본 랠리는 다시 보지 않음(같은 랠리를 다시 만들면 바로). 길이가 없거나 숫자가 아닌 구간은 보지 않음(시간 한도가 NaN이 되어 한도 없이 돌던 틈)
+  if (!todo.length) return st;
+  const v = mhVid, t0w = performance.now(); let why = '', first = '', tri = 0, runs = 0, sec = 0;
+  mhRlRate = 0; mhRlMs = 0; /* 지난번 만들기에서 잰 속도는 이어 쓰지 않음 — 그때만 느렸을 수 있음(가려졌다 돌아온 추론 하나·잠깐 뜨거웠던 폰 때문에 그 뒤로 계속 건너뛰던 문제). 첫 랠리는 분석 때 잰 값으로 시작해 재생하며 바로 고침 */
+  try {
+    if (!v || typeof v.requestVideoFrameCallback !== 'function') { why = 'norvfc'; return st; }
+    if (document.visibilityState !== 'visible') { why = 'hidden'; return st; }
+    mhStatus('공 궤적 다듬을 준비 중…', 0);
+    { const ld = mhLoadModel().then(() => 1, () => 0), t0 = performance.now(); let ok = null; // 분석을 이 화면에서 했으면 이미 있어 바로. 지난 녹화를 다시 연 경우엔 여기서 받음 — 15초 안에 안 되거나 [멈추기]면 기다리지 않음
+      while (ok === null) { ok = await Promise.race([ld, new Promise(q => setTimeout(() => q(null), 300))]); if (ok === null && (mhStop || performance.now() - t0 > 15000)) break; }
+      if (ok !== 1) { why = mhStop ? 'stop' : 'nomodel'; return st; } }
+    todo.sort((p, q) => p.F.fi - q.F.fi || p.r.t0 - q.r.t0); // 영상별로 묶어 시간 순(영상은 한 번에 하나만 엶)
+    const clip = todo.reduce((s, q) => s + Math.max(0, q.r.t1 - q.r.t0) + o.pre + o.post, 0), bud = Math.max(o.budMin, Math.min(o.budMax, clip * o.budK + todo.length * o.budPer)), dead = t0w + bud * 1000, goal = dead - Math.max(2000, 100 * bud); // goal = 끝낼 목표 시각(한도보다 10% — 최소 2초 — 앞)
+    const abort = () => mhStop ? 'stop' : document.visibilityState !== 'visible' ? 'hidden' : performance.now() > dead ? 'budget' : '';
+    const note = w => { if (!first) first = w; }; // 건너뛴 랠리가 있으면 완성 줄에 처음 걸린 이유
+    v.style.display = 'block'; let cur = -1, badFi = -1, doneSec = 0, shortN = 0, stallN = 0, useR = 0; // useR = 앞 랠리에서 잰 '촘촘함 tpsUse를 지키며 낼 수 있는 가장 빠른 배속'(0 = 아직 모름)
+    for (let i = 0; i < todo.length; i++) {
+      const F = todo[i].F, r = todo[i].r; why = abort(); if (why) break;
+      const a = Math.max(0, r.t0 - o.pre), b = Math.min(F.dur || r.t1 + o.post, r.t1 + o.post), span = b - a;
+      if (F.fi === badFi) { st.skip++; doneSec += span; continue; } // 열리지 않거나 재생이 멈춘 영상의 남은 랠리는 분석 표본 그대로(다른 영상은 계속)
+      if (useR > 0 && (dead - performance.now()) / 1000 < 0.9 * span / useR) { note('budget'); st.skip++; doneSec += span; continue; } // 남은 시간에 이 랠리를 쓸 만한 촘촘함으로 끝까지 볼 수 없음 → 시작하지 않음(보다가 한도에 걸리면 본 만큼이 버려짐). 더 짧은 뒤 랠리는 볼 수 있으면 봄
+      const say = t => { const d = doneSec + Math.max(0, t || 0), el = (performance.now() - t0w) / 1000; mhStatus('공 궤적 다듬는 중 ' + (i + 1) + '/' + todo.length + (d > 3 && el > 5 ? ' · 약 ' + mhFmtT(el / d * Math.max(0, clip - d)) + ' 남음' : '') + ' — 화면을 켜 두세요', 100 * d / Math.max(1, clip)); };
+      say(0);
+      if (cur !== F.fi) { shortN = 0; const ok = await mhOpenFile(v, F.fi, true); F.url = mhUrls[F.fi]; if (!ok || !v.videoWidth) { note('open'); badFi = F.fi; cur = -1; st.skip++; doneSec += span; continue; } cur = F.fi; say(0); }
+      if (v.videoWidth !== F.vw || v.videoHeight !== F.vh) { note('size'); badFi = F.fi; st.skip++; doneSec += span; continue; }
+      await mhSeek(v, a); why = abort(); if (why) break;
+      if (mhInf > 0 && !(await mhInfWait(o.infWait, abort))) { why = abort() || 'hang'; break; } // 앞 랠리(또는 가려지기 전·지난번 만들기)의 추론이 아직 안 끝남 → 끝날 때까지만 기다렸다 봄. 끝내 안 끝나면 겹쳐 부르지 않고 그만둠(겹치면 WebGPU에서 페이지가 얼어붙음)
+      const floor = t => { const leftV = Math.max(0, clip - doneSec - Math.max(0, t - a)), leftW = (goal - performance.now()) / 1000 - 0.7 * (todo.length - 1 - i); return leftW > 0.5 ? leftV / leftW : o.rMax; }; // 남은 영상을 목표 시각까지 다 보려면 필요한 배속(전부를 고르게, 영상 열기·이동에 랠리마다 0.7초쯤)
+      const band = F.H ? (F.rlBand || (F.rlBand = mhBandFor(F.H, F.vh))) : null; // 분석 때와 같은 띠(옆 코트 공 제외)
+      const hs = (F.samples || []).filter(q => q.t >= a - o.hintT && q.t <= b + o.hintT), hint = t => { let y = null, bd = o.hintT; for (let j = 0; j < hs.length; j++) { const d = Math.abs(hs[j].t - t); if (d <= bd) { bd = d; y = hs[j].y; } } return y; }; // 세로 영상에서 공을 놓쳤을 때 볼 높이(분석 표본)
+      const res = await mhRlScan(v, a, b, band, { rate: mhRlRate || 0, use: useR || 0, tps: o.tps, abort, onProg: t => say(t - a), hint, floor });
+      mhRlRate = res.rate; if (res.ok && res.use > 0) useR = res.use; tri += res.tri; runs += res.runs; sec += res.sec; if (res.asp) { st.aspTri += res.tri; st.aspRuns += res.runs; }
+      if (!res.ok) {
+        if (res.why === 'seek') { note('seek'); st.skip++; doneSec += span; if (++shortN >= 2) badFi = F.fi; continue; } // 그 자리에 프레임이 없음(앱으로 찍은 영상의 첫머리 등) → 이 랠리만 분석 표본으로. 같은 영상에서 두 번 이어지면 그 영상은 그만
+        if (res.why === 'stall') { note('stall'); st.skip++; doneSec += span; badFi = F.fi; cur = -1; if (++stallN >= 2) { why = 'stall'; break; } continue; } // 재생이 멈춘 영상은 건너뛰고 다음 영상으로(멈춤마다 8초쯤 걸리므로 두 번째면 그만)
+        why = res.why; break; // 멈추기·가려짐·시간 한도·공 인식 오류·멈춘 추론·느린 폰 → 남은 랠리 전부 분석 표본으로
+      }
+      if (res.sec < span * 0.8) { note('short'); st.skip++; doneSec += span; if (++shortN >= 2) badFi = F.fi; continue; } // 구간을 끝까지 못 봄(영상 끝·건너뜀·늦게 시작) → 이 랠리만 분석 표본으로
+      shortN = 0;
+      if (Math.max(res.tps, res.tpsLow || 0) < o.tpsMin) { why = 'slow'; break; } // 랠리 전체로도, 더 못 낮출 배속으로 본 동안으로도 tpsMin에 못 미침 = 느린 폰. 첫머리(분석 때 값으로 어림한 배속이 너무 빨랐던 몇 초)만 듬성했던 랠리는 받음 — 재생 중 판단(slowW)과 같은 잣대라, 끝까지 기다리게 하고 나서 버리는 일이 없음
+      if (F.trAy == null) F.trAy = mhTrailAy(F.samples || [], F.vw, F.vh); // 앱으로 찍은 영상은 여기서 한 번 잼(mhRender의 같은 값)
+      r.rl = { t0: r.t0, t1: r.t1, a, b, tps: res.tps, samples: mhRlClean(res.samples, F.vw, F.vh, F.trAy), miss: res.miss.slice().sort((p, q) => p - q), sparseN: (F.samples || []).filter(q => q.t >= a && q.t <= b).length };
+      st.done++; doneSec += span;
+    }
+  } catch (e) { why = 'err ' + ((e && (e.name || e.message)) || e); }
+  finally { try { v.pause(); v.style.display = 'none'; } catch (e) {} mhPlaying = false; { const pc = $('mh-prev'); if (pc) pc.style.display = 'none'; } st.why = why || first; st.wall = (performance.now() - t0w) / 1000; st.tps = sec > 0 ? tri / sec : 0; st.ms = tri > 0 ? mhRlMs * runs / tri : 0; if (!mhStop) mhStatus('하이라이트 만드는 중 — 화면을 켜 두세요', 0); /* 제목 카드가 도는 동안 '다듬는 중' 줄이 남지 않게 */ }
+  return st;
+}
+function mhRlShown() { // 화면이 다시 보일 때까지(또는 [멈추기]) 기다림. 누르라고 묻지 않음 — 돌아오면 저절로 이어감
+  return new Promise(res => { let done = false, tm = null;
+    const chk = () => { if (done || !(mhStop || document.visibilityState === 'visible')) return; done = true; clearInterval(tm); document.removeEventListener('visibilitychange', chk); res(); };
+    document.addEventListener('visibilitychange', chk); tm = setInterval(chk, 500); chk(); });
+}
+async function mhRelookGo(sel) { // mhGo가 부름: 다듬기 → 화면이 가려져 멈췄으면 돌아온 뒤 못 본 랠리를 한 번만 더 → 화면이 보일 때만 녹화로 넘어감. 꺼져 있으면 아무것도 안 함(v1.82 그대로). 절대 던지지 않음
+  //   가려진 채 녹화를 시작하면 제목 카드(화면 갱신에 맞춰 그림)가 멈춘 채 소리만 녹음됨(흉내 실측: 20초 가려짐 → 21초짜리가 39초 파일). v1.82는 누른 직후 바로 녹화라 그럴 틈이 없었고, 다듬기가 20초~6분을 앞에 넣으면서 생긴 틈
+  let st = await mhRelookAll(sel);
+  try {
+    if (st.on && st.why === 'hidden' && !mhStop) {
+      const w0 = st.wall; mhStatus('화면이 가려져 잠시 멈췄어요 — 화면으로 돌아오면 이어서 만들어요', null); await mhRlShown();
+      if (!mhStop) { st = await mhRelookAll(sel); st.wall += w0; st.again = 1; }
+    }
+    if (st.on && !mhStop && document.visibilityState !== 'visible') { mhStatus('화면이 가려져 잠시 멈췄어요 — 화면으로 돌아오면 이어서 만들어요', null); await mhRlShown(); if (!mhStop) mhStatus('하이라이트 만드는 중 — 화면을 켜 두세요', 0); }
+  } catch (e) {}
+  return st;
+}
 async function mhAnalyzeAll() {
   mhStatus('공 인식 모델 준비 중…', 0); await mhLoadModel();
   const v = mhVid, an = { files: [] }; v.style.display = 'block'; let total = 0, doneV = 0; const t0w = performance.now();
@@ -11330,6 +11699,7 @@ async function mhAnalyzeAll() {
     const band = H ? mhBandFor(H, vh) : null;
     await mhSeek(v, 0);
     const base = doneV;
+    if (mhInf > 0 && !(await mhInfWait(4000, () => mhStop))) { an.files.push({ fi, name: f.name, err: '공 인식이 멈춰 있어요 — 더보기 › 설정 › 버전 줄을 눌러 새로 불러온 뒤 다시 해 주세요' }); continue; } /* v1.83 */
     const samples0 = await mhScan(v, dur, band, (t, rate, ns) => {
       const doneNow = base + t, remainV = Math.max(0, mhFiles.slice(fi + 1).length ? (total - doneNow) + 0 : dur - t), wall = (performance.now() - t0w) / 1000, speed = doneNow / Math.max(1, wall);
       mhStatus('분석 중 ' + (fi + 1) + '/' + mhFiles.length + ' · ' + Math.round(100 * t / dur) + '% · 공 ' + ns + '번 확인 · ' + rate.toFixed(1) + '배속' + (speed > 0.05 && wall > 8 ? ' · 약 ' + mhFmtT(remainV / speed) + ' 남음' : '') + ' — 화면을 켜 두세요', 100 * (fi + t / dur) / mhFiles.length);
@@ -11392,7 +11762,7 @@ async function mhRender(sel, opt) {
   const longest = Math.max(...sel.map(q => q.r.dur)), day = new Date(sel[0].F.date || Date.now()), ds = day.getFullYear() + '.' + String(day.getMonth() + 1).padStart(2, '0') + '.' + String(day.getDate()).padStart(2, '0');
   const card = async (lines, sec) => { const t0 = performance.now(); while (!mhStop) { const p = (performance.now() - t0) / (sec * 1000); if (p >= 1) break; mhCard(g, OW, OH, lines, p); await new Promise(r => requestAnimationFrame(r)); } };
   mhCard(g, OW, OH, [['오늘의 랠리', 64, '#d4e94e']], 0);
-  mhRendN = 0; mhRendSec = 0; mhRendErr = ''; mhRendDraws = 0; mhDrawErr = ''; /* v1.82b R10: 앞 하이라이트의 그리기 오류가 다음 하이라이트의 완성 줄에 붙지 않게 */
+  mhRendN = 0; mhRendSec = 0; mhRendErr = ''; mhRendDraws = 0; mhDrawErr = ''; mhTrHeadN = 0; mhTrDrawN = 0; mhRlUsedN = 0; /* v1.82b R10: 앞 하이라이트의 그리기 오류가 다음 하이라이트의 완성 줄에 붙지 않게 */
   rec.start(1000);
   if (opt.single) await card([['RALLY ' + (sel[0].r.no || 1), 64, '#d4e94e'], [ds, 30, '#ffffff'], [(sel[0].r.shots != null ? sel[0].r.shots + '타 · ' : '') + Math.round(sel[0].r.dur) + '초', 26, '#cfe3d6']], 0.8); // v1.41 한 포인트
   else await card([['오늘의 랠리', 64, '#d4e94e'], [ds, 30, '#ffffff'], ['랠리 ' + sel.length + '개 · 가장 긴 랠리 ' + Math.round(longest) + '초', 26, '#cfe3d6']], 1.6);
@@ -11404,6 +11774,7 @@ async function mhRender(sel, opt) {
     if (curUrl !== F.fi) { const ok = await mhOpenFile(v, F.fi, true); F.url = mhUrls[F.fi]; curUrl = F.fi; if (!ok) { mhRendErr = mhMeta.err; continue; } } // v1.43
     await mhSeek(v, r.t0); v.playbackRate = 1; v.muted = !dest;
     const path = mhPath(F, r, opt.zoom ? (vert ? 1.3 : 1.8) : 1); let S = null; try { S = mhTrailBuild(F.samples.filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1), F.vw, F.vh, { acc: F.trAy != null ? F.trAy : (F.trAy = mhTrailAy(F.samples, F.vw, F.vh)) }); } catch (e) { S = null; } /* v1.82: S = 이 랠리의 공 궤적 표(랠리마다 한 번, 오류면 null = 자국 없음). 이름 S와 아래 두 mhDraw 호출은 그대로 — hlgap173 시험이 step 본문을 떼어 씀. trAy 없는 파일(앱으로 찍은 영상)은 여기서 한 번 잼 */
+    if (mhRlOn()) { const D = mhRlFor(F, r); if (D) { try { const S2 = mhRlTable(D, r.rl.miss, F.vw, F.vh, F.trAy); if (S2 && S2.n) { S = S2; mhRlUsedN++; } } catch (e) {} } if (S) S.drain = mhRlDef.drain; } /* v1.83: 촘촘히 다시 본 랠리는 그 표본만으로(섞지 않음 — mhRlTable: 봤는데 비어 있던 틈은 잇지 않음), 켜져 있으면 끝난 꼬리는 빨려 들며 사라짐. 꺼져 있으면 위 줄(v1.82) 그대로 */
     mhDraw(g, v, OW, OH, vert, r.t0, path, S, i, sel.length, r);
     await v.play().catch(() => {}); if (rec.state === 'paused') rec.resume();
     await new Promise(res => {
@@ -11413,6 +11784,7 @@ async function mhRender(sel, opt) {
         if (++k % 30 === 0 && mhSrcMode === 'el') { try { const d = g.getImageData((OW >> 1) - 16, (OH >> 1) - 16, 32, 32).data; let a = 0; for (let q = 0; q < d.length; q += 4) a += d[q] + d[q + 1] + d[q + 2]; if (a / (d.length / 4) / 3 < 6) { if (++mhBlackN >= 2 && window.VideoFrame) { mhSrcMode = 'vf'; console.warn('mh black → VideoFrame'); } } else mhBlackN = 0; } catch (e) {} } // v1.29c 검은 화면 감지
         if (t >= r.t1 || v.ended || mhStop) return fin(); v.requestVideoFrameCallback(step); };
       const tm = setTimeout(fin, (r.t1 - r.t0 + 8) * 1000);
+      v.addEventListener('ended', fin, { once: true }); /* v1.83: 재생이 영상 끝에 닿으면 바로 다음으로(끝에 닿지 않는 랠리에서는 불리지 않음. 지난 랠리의 것이 남아 불려도 done이라 아무 일 없음) */
       v.requestVideoFrameCallback(step);
     });
     mhRendN++; mhRendSec += Math.max(0, Math.min(v.currentTime, r.t1) - r.t0); // v1.39 진단
@@ -11426,7 +11798,7 @@ async function mhRender(sel, opt) {
   if (mhStop) return null;
   let blob = new Blob(parts, { type: fmt.type }); const raw0 = blob.size; mp4Defrag.info = null; if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
   const di = mp4Defrag.info, mp4d = di ? (di.err ? 'MP4 정리 안 함(' + di.err + ')' : 'MP4 ' + di.tracks.join(', ')) : '';
-  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, OW + '×' + OH + ' · 랠리 초당 ' + Math.min(30, mhRendDraws / Math.max(1, mhRendSec)).toFixed(1) + '장 · ' + (bps / 1e6).toFixed(0) + 'Mbps' + (opt.cpu || mhCpuCanvas() ? ' (CPU)' : ''), '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB'].filter(Boolean).join(' · ') };
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, OW + '×' + OH + ' · 랠리 초당 ' + Math.min(30, mhRendDraws / Math.max(1, mhRendSec)).toFixed(1) + '장 · ' + (bps / 1e6).toFixed(0) + 'Mbps' + (opt.cpu || mhCpuCanvas() ? ' (CPU)' : ''), '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB', mhRlDiag(), mhAspDiag(sel)].filter(Boolean).join(' · ') };
 }
 async function mhGo(onlyIdx) {
   if (mhBusy) return;
@@ -11456,6 +11828,8 @@ async function mhGo(onlyIdx) {
     mhScoreCalc();
     const pool = mhEd.rows, sel = one ? [one] : mhEd.rows.filter(x => x.keep);
     if (!sel.length) { mhStatus('고른 랠리가 없어요 — 목록에서 체크해 주세요', null); mhEdShow(); return; }
+    await mhRelookGo(sel); /* v1.83: 녹화기·캔버스를 만들기 전에 고른 랠리를 촘촘히 다시 봄(던지지 않음 — 못 본 랠리는 분석 표본 그대로). 화면이 가려져 있으면 돌아올 때까지 녹화를 시작하지 않음 */
+    if (mhStop) { mhStatus('멈췄어요 — 다시 누르면 못 본 랠리부터 이어서 다듬고 만들어요', null); return; }
     const out = await mhRender(sel, opt);
     if (!out) { mhStatus('멈췄어요 — [하이라이트 만들기]를 다시 누르면 분석 결과로 바로 만들어요', null); return; }
     mhOut = out;
