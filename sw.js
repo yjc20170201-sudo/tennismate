@@ -16,6 +16,7 @@ self.addEventListener('activate', (e) => {
 
 // v1.70b: 페이지는 쿼리(?u=시각 등)를 뺀 주소로 캐시 — 앱이 주소창의 ?u=를 지우므로, 인터넷 없는 코트에서 다시 열 때 마지막 최신본이 나오게
 function navKey(u) { try { const x = new URL(u); return x.origin + x.pathname; } catch (err) { return u; } }
+function navAlt(k) { return /\.html$/i.test(k) ? k.replace(/\.html$/i, '') : (/\/[^/.]+$/.test(k) ? k + '.html' : k); } // v1.84: /r.html ↔ /r (워치 리모컨 즐겨찾기가 어느 쪽이든 오프라인에서 열리게)
 
 // v1.82: 캐시에 두지 않는 것 — version.json과 ?t=<시각>이 붙은 같은 출처 요청(확인할 때마다 새 주소라 항목이 끝없이 늘어남)
 function noKeep(x) { return x.origin === self.location.origin && (/\/version\.json$/i.test(x.pathname) || x.searchParams.has('t')); }
@@ -66,6 +67,6 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(key, copy).then(() => (!nav && x && x.origin === self.location.origin && x.searchParams.has('v') ? dropOldV(c, x) : null))).catch(() => {}); // v1.82: ?v= 파일은 옛 사본 지우기
         return res;
       })
-      .catch(() => caches.match(key).then((r) => r || (nav ? caches.match(e.request) : r))) // 오프라인일 때만 캐시 사용
+      .catch(() => caches.match(key).then((r) => r || (nav ? caches.match(e.request).then((r2) => r2 || caches.match(navAlt(key))) : r))) // 오프라인일 때만 캐시 사용. v1.84: 페이지는 .html 붙은/뗀 주소도
   );
 });

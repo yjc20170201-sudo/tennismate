@@ -2008,7 +2008,15 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
     <h3>라이브 스코어보드</h3>
     <div id="lvrc-wrap" style="margin-bottom:6px">
       <button type="button" class="tag-btn" id="lvrc-btn" onclick="lvRCHostToggle()">리모컨 연결</button>
+      <button type="button" class="tag-btn" id="lvrc-pair-btn" onclick="lvRCPairOpen()">워치 연결</button>
       <span class="muted" id="lvrc-status" style="font-size:12px;margin-left:6px"></span>
+      <div id="lvrc-pair-row" style="display:none;margin-top:6px"><!-- v1.84: 워치 첫 화면에 뜨는 번호 6자리를 넣으면 연결 — 워치에서 글자를 치지 않음 -->
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="lvrc-pair" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="7" autocomplete="off" placeholder="워치 번호 6자리" oninput="lvRCPairInput(this)" onkeydown="if(event.key==='Enter')lvRCPair()" style="flex:1;min-width:0;margin:0">
+          <button type="button" class="btn small" id="lvrc-pair-go" onclick="lvRCPair()" style="flex:none">연결</button>
+        </div>
+        <div class="muted" style="font-size:11.5px;margin-top:4px">워치 인터넷 앱에서 <b id="lvrc-pair-addr">app.tennismate.kr/r</b> 을 열면 번호가 떠요. 번호 대신 점수 화면이 나오면 워치 [메뉴] › [폰과 연결] 또는 [연결 끊기]를 누르세요. 한 번 연결하면 다음부터는 워치에서 열기만 하면 붙어요.</div>
+      </div>
     </div>
     <div id="lvcam-wrap" style="margin-bottom:8px">
       <button type="button" class="tag-btn" id="lvcam-btn" onclick="lvCamToggle()">촬영 모드 켜기</button>
@@ -2395,7 +2403,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.83';
+const APP_VERSION = 'v1.84';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -5936,15 +5944,33 @@ function openArchive(id) {
 // 로그인 불필요 — 서버 모드(anon key)면 동작. 테스트 훅: window.__rcTestClient
 let lvRC = null; // { chan, code, role: 'host'|'remote', peers }
 function lvRCClient() { return window.__rcTestClient || (serverMode() && TMAuth.client); }
+let lvRCJoining = null; /* v1.84b: 리모컨 입장은 한 번에 하나 — 느린 망에서 경기 시작(자동)·[리모컨 연결]·[워치 연결]이 같은 주제로 겹쳐 들어가면 라이브러리가 같은 채널을 돌려줘 영영 기다림 */
 async function lvRCJoin(code, role) {
+  while (lvRCJoining) { try { await lvRCJoining; } catch (e) {} if (lvRC && lvRC.code === code && lvRC.role === role) return; } /* 기다린 사람이 여럿이어도 한 명씩(while) */
+  const p = lvRCJoin1(code, role); lvRCJoining = p;
+  try { return await p; } finally { if (lvRCJoining === p) lvRCJoining = null; }
+}
+function lvRCErrText(e) { const m = String((e && e.message) || e || ''); return /[가-힣]/.test(m) ? m : '인터넷이 느리거나 끊겨 있어요 — 잠시 뒤 다시 해 주세요'; } /* TIMED_OUT·CHANNEL_ERROR 같은 날것 글 대신 */
+async function rcDropTopic(client, topic) { // v1.84b: 전에 실패·중단한 입장이 남긴 같은 주제 채널을 지움(3초까지 기다림) — realtime-js는 같은 주제면 남은 채널을 돌려주고 그 채널의 subscribe는 답하지 않음(v1.56 rtDropChan과 같은 까닭)
+  try {
+    if (typeof client.getChannels !== 'function') return;
+    for (const c of client.getChannels().slice()) {
+      if (!c || (c.topic !== 'realtime:' + topic && c.topic !== topic)) continue;
+      try { await Promise.race([Promise.resolve(client.removeChannel ? client.removeChannel(c) : c.unsubscribe()), new Promise((r) => setTimeout(r, 3000))]); } catch (e) {}
+    }
+  } catch (e) {}
+}
+async function lvRCJoin1(code, role) {
   const client = lvRCClient();
   if (!client) { toast('서버 연결이 있어야 리모컨을 쓸 수 있어요'); return; }
   if (lvRC) await lvRCStop(true);
+  await rcDropTopic(client, 'score:' + code);
   const chan = client.channel('score:' + code, { config: { presence: { key: role + '-' + Math.random().toString(36).slice(2, 6) }, broadcast: { self: false } } });
   if (role === 'host') {
-    chan.on('broadcast', { event: 'point' }, p => { const sd = p && p.payload ? p.payload.side : null; if (live && !live.done && (sd === 0 || sd === 1)) livePoint(sd); }); /* v1.77 B5 검증: score:는 익명 공개 채널 — 쪽은 0·1만(다른 값이면 live.p·ptsTotal에 NaN·엉뚱한 칸이 생겨 점수판이 깨짐) */
-    chan.on('broadcast', { event: 'undo' }, () => liveUndo());
-    chan.on('broadcast', { event: 'hello' }, () => lvRCPushState());
+    chan.on('broadcast', { event: 'point' }, p => { const q = (p && p.payload) || {}; const sd = q.side; if (lvRCTake(q.id, !!(live && !live.done && (sd === 0 || sd === 1)))) livePoint(sd); else lvRCSendState(); }); /* v1.77 B5 검증: score:는 익명 공개 채널 — 쪽은 0·1만(다른 값이면 live.p·ptsTotal에 NaN·엉뚱한 칸이 생겨 점수판이 깨짐). v1.84: 번호표(id)가 있으면 같은 번호는 한 번만 — 셌다는 표시(ack)는 상태에 실림, 셀 수 없으면 막기만 */
+    chan.on('broadcast', { event: 'undo' }, p => { const q = (p && p.payload) || {}; if (lvRCTake(q.id, !!(live && !live.done && live.hist.length))) liveUndo(); else lvRCSendState(); });
+    chan.on('broadcast', { event: 'hello' }, () => lvRCSendState()); /* v1.84: 리모컨 상태만 — 워치가 몇 초마다 hello로 폰을 확인하므로 공기계 점수(score)는 다시 보내지 않음 */
+    chan.on('broadcast', { event: 'sync' }, p => lvRCSync(p && p.payload)); /* v1.84: 끊긴 사이 워치가 센 점수 맞추기 */
   } else {
     chan.on('broadcast', { event: 'state' }, p => lvRCRemoteState(p.payload));
   }
@@ -5953,10 +5979,15 @@ async function lvRCJoin(code, role) {
     lvRC.peers = Object.keys(chan.presenceState ? chan.presenceState() : {}).length || 1;
     lvRCInfo();
   });
-  await new Promise((res, rej) => chan.subscribe(st => {
-    if (st === 'SUBSCRIBED') { if (chan.track) chan.track({ at: Date.now() }); res(); }
-    else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') rej(new Error(st));
-  }));
+  try {
+    await new Promise((res, rej) => {
+      const t = setTimeout(() => rej(new Error('TIMED_OUT')), 12000); /* v1.84b: 라이브러리가 답하지 않아도 12초면 끝냄 */
+      chan.subscribe(st => {
+        if (st === 'SUBSCRIBED') { clearTimeout(t); if (chan.track) chan.track({ at: Date.now() }); res(); }
+        else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') { clearTimeout(t); rej(new Error(st)); }
+      });
+    });
+  } catch (e) { try { if (client.removeChannel) client.removeChannel(chan); else if (chan.unsubscribe) chan.unsubscribe(); } catch (x) {} throw e; } /* v1.84b: 실패한 채널은 남기지 않음(남기면 다음 입장이 그 채널을 받아 영영 기다림) */
   lvRC = { chan, code, role, peers: 1 };
   if (role === 'remote') { chan.send({ type: 'broadcast', event: 'hello', payload: {} }); renderLive(); }
   lvRCInfo();
@@ -5979,7 +6010,68 @@ function lvRCFixedCode() { // 이 폰의 리모컨 코드 고정 (v0.72) — 워
 }
 function lvRCHostToggle() {
   if (lvRC) { lvRCStop(); return; }
-  lvRCJoin(lvRCFixedCode(), 'host').catch(e => toast('리모컨 연결 실패: ' + (e.message || e)));
+  lvRCJoin(lvRCFixedCode(), 'host').catch(e => toast('리모컨 연결 실패: ' + lvRCErrText(e)));
+}
+/* v1.84 워치 연결(번호) — 워치 첫 화면(r.html)에 번호 6자리가 뜨고, 여기에 그 번호를 넣으면 이 폰의 리모컨 코드를 워치에 보내 줌(리모컨이 꺼져 있으면 고정 코드로 켬,
+   다른 폰의 리모컨으로 들어가 있으면 그 방 코드). 워치는 받으면 'paired'로 답하고 그 코드로 들어옴 — 워치가 코드를 기억하므로 다음부터는 열기만 하면 붙음.
+   pair:<번호>는 score:처럼 익명 공개 채널(워치는 로그인 없음) — 코드가 9초 동안 그 위로 가므로 번호는 6자리(90만 개: 남이 다 듣거나 밀어 넣기 어렵게), 답은 내 id만 받음. */
+let lvPairBusy = false;
+function lvRCWatchAddr() { try { return location.host + location.pathname.replace(/[^/]*$/, '') + 'r'; } catch (e) { return 'app.tennismate.kr/r'; } }
+function lvRCWatchPaired() { try { const c = localStorage.getItem('tm-rc-watch'); return !!c && c === localStorage.getItem('tm-rccode'); } catch (e) { return false; } } // 이 폰(고정 코드)에 워치를 붙인 적이 있음
+function lvRCPairOpen() {
+  const row = $('lvrc-pair-row'); if (!row) return;
+  const open = row.style.display === 'none';
+  row.style.display = open ? '' : 'none';
+  const a = $('lvrc-pair-addr'); if (a) a.textContent = lvRCWatchAddr();
+  const i = $('lvrc-pair'); if (open && i && !lvPairBusy) { i.value = ''; try { i.focus(); } catch (e) {} }
+}
+function lvRCPairInput(el) { const v = String(el.value || '').replace(/\D/g, '').slice(0, 6); if (el.value !== v) el.value = v; if (v.length === 6 && !lvPairBusy) lvRCPair(); }
+function lvRCPairTry(client, n, code, ms) { // 번호 n의 워치에 코드를 보내고 답(paired)을 기다림 — 들어간 뒤 바로·1.5초마다 다시, ms 안에 답 없으면 false
+  return new Promise((res) => {
+    const id = 'p' + Math.random().toString(36).slice(2, 10);
+    let ch = null, done = false, iv = null;
+    const t = setTimeout(() => fin(false), ms);
+    function fin(v) {
+      if (done) return; done = true; clearTimeout(t); clearInterval(iv);
+      const c = ch; ch = null;
+      if (c) { try { const r = client.removeChannel ? client.removeChannel(c) : c.unsubscribe(); if (r && typeof r.then === 'function') r.then(null, () => {}); } catch (e) {} }
+      res(v);
+    }
+    const tx = () => { if (!ch || done) return; try { const r = ch.send({ type: 'broadcast', event: 'pair', payload: { code, id } }); if (r && typeof r.then === 'function') r.then(null, () => {}); } catch (e) {} };
+    try {
+      ch = client.channel('pair:' + n, { config: { broadcast: { self: false } } });
+      ch.on('broadcast', { event: 'paired' }, (p) => { const q = (p && p.payload) || {}; if (q.id === id) fin(true); });
+      ch.subscribe((st) => { if (st === 'SUBSCRIBED' && !done) { tx(); if (!iv) iv = setInterval(tx, 1500); } });
+    } catch (e) { fin(false); }
+  });
+}
+async function lvRCPair() {
+  if (lvPairBusy) return;
+  const inp = $('lvrc-pair'), n = String((inp && inp.value) || '').replace(/\D/g, '');
+  if (!/^\d{6}$/.test(n)) { toast('워치 화면에 보이는 번호 6자리를 넣어 주세요'); return; }
+  const client = lvRCClient();
+  if (!client) { toast('서버 연결이 있어야 워치를 연결할 수 있어요'); return; }
+  lvPairBusy = true;
+  const go = $('lvrc-pair-go'); if (go) { go.disabled = true; go.textContent = '찾는 중…'; }
+  let ok = false, err = null, role = '';
+  try {
+    await Promise.race([(async () => {
+      while (lvRCJoining) { try { await lvRCJoining; } catch (e) {} } /* 다른 폰 방에 들어가는 중이면 끝나길 기다린 뒤 정함 — 안 그러면 그 입장을 이 폰 방으로 덮어 워치가 엉뚱한 점수판에 붙음(재검토 11/22) */
+      if (!lvRC) await lvRCJoin(lvRCFixedCode(), 'host');
+      const code = lvRC && lvRC.code; role = lvRC ? lvRC.role : '';
+      if (!/^[A-Z0-9]{6}$/.test(code || '')) throw new Error('리모컨을 켜지 못했어요');
+      await rcDropTopic(client, 'pair:' + n);
+      ok = await lvRCPairTry(client, n, code, 9000);
+      if (ok && role === 'host' && code === lvRCFixedCode()) { try { localStorage.setItem('tm-rc-watch', code); } catch (e) {} } /* 다음 경기 때 로그인 없이도 리모컨을 켜게(startLive — 고정 코드 방일 때만) */
+    })(), new Promise((_, rej) => setTimeout(() => rej(new Error('TIMED_OUT')), 45000))]); /* 무슨 일이 있어도 버튼은 풀림 */
+  } catch (e) { ok = false; err = e; }
+  lvPairBusy = false;
+  if (go) { go.disabled = false; go.textContent = '연결'; }
+  if (ok) {
+    if (inp) inp.value = '';
+    const row = $('lvrc-pair-row'); if (row) row.style.display = 'none';
+    toast(role === 'host' ? '워치를 연결했어요 — 다음부터는 워치에서 열기만 하면 붙어요' : '워치를 연결했어요');
+  } else toast(err ? '워치 연결 실패: ' + lvRCErrText(err) : '워치를 못 찾았어요 — 워치 화면의 번호와 인터넷을 확인해 주세요');
 }
 function cvStartMatch() { openModal('live'); openLive(); }
 function cvMark(side) {
@@ -6006,7 +6098,7 @@ function cvRenderScore() { // 뷰어 안 점수판 갱신 (v0.72)
 function lvRCRemoteJoin() {
   const c = ($('lvrc-code-in').value || '').trim().toUpperCase();
   if (c.length !== 6) { toast('리모컨 코드 6자리를 입력해 주세요'); return; }
-  lvRCJoin(c, 'remote').catch(e => toast('입장 실패: ' + (e.message || e)));
+  lvRCJoin(c, 'remote').catch(e => toast('입장 실패: ' + lvRCErrText(e)));
 }
 function lvRCPoint(side) {
   if (!lvRC || !lvRC.chan) return;
@@ -6026,13 +6118,111 @@ function lvRCPushState() {
     if (typeof cvChanB !== 'undefined' && cvChanB) { try { cvChanB.send(sc); } catch (e) {} }
     try { if (cvChan || cvChanB) { const k = [d[0], d[1], live.g[0], live.g[1], sc.payload.sets, live.tb ? 1 : 0, live.done ? 1 : 0].join('|'); if (k !== cvLastScoreKey) { cvLastScoreKey = k; cvLastScorePushAt = Date.now(); } } } catch (e) {} // v1.58c · v1.58d 점수가 바뀐 때만(폴트·렛·태그·토글로 다시 그려도 그대로)
   }
+  lvRCSendState();
+}
+// ── v1.84 워치 리모컨 번호표·맞추기 ──
+// 워치(r.html v1.84)는 점수를 스스로 계산하고, 탭마다 번호표(id)를 붙여 보냄. 폰은 같은 번호를 한 번만 세고(lvRCFirst), 받은 번호를 상태의 ack에 실어 돌려줌.
+// 끊긴 사이 워치가 센 것은 sync = { id, ids, mid, why, from, to } — 폰의 지금 점수 열쇠(lvRCKey)가 from과 같을 때만 to로 바꿈(그사이 폰이 바뀌었으면 상태만 보내 워치가 다시 판단).
+// ids는 그 sync에 담긴 탭 번호 — 바꾸지 못해도 막아 둠(늦게 도착해 두 번 세지지 않게), 바꾸면 받음 표시. 옛 리모컨(번호 없음)은 예전 그대로.
+const lvRCSeen = new Map(); let lvRCAcks = []; /* 번호 → 1 막음(아직 안 셈) · 2 셈. 최근 600개 */
+function lvRCIdOk(id) { return typeof id === 'string' && /^[A-Za-z0-9._-]{1,24}$/.test(id); }
+function lvRCMark(id, done) {
+  if (!lvRCIdOk(id)) return;
+  if (done || !lvRCSeen.has(id)) lvRCSeen.set(id, done ? 2 : 1);
+  while (lvRCSeen.size > 600) lvRCSeen.delete(lvRCSeen.keys().next().value);
+  if (done) { lvRCAcks = lvRCAcks.filter(x => x !== id); lvRCAcks.push(id); if (lvRCAcks.length > 40) lvRCAcks = lvRCAcks.slice(-40); }
+}
+function lvRCFirst(id) { /* 처음 온 번호면 true(받음 표시), 이미 셌거나 막은 번호·이상한 번호면 false. 번호 없음 = 옛 리모컨 → true */
+  return lvRCTake(id, true);
+}
+function lvRCTake(id, can) { /* 탭을 지금 셀지 — can = 점수판이 셀 수 있는 상태인지. 이미 센 번호는 받음 표시만 다시, 막은 번호·이상한 번호는 안 셈, 셀 수 없으면 그 번호를 막기만(받음 아님 — 워치가 맞추기로 넘어감) */
+  if (id == null) return can; /* 옛 리모컨 */
+  if (!lvRCIdOk(id)) return false;
+  const s = lvRCSeen.get(id);
+  if (s === 2) { lvRCMark(id, true); return false; }
+  if (s === 1) return false;
+  if (!can) { lvRCMark(id, false); return false; }
+  lvRCMark(id, true); return true;
+}
+let lvRCNacks = []; /* 받지 않은 sync — '번호:까닭'(k 그사이 점수가 바뀜 · v 이 경기 방식에 없는 점수 · d 끝난 경기 · m 다른 경기). 워치가 추측하지 않게 상태에 실음 */
+function lvRCNack(id, r) { if (!lvRCIdOk(id)) return; lvRCNacks = lvRCNacks.filter(x => x.indexOf(id + ':') !== 0); lvRCNacks.push(id + ':' + r); if (lvRCNacks.length > 10) lvRCNacks = lvRCNacks.slice(-10); }
+function lvRCNewMid() { const a = 'abcdefghijklmnopqrstuvwxyz0123456789'; let s = ''; for (let i = 0; i < 10; i++) s += a[Math.floor(Math.random() * 36)]; return s; }
+function lvRCKeyOf(o) { return [o.sets.map(s => s[0] + '-' + s[1]).join(' '), o.g[0], o.g[1], o.p[0], o.p[1], o.tb ? 1 : 0].join('|'); } /* r.html keyOf와 같은 모양 */
+function lvRCKey() { return live ? lvRCKeyOf(live) : ''; }
+let lvRCSeq = 0; /* 상태 번호(q) — 워치가 늦게 도착한 옛 상태를 버림 */
+function lvRCSendState() {
   if (!lvRC || lvRC.role !== 'host' || !lvRC.chan || !live) return;
+  if (!live.mid) live.mid = lvRCNewMid();
   const d = live.done ? ['✓', '✓'] : liveDisp();
   lvRC.chan.send({ type: 'broadcast', event: 'state', payload: {
     d0: d[0], d1: d[1], g0: live.g[0], g1: live.g[1],
     sets: live.sets.map(s => s[0] + '-' + s[1]).join(' '),
-    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs, srv: live.srv || 0, noAd: !!live.noAd
+    tb: live.tb, done: live.done, n0: liveTeams().mine, n1: liveTeams().theirs, srv: live.srv || 0, noAd: !!live.noAd,
+    v: 2, mid: live.mid, q: ++lvRCSeq, p0: live.p[0], p1: live.p[1], gT: live.gT || 6, sNeed: live.sNeed || 2, pt0: live.ptsTotal[0], pt1: live.ptsTotal[1], ack: lvRCAcks.slice(-40), nack: lvRCNacks.slice(-10)
   } });
+}
+function lvRCSyncTo(t) { /* 워치가 보낸 점수 검사 — 익명 공개 채널이라 이 경기 방식(gT·sNeed·노애드)으로 나올 수 있는 점수만 받음 */
+  if (!live || !t || typeof t !== 'object' || !Array.isArray(t.sets) || t.sets.length > 5 || !Array.isArray(t.g) || t.g.length !== 2 || !Array.isArray(t.p) || t.p.length !== 2) return null;
+  const gT = live.gT || 6, sNeed = live.sNeed || 2;
+  const N = (v, hi) => (Number.isInteger(v) && v >= 0 && v <= hi ? v : null);
+  const sets = []; let w0 = 0, w1 = 0;
+  for (const s of t.sets) {
+    if (!Array.isArray(s) || s.length !== 2) return null;
+    const a = N(s[0], gT + 1), b = N(s[1], gT + 1); if (a === null || b === null) return null;
+    const hi = Math.max(a, b), lo = Math.min(a, b);
+    if (!((hi === gT && lo <= gT - 2) || (hi === gT + 1 && (lo === gT - 1 || lo === gT)))) return null; /* 6게임제: 6-0~6-4·7-5·7-6 */
+    if (w0 === sNeed || w1 === sNeed) return null; /* 이미 끝난 경기 뒤의 세트 */
+    if (a > b) w0++; else w1++;
+    sets.push([a, b]);
+  }
+  const done = w0 === sNeed || w1 === sNeed;
+  const g = [N(t.g[0], gT), N(t.g[1], gT)], p = [N(t.p[0], 99), N(t.p[1], 99)];
+  if (g.includes(null) || p.includes(null) || typeof t.tb !== 'boolean' || (t.srv !== 0 && t.srv !== 1)) return null;
+  if (t.tb !== (g[0] === gT && g[1] === gT)) return null; /* 타이브레이크는 gT-gT일 때만 */
+  if (!t.tb && Math.max(g[0], g[1]) >= gT && Math.abs(g[0] - g[1]) >= 2) return null; /* 끝났어야 할 세트 */
+  if (t.tb) { if (Math.max(p[0], p[1]) >= 7 && Math.abs(p[0] - p[1]) >= 2) return null; }
+  else if (live.noAd) { if (p[0] > 3 || p[1] > 3) return null; }
+  else if (Math.max(p[0], p[1]) > 3 && (Math.min(p[0], p[1]) < 3 || Math.abs(p[0] - p[1]) > 1)) return null;
+  if (done && (g[0] || g[1] || p[0] || p[1] || t.tb)) return null;
+  let pt = null; if (Array.isArray(t.pt) && t.pt.length === 2) { const a = N(t.pt[0], 99999), b = N(t.pt[1], 99999); if (a !== null && b !== null) pt = [a, b]; }
+  return { sets, g, p, tb: t.tb, srv: t.srv, pt, done };
+}
+function lvRCSync(q) {
+  if (!q || typeof q !== 'object' || !live || !lvRC || lvRC.role !== 'host' || !lvRCIdOk(q.id)) return;
+  const ids = Array.isArray(q.ids) ? q.ids.filter(lvRCIdOk).slice(0, 60) : [];
+  ids.forEach(x => lvRCMark(x, false)); /* 늦게 오는 같은 번호의 탭은 막음(아직 '셈'은 아님) */
+  if (lvRCSeen.get(q.id) === 2) { lvRCMark(q.id, true); lvRCSendState(); return; } /* 이미 맞춤 */
+  const cur = lvRCKey();
+  const bad = live.done ? 'd' : (q.mid != null && q.mid !== live.mid) ? 'm' : (typeof q.from !== 'string' || q.from !== cur) ? 'k' : ''; /* 끝난 경기·다른 경기·그사이 폰 점수가 바뀜 */
+  if (bad) { lvRCNack(q.id, bad); lvRCSendState(); return; }
+  const t = lvRCSyncTo(q.to);
+  if (!t || (t.done && q.mid == null && !live.hist.length && !live.ptsTotal[0] && !live.ptsTotal[1])) { lvRCNack(q.id, 'v'); lvRCSendState(); return; } /* 이 경기 방식에 없는 점수 · 경기 번호 없이 시작도 안 한 경기를 한 번에 끝내지 않음(v1.84 워치는 늘 경기 번호를 보냄) */
+  const tk = lvRCKeyOf(t);
+  if (tk === cur) { lvRCMark(q.id, true); ids.forEach(x => lvRCMark(x, true)); lvRCSendState(); return; } /* 이미 같음 — 번호만 받음(서브는 폰 것 그대로) */
+  /* 워치가 지나온 점수들(chain, 끝 = to) — 폰 기록도 한 점씩 쌓이게(맞춘 뒤 폰·워치 되돌리기가 한 점씩). 이어지는 자리를 못 찾으면 한 칸으로 */
+  let chain = Array.isArray(q.chain) && q.chain.length >= 1 && q.chain.length <= 41 ? q.chain.map(lvRCSyncTo) : [];
+  if (!chain.length || chain.some(c => !c) || lvRCKeyOf(chain[chain.length - 1]) !== tk) chain = [t];
+  const keys = chain.map(lvRCKeyOf);
+  let steps = null, popped = 0;
+  const at = keys.lastIndexOf(cur);
+  if (at >= 0) steps = chain.slice(at + 1); /* 폰 지금 점수에서 이어짐 → 그 뒤 점수들을 한 칸씩 */
+  else for (let d = 1; d <= Math.min(40, live.hist.length) && !steps; d++) { /* 워치가 폰 기록보다 앞으로 되돌림 → 폰 기록에서 만나는 곳까지 되돌린 뒤 이어서(liveUndo처럼, 태그도) */
+    const j = keys.lastIndexOf(lvRCKeyOf(JSON.parse(live.hist[live.hist.length - d])));
+    if (j >= 0) { for (let k = 0; k < d; k++) { Object.assign(live, JSON.parse(live.hist.pop())); if (live.tags && live.tags.length) live.tags.pop(); } popped = d; steps = chain.slice(j + 1); }
+  }
+  if (!steps) steps = [t];
+  for (const s of steps) {
+    const side = s.pt && s.pt[0] > live.ptsTotal[0] ? 0 : s.pt && s.pt[1] > live.ptsTotal[1] ? 1 : null;
+    live.hist.push(JSON.stringify({ sets: live.sets, g: live.g, p: live.p, tb: live.tb, ptsTotal: live.ptsTotal, srv: live.srv || 0, fault: live.fault || 0 }));
+    live.tags.push({ side, tag: null, sync: true });
+    live.sets = s.sets; live.g = s.g; live.p = s.p; live.tb = s.tb; live.srv = s.srv; live.fault = 0;
+    if (s.pt) live.ptsTotal = s.pt;
+  }
+  lvRCMark(q.id, true); ids.forEach(x => lvRCMark(x, true));
+  const myS = live.sets.filter(s => s[0] > s[1]).length, opS = live.sets.length - myS, sNeed = live.sNeed || 2;
+  const fin = steps.length > 0 && (myS === sNeed || opS === sNeed);
+  lvSpeak(fin ? '워치 점수로 맞췄어요. 경기 종료' : !steps.length ? '되돌리기. ' + lvScoreCall() : '워치 점수로 맞췄어요. 게임 ' + live.g[0] + ' 대 ' + live.g[1] + '. ' + lvScoreCall());
+  if (fin) finishLive(myS, opS); else renderLive();
 }
 function lvRCRemoteState(p) {
   const sc = $('lvrc-score'), sub = $('lvrc-sub'), n0 = $('lvrc-n0'), n1 = $('lvrc-n1');
@@ -6344,9 +6534,9 @@ function startLive() {
   const gT = parseInt($('lv-games') ? $('lv-games').value : '6') || 6;
   const sNeed = parseInt($('lv-sets') ? $('lv-sets').value : '2') || 2;
   const noAd = !$('lv-noad') || $('lv-noad').value !== '0'; // 기본 노애드 (동호회 규칙) — v0.67
-  live = { type, gT, sNeed, oppId, partnerId, opp2Id, p1Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd };
+  live = { type, gT, sNeed, oppId, partnerId, opp2Id, p1Id, sets: [], g: [0, 0], p: [0, 0], tb: false, hist: [], ptsTotal: [0, 0], tags: [], done: false, srv: 0, fault: 0, noAd, mid: lvRCNewMid() }; /* v1.84 mid = 경기 번호(워치가 새 경기를 알아봄) */
   lvSpeak('경기 시작. 서브 우리');
-  if (!lvRC && typeof serverMode === 'function' && serverMode() && TMAuth.isLoggedIn) { // 워치·다른 폰이 바로 붙게 리모컨 자동 연결 (고정 코드)
+  if (!lvRC && typeof serverMode === 'function' && serverMode() && (TMAuth.isLoggedIn || lvRCWatchPaired())) { // 워치·다른 폰이 바로 붙게 리모컨 자동 연결 (고정 코드) — v1.84b: 워치를 붙인 폰은 로그인 없이도
     lvRCJoin(lvRCFixedCode(), 'host').catch(() => {});
   }
   renderLive();
@@ -12531,6 +12721,7 @@ const TAG_LABEL = { ace: '🎯 에이스', winner: '💥 위너', net: '🥅 네
 function lvTagRowHtml() {
   if (!live || !live.tags || !live.tags.length) return '';
   const last = live.tags[live.tags.length - 1];
+  if (last.sync) return ''; /* v1.84: 워치 점수 맞춤 칸 — 어느 포인트인지 모름 */
   return '<div class="muted" style="font-size:12px;margin-top:8px">🏷️ 방금 포인트는 어떻게 끝났나요? (선택 — 이 경기 동안 폰에만 남아요)</div><div style="margin-top:4px">' +
     Object.keys(TAG_LABEL).map(t => '<button type="button" class="tag-btn ' + (last.tag === t ? 'sel' : '') + '" onclick="lvTag(\'' + t + '\')">' + TAG_LABEL[t] + '</button>').join(' ') + '</div>';
 }
@@ -12543,7 +12734,7 @@ function lvTag(t) {
 function lvTagCommit(oppName) {
   if (!live || !live.tags) return;
   const rec = coachTags[oppName] || (coachTags[oppName] = { my: {}, op: {} });
-  live.tags.forEach(t => { if (!t.tag) return; const b = t.side === 0 ? rec.my : rec.op; b[t.tag] = (b[t.tag] || 0) + 1; });
+  live.tags.forEach(t => { if (!t.tag || (t.side !== 0 && t.side !== 1)) return; const b = t.side === 0 ? rec.my : rec.op; b[t.tag] = (b[t.tag] || 0) + 1; }); /* v1.84: 쪽 없는 칸(워치 맞춤)은 빼기 */
   renderCoachData();
 }
 function renderCoachData() {

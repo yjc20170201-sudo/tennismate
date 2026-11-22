@@ -9,65 +9,125 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { height: 100%; }
   body { background: #10231a; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; }
-  /* 원형 워치 화면 대비: 가장자리 여백 */
-  #join { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; padding: 18%; text-align: center; }
-  #join input { width: 100%; max-width: 140px; font-size: 22px; text-align: center; padding: 8px; border-radius: 10px; border: none; text-transform: uppercase; }
+  /* 원형 워치 화면 대비: 가장자리 여백. v1.84: 내용이 넘쳐도 위가 잘리지 않게(가운데 맞춤은 첫·끝 칸의 auto 여백으로) */
+  #join { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; height: 100%; gap: 8px; padding: 14% 16%; text-align: center; overflow-y: auto; }
+  #join > * { flex-shrink: 0; } #join > :first-child { margin-top: auto; } #join > :last-child { margin-bottom: auto; }
+  #join input { width: 100%; max-width: 140px; font-size: 22px; text-align: center; padding: 7px; border-radius: 10px; border: none; text-transform: uppercase; }
   #join button, .full-btn { border: none; border-radius: 14px; font-weight: 800; cursor: pointer; }
-  #join button { background: #2f9e5f; color: #fff; font-size: 16px; padding: 10px 22px; }
+  #join button { background: #2f9e5f; color: #fff; font-size: 16px; padding: 9px 22px; }
+  #join button.sub { background: transparent; color: #bfe8d0; font-size: 11.5px; font-weight: 700; padding: 2px 6px; text-decoration: underline; }
+  /* v1.84 번호로 연결: 워치 번호를 크게(폰에서 그 번호를 넣음) — [코드로 연결]을 누르면 예전 코드 칸 */
+  #join .jt { font-size: 12px; font-weight: 800; opacity: .9; }
+  #pair-box, #code-box { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; }
+  #code-box { display: none; gap: 8px; }
+  #join.code #code-box { display: flex; } #join.code #pair-box { display: none; }
+  #pair-box .pl { font-size: 10.5px; opacity: .75; }
+  #pair-no { font-size: 30px; font-weight: 900; letter-spacing: 1px; line-height: 1.15; white-space: nowrap; font-variant-numeric: tabular-nums; color: #f4e04d; }
+  #pair-no.wait { font-size: 14px; letter-spacing: 0; line-height: 1.7; color: #bfe8d0; }
+  #pair-msg { font-size: 10.5px; opacity: .85; line-height: 1.35; }
   #play { display: none; flex-direction: column; height: 100%; padding: 5% 9% 6%; gap: 5px; }
   /* 점수판: 탭하면 음성으로 읽어줌 */
   #score { text-align: center; line-height: 1.15; padding-top: 3%; cursor: pointer; }
   #sets { font-size: 10px; opacity: .7; min-height: 12px; }
   #games { font-size: 13px; font-weight: 800; margin-top: 2px; }
   #games .g0 { color: #7ee2a8; } #games .g1 { color: #ff9b9b; }
+  /* v1.84: 게임 줄 앞 점 = 연결 상태(초록 폰과 연결됨 · 노랑 워치가 혼자 셈 · 파랑 폰에 맞추는 중) */
+  #games i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; background: #888; }
+  #games i.on { background: #4cd38a; } #games i.solo { background: #f2c14e; } #games i.sync { background: #6fb5ff; }
   #pts { font-size: 34px; font-weight: 900; letter-spacing: 1px; margin-top: 1px; font-variant-numeric: tabular-nums; }
   #pts .p0 { color: #7ee2a8; } #pts .p1 { color: #ff9b9b; } #pts .colon { opacity: .5; font-size: 24px; margin: 0 4px; }
-  #state { font-size: 11px; opacity: .8; min-height: 13px; }
+  #state { font-size: 11px; opacity: .8; min-height: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .full-btn { flex: 1; font-size: 18px; color: #fff; }
   #btn-us { background: #2f9e5f; }
   #btn-them { background: #b03a3a; }
-  #foot { display: flex; gap: 5px; padding-bottom: 4%; }
-  #foot button { flex: 1; background: rgba(255,255,255,.14); color: #fff; border: none; border-radius: 10px; padding: 7px 4px; font-size: 11.5px; }
+  /* v1.84: 아래 줄은 한 줄 글자(두 줄로 접히면 원형 화면 아래로 밀려남)·가운데로 모음 */
+  #foot { display: flex; gap: 4px; padding: 0 7% 4%; }
+  #foot button { flex: 1; min-width: 0; background: rgba(255,255,255,.14); color: #fff; border: none; border-radius: 10px; padding: 7px 1px; font-size: 10.5px; letter-spacing: -.3px; white-space: nowrap; overflow: hidden; }
   #foot button.on { background: rgba(126,226,168,.35); }
+  @media (max-height: 235px) { #score { padding-top: 1%; } #pts { font-size: 31px; } #play { padding-bottom: 7%; } } /* v1.84: 작은 원형 화면(198~225)에서 아래 줄을 원 안으로 조금 올림 */
   #msg { font-size: 11px; text-align: center; opacity: .75; min-height: 14px; }
+  /* v1.84: 메뉴·물어보기 — 화면 전체를 덮는 버튼 목록(원형 화면이라 가운데로, 넘치면 위부터 보이게) */
+  .ov { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #0b1a13; z-index: 5; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 5px; padding: 11% 13% 12%; overflow-y: auto; text-align: center; }
+  .ov > * { flex-shrink: 0; } .ov > :first-child { margin-top: auto; } .ov > :last-child { margin-bottom: auto; }
+  .ov.show { display: flex; }
+  .ov button { border: none; border-radius: 11px; padding: 7px 5px; font-size: 12px; font-weight: 700; color: #fff; background: rgba(255,255,255,.16); cursor: pointer; }
+  .ov button.pri { background: #2f9e5f; }
+  .ov button:disabled { opacity: .35; }
+  .ov .t { font-size: 13px; font-weight: 800; }
+  .ov .s { font-size: 10.5px; opacity: .85; line-height: 1.35; }
 </style>
 </head>
 <body>
 <div id="join">
-  <div style="font-size:26px">📟</div>
-  <div style="font-size:14px;font-weight:800">테니스메이트 리모컨</div>
-  <input id="code" maxlength="6" placeholder="코드 6자리" autocapitalize="characters">
-  <button onclick="joinRoom()">연결</button>
-  <div id="msg">점수판 폰의 "📟 리모컨 연결" 코드를 입력하세요</div>
+  <div class="jt">테니스메이트 리모컨</div>
+  <div id="pair-box">
+    <div class="pl">워치 번호</div>
+    <div id="pair-no" class="wait">연결 중…</div>
+    <div id="pair-msg">인터넷에 연결되면<br>번호가 나와요</div>
+  </div>
+  <div id="code-box">
+    <input id="code" maxlength="6" placeholder="코드 6자리" autocapitalize="characters" autocomplete="off">
+    <button id="code-go" onclick="joinRoom()">연결</button>
+    <div id="msg">점수판 폰의 리모컨 코드를 넣으세요</div>
+  </div>
+  <button class="sub" id="code-tog" onclick="codeMode()">코드로 연결</button>
+  <button class="sub" id="solo-btn" onclick="soloStart()">코드 없이 워치로만 세기</button>
 </div>
 <div id="play">
   <div id="score" onclick="speakNow()" title="탭하면 점수를 읽어줘요">
     <div id="sets"></div>
-    <div id="games">연결됨 — 점수판에서 경기를 시작하세요</div>
-    <div id="pts"><span class="p0">—</span><span class="colon">:</span><span class="p1">—</span></div>
+    <div id="games"><i></i>게임 <span class="g0">0</span> - <span class="g1">0</span></div>
+    <div id="pts"><span class="p0">0</span><span class="colon">:</span><span class="p1">0</span></div>
     <div id="state"></div>
   </div>
-  <button class="full-btn" id="btn-us" onclick="sendPoint(0)">🟢 우리 포인트</button>
-  <button class="full-btn" id="btn-them" onclick="sendPoint(1)">🔴 상대 포인트</button>
+  <button class="full-btn" id="btn-us" onclick="sendPoint(0)">🟢 우리</button>
+  <button class="full-btn" id="btn-them" onclick="sendPoint(1)">🔴 상대</button>
   <div id="foot">
-    <button onclick="sendUndo()">↩️ 되돌리기</button>
-    <button id="voice-btn" onclick="toggleVoice()">🔊 음성</button>
-    <button onclick="location.reload()">끊기</button>
+    <button onclick="sendUndo()">되돌리기</button>
+    <button id="voice-btn" onclick="toggleVoice()">음성</button>
+    <button onclick="menuOpen()">메뉴</button>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js"></script>
+<div id="menu" class="ov">
+  <button class="pri" onclick="menuClose()">닫기</button>
+  <div class="s" id="menu-info"></div>
+  <button id="m-phone" onclick="menuPhone()">폰 점수로 맞추기</button>
+  <button id="m-new" onclick="menuNew()">새 경기 (0:0)</button>
+  <button id="m-gt" onclick="menuFmt('gT')"></button>
+  <button id="m-sn" onclick="menuFmt('sNeed')"></button>
+  <button id="m-ad" onclick="menuFmt('noAd')"></button>
+  <button id="m-srv" onclick="menuSrv()"></button>
+  <button id="m-link" onclick="menuLink()"></button>
+</div>
+<div id="ask" class="ov">
+  <div class="t">폰 점수와 달라요</div>
+  <div class="s" id="ask-phone"></div>
+  <div class="s" id="ask-watch"></div>
+  <button onclick="askPick('keep')">워치 점수 그대로 (폰과 따로)</button>
+  <button class="pri" id="ask-send" onclick="askPick('send')">워치 점수를 폰에 보내기</button>
+  <button onclick="askPick('phone')">폰 점수 쓰기</button>
+</div>
 <script>
 var SB_URL = 'https://ssibxgplavavsqemqrej.supabase.co';
 var SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaWJ4Z3BsYXZhdnNxZW1xcmVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMDkwNzAsImV4cCI6MjEwMzY4NTA3MH0.SU5gZ8lIT8qdQNF0t8EnYRpD_GA7QFF3KohOsNlvc6U';
-var chan = null, last = null, pendingSpeak = false;
-// 🔊 음성 안내 — Web Speech(speechSynthesis) 있는 기기만. 없으면 진동 패턴으로만 구분
+var SB_SRC = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.119.0/dist/umd/supabase.min.js'; /* v1.84: 막는 <script> 대신 나중에 불러옴 — 인터넷이 느려도 세기는 바로 됨 */
+// ── v1.84 워치가 혼자 세기 ──
+// 예전: 워치는 탭을 폰(점수판)에 보내기만 하고, 폰이 계산해 돌려준 점수를 보여 줌 → 폰과 연결이 안 되면 숫자가 그대로였음.
+// 지금: 워치가 폰과 같은 규칙으로 직접 계산해 바로 보여 줌(인터넷·폰 없이도). 폰과는 —
+//   · 연결돼 있으면 탭·되돌리기를 예전처럼 바로 보냄(point·undo — 폰이 계산, 되돌리기는 폰 기록에서 한 칸). 번호표(id)로 폰은 같은 번호를 한 번만 셈, 받으면 ack·못 받으면 nack
+//   · 답이 없으면 같은 번호로 다시(세 번까지). 순서가 바뀌면 다시 보내지 않고 맞추기로
+//   · 끊긴 사이 워치에서 센 것은 sync(폰이 base 점수일 때만 워치 점수로)로 맞춤. 폰도 그사이 바뀌었으면 물어봄
+//   · 안 보낸 변화가 없으면 폰 점수를 따름. 워치가 혼자 센 경기와 폰의 경기가 만나면 물어봄(다 보낸 경기는 묻지 않고 따름)
+//   · 점수·안 보낸 것은 이 워치에 저장(화면이 꺼져 페이지를 다시 열어도 이어서, 12시간)
 var voiceOn = true;
 try { voiceOn = localStorage.getItem('tm-rc-voice') !== '0'; } catch (e) {}
 var canSpeak = typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance !== 'undefined';
 function $(id) { return document.getElementById(id); }
+function now() { return Date.now(); }
+function age(at) { var d = now() - at; return d < -1000 ? 1e9 : d; } /* 시계가 뒤로 가면 '오래됨'으로 */
 function renderVoiceBtn() {
   var b = $('voice-btn');
-  b.textContent = !canSpeak ? '🔇 음성 불가' : voiceOn ? '🔊 음성 켬' : '🔇 음성 끔';
+  b.textContent = !canSpeak ? '음성 불가' : voiceOn ? '음성 켬' : '음성 끔';
   b.className = voiceOn && canSpeak ? 'on' : '';
 }
 function toggleVoice() {
@@ -86,6 +146,8 @@ function speak(text, force) {
     speechSynthesis.speak(u);
   } catch (e) {}
 }
+function vib(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+var NO = [40, 60, 40]; /* 안 됨 진동(음성을 꺼도 알 수 있게) */
 // 포인트 표기(0/15/30/40/Ad) → 말
 function sayPt(d) { return ({ '0': '러브', '15': '피프틴', '30': '써티', '40': '포티', 'Ad': '어드밴티지', '✓': '' })[d] || String(d); } // 테니스식 콜
 function saySets(s) { return String(s || '').split(' ').filter(Boolean).map(function (x) { return x.replace('-', ' 대 '); }).join(', '); } // "6-4 4-6" → "6 대 4, 4 대 6"
@@ -102,73 +164,506 @@ function scoreText(p) { // 현재 상태를 한 문장으로 (탭했을 때·포
   var srvFirst = (p.srv || 0) === 0 ? [a, b] : [b, a]; // 서브 넣는 쪽 점수 먼저
   return sayPt(srvFirst[0]) + ' ' + sayPt(srvFirst[1]);
 }
-function joinRoom() {
-  var code = ($('code').value || '').trim().toUpperCase();
-  if (code.length !== 6) { $('msg').textContent = '코드 6자리를 입력하세요'; return; }
-  $('msg').textContent = '연결 중…';
-  try {
-    var client = (window.__testClient) || window.supabase.createClient(SB_URL, SB_KEY);
-    chan = client.channel('score:' + code, { config: { broadcast: { self: false } } });
-    chan.on('broadcast', { event: 'state' }, function (p) { onState(p.payload); });
-    chan.subscribe(function (st) {
-      if (st === 'SUBSCRIBED') {
-        try { localStorage.setItem('tm-rc-last', code); } catch (e) {}
-        $('join').style.display = 'none';
-        $('play').style.display = 'flex';
-        renderVoiceBtn();
-        chan.send({ type: 'broadcast', event: 'hello', payload: {} });
-      } else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') {
-        $('msg').textContent = '연결 실패 — 인터넷을 확인하고 다시 시도하세요';
-      }
-    });
-  } catch (e) { $('msg').textContent = '오류: ' + (e.message || e); }
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+// ── 점수 계산 — 점수판 폰(index.html livePoint·lvAnnounce·liveDisp)과 같은 규칙. 바꾸면 양쪽을 같이 + watch184_unit_test ──
+var PT = ['0', '15', '30', '40'];
+function I(v, lo, hi, d) { var n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{1,5}$/.test(v) ? Number(v) : NaN); return n === Math.floor(n) && n >= lo && n <= hi ? n : d; }
+function fmtLoad() { var f = { gT: 6, sNeed: 2, noAd: true }; try { var o = JSON.parse(localStorage.getItem('tm-rc-fmt') || 'null'); if (o && typeof o === 'object') { if (o.gT === 4) f.gT = 4; if (o.sNeed === 1) f.sNeed = 1; if (o.noAd === false) f.noAd = false; } } catch (e) {} return f; }
+function fresh(f) { return { sets: [], g: [0, 0], p: [0, 0], tb: false, done: false, srv: 0, noAd: f.noAd !== false, gT: f.gT === 4 ? 4 : 6, sNeed: f.sNeed === 1 ? 1 : 2, pt: [0, 0] }; }
+function clone(E) { return { sets: E.sets.map(function (s) { return [s[0], s[1]]; }), g: [E.g[0], E.g[1]], p: [E.p[0], E.p[1]], tb: !!E.tb, done: !!E.done, srv: E.srv ? 1 : 0, noAd: !!E.noAd, gT: E.gT === 4 ? 4 : 6, sNeed: E.sNeed === 1 ? 1 : 2, pt: [E.pt[0], E.pt[1]] }; }
+function cleanE(o) { // 저장해 둔 것 읽기 — 모양이 틀리면 버림
+  if (!o || typeof o !== 'object' || !Array.isArray(o.sets) || o.sets.length > 5 || !Array.isArray(o.g) || !Array.isArray(o.p) || !Array.isArray(o.pt)) return null;
+  var E = { sets: [], g: [I(o.g[0], 0, 13, -1), I(o.g[1], 0, 13, -1)], p: [I(o.p[0], 0, 999, -1), I(o.p[1], 0, 999, -1)], tb: o.tb === true, done: o.done === true, srv: o.srv === 1 ? 1 : 0, noAd: o.noAd !== false, gT: o.gT === 4 ? 4 : 6, sNeed: o.sNeed === 1 ? 1 : 2, pt: [I(o.pt[0], 0, 99999, 0), I(o.pt[1], 0, 99999, 0)] };
+  for (var i = 0; i < o.sets.length; i++) { var s = o.sets[i]; if (!Array.isArray(s)) return null; var a = I(s[0], 0, 13, -1), b = I(s[1], 0, 13, -1); if (a < 0 || b < 0) return null; E.sets.push([a, b]); }
+  return E.g[0] < 0 || E.g[1] < 0 || E.p[0] < 0 || E.p[1] < 0 ? null : E;
 }
-function onState(p) {
-  if (!p || typeof p !== 'object') return;
-  var g0 = Number(p.g0) || 0, g1 = Number(p.g1) || 0;
-  var d0 = String(p.d0 == null ? '—' : p.d0), d1 = String(p.d1 == null ? '—' : p.d1);
-  $('sets').textContent = (p.sets ? '세트 ' + String(p.sets) : '') + (p.done ? ' · 🏁 종료' : '');
-  $('games').innerHTML = '게임 <span class="g0">' + g0 + '</span> - <span class="g1">' + g1 + '</span>';
-  $('pts').innerHTML = '<span class="p0">' + esc(d0) + '</span><span class="colon">:</span><span class="p1">' + esc(d1) + '</span>';
-  $('state').textContent = p.done ? '경기 종료' : p.tb ? '🔥 타이브레이크' : (d0 === '40' && d1 === '40') ? '듀스' : (d0 === 'Ad' || d1 === 'Ad') ? '어드밴티지' : '';
-  $('btn-us').textContent = '🟢 ' + String(p.n0 || '우리'); /* v1.82: textContent는 글자 그대로 넣음 — esc()를 겹치면 &가 &amp;로 보임 */
-  $('btn-them').textContent = '🔴 ' + String(p.n1 || '상대');
-  // 게임이 넘어갔으면 진동 길게 + "게임" 먼저 말하기
-  var gameWon = last && (g0 !== last.g0 || g1 !== last.g1) && !p.done;
-  var setWon = last && String(p.sets || '') !== String(last.sets || '');
-  if (pendingSpeak) {
-    pendingSpeak = false;
-    var t = scoreText(p);
-    if (p.done) t = '경기 종료';
-    else if (setWon) t = '세트. ' + saySets(p.sets);
-    else if (gameWon) t = '게임. ' + g0 + ' 대 ' + g1;
-    speak(t);
-    if (navigator.vibrate) navigator.vibrate(p.done ? [80, 60, 80, 60, 160] : (gameWon || setWon) ? [60, 50, 60] : 25);
+function setWins(E) { var a = 0, b = 0; E.sets.forEach(function (s) { if (s[0] > s[1]) a++; else b++; }); return [a, b]; }
+function applyPoint(E0, side) {
+  var E = clone(E0); if (E.done) return E;
+  var o = 1 - side, gT = E.gT, g0 = E.g[0], g1 = E.g[1], ns = E.sets.length;
+  E.pt[side]++; E.p[side]++;
+  if (E.tb) {
+    if (E.p[side] >= 7 && E.p[side] - E.p[o] >= 2) { var st = [0, 0]; st[side] = gT + 1; st[o] = gT; E.sets.push(st); E.g = [0, 0]; E.p = [0, 0]; E.tb = false; } // 타이브레이크 승리 (6게임제 7-6, 4게임제 5-4)
+  } else if (E.p[side] >= 4 && (E.noAd ? true : E.p[side] - E.p[o] >= 2)) { // 게임 (노애드: 듀스 뒤 한 점)
+    E.g[side]++; E.p = [0, 0];
+    if (E.g[side] >= gT && E.g[side] - E.g[o] >= 2) { E.sets.push([E.g[0], E.g[1]]); E.g = [0, 0]; } // 세트
+    else if (E.g[0] === gT && E.g[1] === gT) E.tb = true; // 동률 → 타이브레이크
   }
-  last = { g0: g0, g1: g1, sets: p.sets, d0: d0, d1: d1, tb: !!p.tb, done: !!p.done, srv: Number(p.srv) || 0, noAd: !!p.noAd };
+  var w = setWins(E);
+  if (w[0] === E.sNeed || w[1] === E.sNeed) E.done = true;
+  else if (E.sets.length !== ns || E.g[0] !== g0 || E.g[1] !== g1) E.srv = 1 - E.srv; // 게임·세트마다 서브 교대(타이브레이크 안은 그대로 — 폰과 같음)
+  return E;
 }
-function esc(s) { return s.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-function speakNow() { // 점수판 탭 → 지금 점수 읽기
-  if (!last) { speak('아직 경기가 시작되지 않았어요', true); return; }
-  var p = { d0: last.d0, d1: last.d1, g0: last.g0, g1: last.g1, sets: last.sets, tb: last.tb, done: last.done, srv: last.srv, noAd: last.noAd };
-  speak(scoreText(p), true);
-  if (navigator.vibrate) navigator.vibrate(15);
+function disp(E) {
+  if (E.done) return ['✓', '✓'];
+  if (E.tb) return [String(E.p[0]), String(E.p[1])];
+  var a = E.p[0], b = E.p[1];
+  if (a >= 3 && b >= 3) return a === b ? ['40', '40'] : a > b ? ['Ad', '40'] : ['40', 'Ad'];
+  return [PT[Math.min(a, 3)], PT[Math.min(b, 3)]];
 }
+function setsStr(E) { return E.sets.map(function (s) { return s[0] + '-' + s[1]; }).join(' '); }
+function keyOf(E) { return [setsStr(E), E.g[0], E.g[1], E.p[0], E.p[1], E.tb ? 1 : 0].join('|'); } /* 폰 lvRCKey와 같은 모양 */
+function viewOf(E) { var d = disp(E); return { d0: d[0], d1: d[1], g0: E.g[0], g1: E.g[1], sets: setsStr(E), tb: E.tb, done: E.done, srv: E.srv, noAd: E.noAd }; }
+function viewKey(E) { var v = viewOf(E); return [v.d0, v.d1, v.g0, v.g1, v.sets, v.tb ? 1 : 0, v.done ? 1 : 0].join('|'); }
+function pristine(E) { return !E.sets.length && !E.g[0] && !E.g[1] && !E.p[0] && !E.p[1] && !E.tb && !E.done; }
+function sameFmt(a, b) { return a.gT === b.gT && a.sNeed === b.sNeed && a.noAd === b.noAd; }
+function parseSets(s) { var out = []; String(s == null ? '' : s).split(' ').forEach(function (x) { var m = /^(\d{1,2})-(\d{1,2})$/.exec(x); if (m && out.length < 5 && +m[1] <= 13 && +m[2] <= 13) out.push([+m[1], +m[2]]); }); return out; } /* 저장 검사(cleanE)와 같은 범위 */
+function fromHost(p, prev) { // 폰이 보낸 상태 → 계산용 상태(이상한 값은 0·기본값)
+  var E = fresh({ gT: prev.gT, sNeed: prev.sNeed, noAd: prev.noAd });
+  E.sets = parseSets(p.sets);
+  E.g = [I(p.g0, 0, 13, 0), I(p.g1, 0, 13, 0)];
+  E.tb = p.tb === true; E.done = p.done === true; E.srv = p.srv === 1 ? 1 : 0;
+  if (typeof p.noAd === 'boolean') E.noAd = p.noAd;
+  if (p.v === 2) {
+    E.p = [I(p.p0, 0, 999, 0), I(p.p1, 0, 999, 0)];
+    if (p.gT === 4 || p.gT === 6) E.gT = p.gT;
+    if (p.sNeed === 1 || p.sNeed === 2) E.sNeed = p.sNeed;
+    E.pt = [I(p.pt0, 0, 99999, 0), I(p.pt1, 0, 99999, 0)];
+  } else { // v1.83 이전 점수판: 표시 글자에서 거꾸로(세트당 게임 수·세트 수는 짐작)
+    var d0 = String(p.d0), d1 = String(p.d1), m = { '0': 0, '15': 1, '30': 2, '40': 3 }, has = function (k) { return Object.prototype.hasOwnProperty.call(m, k); };
+    if (E.tb) E.p = [I(d0, 0, 999, 0), I(d1, 0, 999, 0)];
+    else if (d0 === 'Ad') E.p = [4, 3];
+    else if (d1 === 'Ad') E.p = [3, 4];
+    else E.p = [has(d0) ? m[d0] : 0, has(d1) ? m[d1] : 0];
+    var mx = 0; E.sets.forEach(function (s) { mx = Math.max(mx, s[0], s[1]); });
+    var gm = Math.max(E.g[0], E.g[1]), gn = Math.min(E.g[0], E.g[1]);
+    if (mx >= 6 || gm >= 5 || (!E.tb && gm === 4 && (gn <= 2 || gn === 4))) E.gT = 6; else if (mx === 4 || mx === 5 || (E.tb && gm === 4 && gn === 4)) E.gT = 4;
+    var w = setWins(E); if (!E.done && Math.max(w[0], w[1]) >= 1) E.sNeed = 2; else if (E.done) E.sNeed = Math.max(w[0], w[1]) === 1 ? 1 : 2; /* 한 세트를 이긴 쪽이 있는데 안 끝났으면 3판 2선승 */
+    E.pt = [prev.pt[0], prev.pt[1]];
+  }
+  return E;
+}
+
+// ── 워치에 두는 것(이 워치 localStorage 'tm-rc-m', 12시간) ──
+// E 지금 점수 · Eh 되돌리기용 이전 점수(폰과 끊겼을 때만 씀) · tag 맞춰 놓은 폰 경기 번호('old' = v1.83 이전 점수판, null = 워치 혼자 센 경기) · ign 따로 세기로 한 폰 경기
+// baseE 마지막으로 폰과 맞았던 점수(base = 그 열쇠) · unsent 폰에 아직 안 보낸 변화 수
+// tx 보냈는데 폰이 아직 받았다고 안 한 탭 [{id, s 쪽(0·1, 되돌리기 -1), at 마지막으로 보낸 때, t0 처음 보낸 때, e 그 뒤 워치 점수, rs 다시 보낸 때의 폰 상태 시각, n 다시 보낸 수, ooo 순서가 바뀌어 다시 보내지 않음}]
+// ver 변화 번호 · nm 버튼 이름
+var M = null, SID = '';
+function newSid() { var a = 'abcdefghijkmnpqrstuvwxyz23456789', s = ''; for (var i = 0; i < 5; i++) s += a.charAt(Math.floor(Math.random() * a.length)); return s; }
+function newId() { M.n = (M.n || 0) + 1; return SID + '.' + M.n.toString(36); }
+function blankM() { return { E: fresh(fmtLoad()), Eh: [], tag: null, ign: null, baseE: null, base: null, unsent: 0, tx: [], ver: 0, n: 0, last: '', nm: { n0: '', n1: '' }, at: now() }; }
+var TAGRE = /^(old|[a-z0-9]{4,16})$/, IDRE = /^[A-Za-z0-9._-]{1,24}$/;
+function loadM() {
+  SID = newSid(); M = blankM();
+  var m = null; try { m = JSON.parse(localStorage.getItem('tm-rc-m') || 'null'); } catch (e) {}
+  if (!m || typeof m !== 'object' || m.v !== 1 || typeof m.at !== 'number' || now() - m.at > 12 * 3600e3 || now() - m.at < -60e3) return false;
+  var E = cleanE(m.E); if (!E) return false;
+  M.E = E;
+  M.Eh = (Array.isArray(m.Eh) ? m.Eh : []).map(cleanE).filter(Boolean).slice(-300);
+  M.tag = typeof m.tag === 'string' && TAGRE.test(m.tag) ? m.tag : null;
+  M.ign = typeof m.ign === 'string' && TAGRE.test(m.ign) ? m.ign : null;
+  M.baseE = cleanE(m.baseE); M.base = M.baseE ? keyOf(M.baseE) : null;
+  M.unsent = I(m.unsent, 0, 99999, 0);
+  M.tx = (Array.isArray(m.tx) ? m.tx : []).filter(function (x) { return x && typeof x.id === 'string' && IDRE.test(x.id); }).slice(-60).map(function (x) { return { id: x.id, s: x.s === 0 || x.s === 1 ? x.s : -1, at: 0, t0: 0, e: cleanE(x.e), rs: 0, n: 0, ooo: x.ooo === true }; }); /* 다시 열면 '오래된 것' — 같은 번호로 다시 보냄(폰이 번호를 기억해 두 번 세지 않음) */
+  M.ver = I(m.ver, 0, 1e9, 0); M.n = I(m.n, 0, 1e9, 0);
+  if (m.nm && typeof m.nm === 'object') M.nm = { n0: typeof m.nm.n0 === 'string' ? m.nm.n0.slice(0, 60) : '', n1: typeof m.nm.n1 === 'string' ? m.nm.n1.slice(0, 60) : '' };
+  M.at = m.at;
+  return true;
+}
+function save() { try { M.at = now(); localStorage.setItem('tm-rc-m', JSON.stringify({ v: 1, E: M.E, Eh: M.Eh.slice(-300), tag: M.tag, ign: M.ign, baseE: M.baseE, unsent: M.unsent, tx: M.tx.slice(-60).map(function (x) { return { id: x.id, s: x.s, e: x.e, ooo: !!x.ooo }; }), ver: M.ver, n: M.n, nm: M.nm, at: M.at })); } catch (e) {} }
+
+// ── 폰(점수판)과 연결 ──
+var client = null, chan = null, link = 'off', code = '', wantLink = false, linkAt = 0, lastHello = 0, libAt = 0, libBusy = false;
+var H = null, Hat = 0, Hv2 = false, Hmid = null, Hack = [], Hnack = [], Hq = -1, syncs = [], syncQ = null, lastSyncAt = 0, syncFail = 0, syncTry = 0, ask = null, lastLocalAt = 0, sayU = null, ackedUndo = false;
+function hk() { return Hv2 ? Hmid : 'old'; }
+function aligned() { return !!H && M.tag === hk() && M.ign !== hk(); }
+function ignored() { return !!H && !!M.ign && M.ign === hk(); }
+function txStale() { return M.tx.some(function (x) { return age(x.t0) >= 3000; }); }
+function hostHeard() { return !!H && age(Hat) < 35000 && M.tx.every(function (x) { return Hat >= x.t0 || age(x.t0) < 3000; }); } // 폰이 최근에 말함(보낸 탭 뒤로도)
+function liveOk() { // 탭을 지금 폰에 바로 보내도 되나(폰이 한동안 말이 없어도 보냄 — 못 받으면 같은 번호로 다시)
+  if (link !== 'up' || !aligned() || H.done === true || ask) return false;
+  if (!Hv2) return true; /* 옛 점수판: 예전처럼 늘 보냄(번호표를 몰라 다시 보내기·맞추기는 없음) */
+  return !syncQ && M.unsent === 0 && !M.tx.some(function (x) { return x.ooo || x.n >= 3 || age(x.at) >= 3000; }); /* 다시 보내는 중인 탭은 '가는 중' — 세 번 다 안 되거나 폰이 3초 넘게 말이 없으면 그다음 탭부터 맞추기로 */
+}
+function send(ev, payload) {
+  if (!chan || link !== 'up') return false;
+  try { var r = chan.send({ type: 'broadcast', event: ev, payload: payload }); if (r && typeof r.then === 'function') r.then(null, function () {}); return true; } catch (e) { return false; }
+}
+function hello() { lastHello = now(); send('hello', {}); }
+function teardown() {
+  var c = chan; chan = null; link = 'off';
+  if (c) { try { if (client && typeof client.removeChannel === 'function') client.removeChannel(c); else if (typeof c.unsubscribe === 'function') c.unsubscribe(); } catch (e) {} }
+}
+function resetHost() { H = null; Hat = 0; Hv2 = false; Hmid = null; Hack = []; Hnack = []; Hq = -1; syncs = []; syncQ = null; syncFail = 0; askClose(); }
+function libLoad() { // supabase 스크립트 — 열 때 한 번, 실패하면(인터넷 없이 열림) 연결을 다시 시도할 때 20초마다(불러오는 중이면 또 넣지 않음)
+  if (window.supabase || window.__testClient || libBusy || age(libAt) < 20000) return;
+  libAt = now(); libBusy = true;
+  try { var s = document.createElement('script'); s.src = SB_SRC; s.async = true; s.onload = function () { libBusy = false; if (wantLink && link !== 'up') connect(); else if (!wantLink && joinShown() && !pairCh) pairStart(); }; s.onerror = function () { libBusy = false; try { s.parentNode.removeChild(s); } catch (e) {} }; document.head.appendChild(s); } catch (e) { libBusy = false; }
+}
+function connect() {
+  if (!wantLink || !code) return;
+  teardown(); linkAt = now(); link = 'conn';
+  try {
+    if (!client) client = window.__testClient || (window.supabase && typeof window.supabase.createClient === 'function' ? window.supabase.createClient(SB_URL, SB_KEY) : null);
+  } catch (e) { client = null; }
+  if (!client) { link = 'off'; libLoad(); renderLink(); return; }
+  try {
+    var ch = client.channel('score:' + code, { config: { broadcast: { self: false } } });
+    chan = ch;
+    ch.on('broadcast', { event: 'state' }, function (p) { if (chan === ch) onState(p && p.payload); });
+    ch.subscribe(function (st) {
+      if (chan !== ch) return;
+      if (st === 'SUBSCRIBED') { link = 'up'; linkAt = now(); hello(); }
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') { link = 'conn'; }
+      renderLink();
+    });
+  } catch (e) { chan = null; link = 'off'; }
+  renderLink();
+}
+function onState(p) { // 폰이 보낸 점수
+  if (!p || typeof p !== 'object') return;
+  var mid = p.v === 2 && typeof p.mid === 'string' && /^[a-z0-9]{4,16}$/.test(p.mid) ? p.mid : null;
+  var q = mid && typeof p.q === 'number' && isFinite(p.q) ? p.q : -1;
+  if (mid && mid === Hmid && q >= 0 && q < Hq && Hq - q <= 200) return; /* 늦게 도착한 옛 상태(같은 경기의 조금 앞 번호)는 버림 — 크게 차이 나면(폰을 다시 엶·이상한 값) 받음 */
+  if (mid !== Hmid) { syncs = []; syncQ = null; syncFail = 0; } // 다른 경기
+  H = p; Hat = now(); Hmid = mid; Hv2 = !!mid; Hq = q;
+  var str = function (a) { return Array.isArray(a) ? a.filter(function (x) { return typeof x === 'string' && x.length < 40; }).slice(-80) : []; };
+  Hack = Hv2 ? str(p.ack) : []; Hnack = Hv2 ? str(p.nack) : [];
+  reconcile();
+}
+function takeNames() { M.nm = { n0: typeof H.n0 === 'string' ? H.n0.slice(0, 60) : '', n1: typeof H.n1 === 'string' ? H.n1.slice(0, 60) : '' }; }
+function alignTo(HE) { // 폰과 같은 점수 — 폰 것(서브·총 포인트·경기 방식·끝남)을 그대로 쓰고 맞춤 표시
+  M.E = HE; M.tag = hk(); M.ign = null; M.baseE = clone(HE); M.base = keyOf(HE); M.unsent = 0; M.tx = []; syncQ = null; syncFail = 0; syncTry = 0; askClose(); takeNames();
+}
+function oneAhead(HE) { var f = Hv2 ? keyOf : viewKey, k = f(HE); return !M.E.done && (f(applyPoint(M.E, 0)) === k || f(applyPoint(M.E, 1)) === k); }
+function adopt(HE, reset) { // 폰 점수로 — 워치 되돌리기 칸은 폰 기록과 한 점씩 맞을 때만 이어 감
+  var k = keyOf(HE);
+  if (reset) M.Eh = [];
+  else if (k !== keyOf(M.E)) {
+    var at = -1; for (var i = M.Eh.length - 1; i >= Math.max(0, M.Eh.length - 30); i--) if (keyOf(M.Eh[i]) === k) { at = i; break; }
+    if (at >= 0) M.Eh.length = at; /* 폰에서 되돌리기 = 워치의 이전 점수로 돌아감 → 거기까지 빼기 */
+    else if (oneAhead(HE)) { M.Eh.push(clone(M.E)); if (M.Eh.length > 300) M.Eh.shift(); } /* 폰이 딱 한 점 앞섬 = 폰 기록 맨 위가 지금 워치 점수 */
+    else M.Eh = []; /* 그 밖(되돌린 뒤 다시 누름·여러 점을 건너뜀) — 워치 기억이 폰 기록과 어긋나므로 버림(다음 되돌리기는 폰에 맡김) */
+  }
+  alignTo(HE);
+}
+function sendSync(HE) { // '폰이 지금 이 점수(from)면 워치 점수(to)로' — 번호표 ids는 폰이 다시 세지 않음
+  var t = now(); if (!Hv2 || syncQ || Hat <= lastSyncAt || age(lastSyncAt) < 1200) return; /* 폰이 새로 말한 뒤에만 한 번 — 폰이 없으면 보내지 않음 */
+  var id = newId(), E = M.E, ids = M.tx.map(function (x) { return x.id; });
+  var cp = function (s) { return { sets: s.sets, g: s.g, p: s.p, tb: s.tb, srv: s.srv, pt: s.pt }; };
+  var ok = send('sync', { id: id, ids: ids, mid: Hmid, why: M.last === 'u' ? 'undo' : 'sync', from: keyOf(HE), to: cp(E), chain: M.Eh.slice(-40).concat([E]).map(cp) }); /* chain = 워치가 지나온 점수(끝 = to) — 폰이 한 점씩 기록 */
+  if (!ok) return;
+  lastSyncAt = t; syncQ = { id: id, ids: ids, ver: M.ver, at: t, from: keyOf(HE), to: keyOf(E), e: clone(E) };
+  syncs.push(syncQ); if (syncs.length > 6) syncs.shift();
+}
+function resendTx() { // 답 없는 탭 — 같은 번호로 다시(폰은 같은 번호를 한 번만 셈). 폰이 새로 말한 뒤에만, 세 번까지
+  var did = false;
+  M.tx.forEach(function (x) { if (!x.ooo && age(x.at) >= 2500 && x.rs < Hat && x.n < 3) { if (send(x.s === -1 ? 'undo' : 'point', x.s === -1 ? { id: x.id } : { side: x.s, id: x.id })) { x.at = now(); x.rs = Hat; x.n++; did = true; } } });
+  return did;
+}
+function takeAcks(HE, hkey) { // 폰이 받은(ack)·못 받은(nack) 번호 정리
+  ackedUndo = false;
+  syncs.forEach(function (s) { if (sayU && Hack.indexOf(s.id) >= 0 && s.ids.indexOf(sayU) >= 0) sayU = null; }); /* 맞추기에 묻혀 받은 되돌리기는 '되돌렸다'고 말하지 않음(폰이 셀 수 없어 막았던 것일 수 있음) */
+  if (Hack.length && M.tx.length) {
+    var hit = M.tx.map(function (x) { return Hack.indexOf(x.id) >= 0; }), last = hit.lastIndexOf(true);
+    if (last >= 0) {
+      var gap = false, sim = M.baseE ? clone(M.baseE) : null, ok = true;
+      M.tx.forEach(function (x, i) { if (i > last) return; if (!hit[i]) { gap = true; x.ooo = true; } else if (x.s === -1) { ok = false; ackedUndo = true; if (i === last && keyOf(x.e || M.E) !== hkey) { var u = -1; for (var z = M.Eh.length - 1; z >= 0; z--) if (keyOf(M.Eh[z]) === hkey) { u = z; break; } if (u >= 0) M.Eh.length = u; else M.Eh = []; } } else if (sim) sim = applyPoint(sim, x.s); }); /* 되돌리기가 예상과 다른 곳에 닿음 → 워치 기억을 폰에 맞춤 */
+      var lastE = M.tx[last].e;
+      if (!gap && lastE && keyOf(lastE) === hkey) { M.baseE = clone(HE); M.base = hkey; }
+      else if (gap && ok && sim && keyOf(sim) === hkey) { M.baseE = clone(HE); M.base = hkey; } /* 앞 탭이 빠지고 뒤 탭만 셈 — 폰은 base + 받은 탭 */
+      else if (!gap && !ok) { M.baseE = clone(HE); M.base = hkey; } /* 되돌리기는 폰 기록에서 한 칸 — 폰 점수가 기준 */
+      if (sayU && Hack.indexOf(sayU) >= 0) { sayU = null; speak('되돌리기. ' + scoreText(viewOf(HE))); }
+      M.tx = M.tx.filter(function (x, i) { return !hit[i]; });
+    }
+  }
+  syncs.slice().forEach(function (s) { // 보낸 sync — 늦게 와도 처리
+    if (Hack.indexOf(s.id) >= 0) {
+      M.tx = M.tx.filter(function (x) { return s.ids.indexOf(x.id) < 0; });
+      if (M.ver === s.ver) M.unsent = 0;
+      if (s.to === hkey) { M.baseE = clone(HE); M.base = hkey; }
+      syncs = syncs.filter(function (z) { return z !== s; }); if (syncQ === s) syncQ = null; syncFail = 0; syncTry = 0;
+    } else {
+      var nk = Hnack.filter(function (x) { return x.indexOf(s.id + ':') === 0; })[0];
+      if (nk) { syncs = syncs.filter(function (z) { return z !== s; }); if (syncQ === s) { syncQ = null; if (nk.slice(-1) !== 'k') syncFail++; } } /* k = 그사이 폰 점수가 바뀜(다시 판단) · 그 밖(이상한 값·끝난 경기·다른 경기)은 실패로 셈 */
+    }
+  });
+}
+function reconcile() {
+  if (!H) { save(); render(); return; }
+  var HE = fromHost(H, M.E), hkey = keyOf(HE);
+  if (Hv2) takeAcks(HE, hkey);
+  if (ignored()) { save(); render(); return; } // 따로 세기
+  if (ask) { if (ask.hk !== hk() || H.done === true) askClose(); else { fillAsk(HE); render(); return; } } // 묻는 동안엔 몰래 보내지 않음(폰 경기가 바뀌면 다시 판단)
+  if (M.tag !== hk()) { // 워치가 혼자 센 경기·폰의 다른 경기
+    if (H.done === true) { render(); return; } // 폰의 끝난 경기는 건드리지 않음
+    if (Hat < lastLocalAt) { save(); render(); return; } // 마지막 워치 탭보다 옛 폰 상태 — 폰이 다시 말하면 판단
+    if (pristine(M.E) || (!M.unsent && !M.tx.length)) { adopt(HE, true); save(); render(); return; } // 센 게 없음·다 보낸 경기 → 폰의 경기를 따름
+    if (hkey === keyOf(M.E)) { alignTo(HE); save(); render(); return; } // 같은 점수 — 이어 붙이기만
+    openAsk(HE); save(); render(); return;
+  }
+  // 맞춰 놓은 경기
+  if (H.done === true) { if (hkey !== keyOf(M.E) || !M.E.done) adopt(HE, false); else alignTo(HE); save(); render(); return; } // 폰에서 끝남 — 더 바꿀 수 없음
+  if (!Hv2) { // v1.83 이전 점수판: 번호표·sync를 모름 → 폰 점수가 기준(예전처럼). 끊긴 사이 워치에서 센 것은 맞추지 못함
+    if (viewKey(HE) === viewKey(M.E)) alignTo(HE);
+    else if ((M.unsent || M.tx.length) && (Hat <= lastLocalAt || age(lastLocalAt) < 1200)) { /* 폰이 아직 그 탭 뒤로 말하지 않음 — 기다림 */ }
+    else { var lost = M.unsent || M.tx.length; adopt(HE, false); if (lost) speak('폰 점수로 맞췄어요'); }
+    save(); render(); return;
+  }
+  if (syncQ) { if (age(syncQ.at) < 3000) { render(); return; } if (Hat > syncQ.at) syncTry++; syncQ = null; } // 답(ack·nack) 기다림 — 3초 넘으면 폰이 다시 말할 때 다시(폰이 말했는데 답이 없던 횟수는 셈)
+  if (syncFail >= 3 || syncTry >= 8) { syncFail = 0; syncTry = 0; openAsk(HE, true); save(); render(); return; } // 폰이 세 번 거절·여덟 번 답 없음 → 물어봄(폰 점수 쓰기·따로 세기)
+  if (!M.tx.length && !M.unsent) { if (hkey !== keyOf(M.E)) { if (ackedUndo) alignTo(HE); else adopt(HE, false); } else alignTo(HE); save(); render(); return; } // 안 보낸 게 없음 → 폰을 따름
+  if (!M.unsent) { // 보낸 탭만 답이 없음 → 같은 번호로 다시(세 번까지), 순서가 바뀐 탭은 맞추기로
+    if (M.tx.some(function (x) { return !x.ooo && age(x.at) < 2500; }) || resendTx() || M.tx.some(function (x) { return !x.ooo && x.n < 3; })) { save(); render(); return; }
+  }
+  if (hkey === keyOf(M.E) || hkey === M.base) sendSync(HE); // 폰이 그대로(또는 이미 같음) → 워치 것을 맞춤
+  else openAsk(HE); // 끊긴 사이 폰도 바뀌고 워치도 바뀜 → 물어봄
+  save(); render();
+}
+function fillAsk(HE) {
+  var vp = viewOf(HE), vw = viewOf(M.E);
+  if (ask) { ask.noSend = ask.noSend0 || !Hv2 || !sameFmt(M.E, HE) || (M.E.done && !pristine(HE)); $('ask-send').style.display = ask.noSend ? 'none' : ''; } /* 묻는 동안 폰 점수가 바뀌면 보내기 버튼도 다시 판단 */
+  $('ask-phone').textContent = '폰 ' + (vp.done ? '경기 종료' : vp.d0 + ':' + vp.d1) + ' · 게임 ' + vp.g0 + '-' + vp.g1 + (vp.sets ? ' · 세트 ' + vp.sets : '');
+  $('ask-watch').textContent = '워치 ' + (vw.done ? '경기 종료' : vw.d0 + ':' + vw.d1) + ' · 게임 ' + vw.g0 + '-' + vw.g1 + (vw.sets ? ' · 세트 ' + vw.sets : '');
+}
+function openAsk(HE, noSend) {
+  if (!ask) { speak('폰 점수판과 점수가 달라요'); vib(NO); }
+  ask = { hk: hk(), at: ask ? ask.at : now(), noSend0: !!noSend || !!(ask && ask.noSend0), noSend: true };
+  fillAsk(HE);
+  $('ask').className = 'ov show';
+}
+function askClose() { ask = null; var a = $('ask'); if (a) a.className = 'ov'; }
+function askPick(k) {
+  if (!ask || !H) { askClose(); return; }
+  if (age(ask.at) < 1200) return; /* 뜬 직후 손이 버릇처럼 누른 탭은 무시(점수 버튼 자리) */
+  var HE = fromHost(H, M.E);
+  if (ask.hk !== hk()) { askClose(); reconcile(); return; } // 그사이 폰 경기가 바뀜 → 다시 판단
+  if (k === 'send' && !ask.noSend) { askClose(); M.tag = hk(); M.ign = null; M.baseE = clone(HE); M.base = keyOf(HE); takeNames(); M.unsent = Math.max(1, M.unsent); lastSyncAt = 0; syncFail = 0; sendSync(HE); speak('워치 점수를 폰에 보냈어요'); }
+  else if (k === 'phone') { adopt(HE, true); speak('폰 점수로 바꿨어요. ' + scoreText(viewOf(M.E))); }
+  else if (k === 'keep') { M.ign = hk(); askClose(); speak('워치 점수 그대로 세요'); }
+  else return;
+  save(); render();
+}
+
+// ── 탭 ──
+function poke() { if (link === 'up' && age(lastHello) > 500) hello(); if (H) reconcile(); } // 안 보낸 변화 → 폰에 물어보고 맞춤
 function sendPoint(side) {
-  if (!chan) return;
-  pendingSpeak = true; // 점수판이 새 상태를 보내면 그때 읽음 (사용자 탭 직후라 음성 허용됨)
-  chan.send({ type: 'broadcast', event: 'point', payload: { side: side } });
-  if (navigator.vibrate) navigator.vibrate(25);
+  if (side !== 0 && side !== 1) return;
+  var oldLive = aligned() && !Hv2 && H.done !== true && link === 'up';
+  if (M.E.done && !oldLive) { speak('경기가 끝났어요. 새 경기는 메뉴에서'); vib(NO); return; }
+  var ok = liveOk(), a = M.E, was = M.E.done;
+  if (!was) { M.Eh.push(clone(a)); if (M.Eh.length > 300) M.Eh.shift(); M.E = applyPoint(a, side); }
+  M.ver++; M.last = 'p'; lastLocalAt = now();
+  var id = newId();
+  if (ok && send('point', { side: side, id: id })) M.tx.push({ id: id, s: side, at: now(), t0: now(), e: clone(M.E), rs: 0, n: 0 }); else M.unsent++;
+  save(); render(); if (was) vib(25); else sayAfter(a, M.E); /* 옛 점수판에서 워치만 끝났다고 본 경우 — 폰에 보내기만(폰 점수가 오면 따름) */
+  if (M.unsent) poke();
 }
 function sendUndo() {
-  if (!chan) return;
-  pendingSpeak = true;
-  chan.send({ type: 'broadcast', event: 'undo', payload: {} });
-  if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
+  if (aligned() && (H.done === true || (M.E.done && !M.unsent && !M.tx.length))) { speak('끝난 경기는 되돌릴 수 없어요'); vib(NO); return; } /* 점수판도 끝난 경기는 되돌리지 않음 — 워치만 끝냈고 아직 폰에 안 간 마지막 탭은 되돌릴 수 있음 */
+  var online = liveOk() && (!Hv2 || !M.tx.length), had = M.Eh.length > 0; /* v1.84 점수판: 받았다고 안 한 탭이 있으면 undo를 보내지 않음(그 탭이 빠졌으면 폰이 엉뚱한 점수를 되돌림) — 맞추기로. 옛 점수판은 예전처럼 늘 undo */
+  if (!online && !had) { speak('되돌릴 게 없어요'); vib(NO); return; }
+  var id = newId();
+  if (online && send('undo', { id: id })) { /* 연결돼 있으면 v1.83처럼 폰이 자기 기록에서 한 칸 되돌림 — 화면은 미리 바꾸고, 폰 답이 오면 폰 점수로 */
+    if (had) M.E = M.Eh.pop();
+    M.tx.push({ id: id, s: -1, at: now(), t0: now(), e: had ? clone(M.E) : null, rs: 0, n: 0 });
+    if (!had) sayU = id;
+  } else if (had) { M.E = M.Eh.pop(); M.unsent++; } /* 끊겼을 때 — 워치 점수에서 한 칸, 다시 연결되면 맞춤 */
+  else { speak('되돌릴 게 없어요'); vib(NO); return; }
+  M.ver++; M.last = 'u'; lastLocalAt = now();
+  save(); render(); if (had) speak('되돌리기. ' + scoreText(viewOf(M.E))); vib([15, 40, 15]);
+  if (M.unsent) poke();
+}
+function sayAfter(a, b) {
+  var setCh = b.sets.length !== a.sets.length, gameCh = setCh || b.g[0] !== a.g[0] || b.g[1] !== a.g[1], t;
+  if (b.done) t = '경기 종료. 세트 ' + saySets(setsStr(b));
+  else if (setCh) t = '세트. ' + saySets(setsStr(b));
+  else if (gameCh) t = '게임. ' + b.g[0] + ' 대 ' + b.g[1] + (b.tb ? '. 타이브레이크' : '');
+  else t = scoreText(viewOf(b));
+  speak(t);
+  vib(b.done ? [80, 60, 80, 60, 160] : gameCh ? [60, 50, 60] : 25);
+}
+function speakNow() { speak(scoreText(viewOf(M.E)), true); vib(15); } // 점수판 탭 → 지금 점수 읽기
+
+// ── 화면 ──
+var lastLab = '';
+function render() {
+  var E = M.E, v = viewOf(E);
+  $('sets').textContent = (v.sets ? '세트 ' + v.sets : '') + (v.done ? ' · 🏁 종료' : '');
+  $('games').innerHTML = '<i></i>게임 <span class="g0">' + Number(v.g0) + '</span> - <span class="g1">' + Number(v.g1) + '</span>';
+  $('pts').innerHTML = '<span class="p0">' + esc(v.d0) + '</span><span class="colon">:</span><span class="p1">' + esc(v.d1) + '</span>';
+  lastLab = v.done ? '경기 종료' : v.tb ? '🔥 타이브레이크' : (v.d0 === '40' && v.d1 === '40') ? (E.noAd ? '듀스 · 결정 포인트' : '듀스') : (v.d0 === 'Ad' || v.d1 === 'Ad') ? '어드밴티지' : '';
+  $('btn-us').textContent = '🟢 ' + String(M.nm.n0 || '우리'); /* v1.82: textContent는 글자 그대로 넣음 — esc()를 겹치면 &가 &amp;로 보임 */
+  $('btn-them').textContent = '🔴 ' + String(M.nm.n1 || '상대');
+  renderLink();
+}
+function linkState() { // c 점 색 · l 긴 글(경기 상황이 없을 때) · s 짧은 글(듀스 등 옆에)
+  if (ask) return { c: 'sync', l: '폰 점수와 달라요', s: '확인 필요' };
+  if (ignored()) return { c: 'solo', l: '폰과 따로 세는 중', s: '따로' };
+  if (!wantLink) return { c: 'solo', l: '워치로만 세는 중', s: '워치만' };
+  if (link === 'up' && hostHeard() && aligned()) {
+    if (M.unsent || txStale() || syncQ) return { c: 'sync', l: '폰에 맞추는 중', s: '맞추는 중' };
+    return { c: 'on', l: '폰과 연결됨', s: '연결됨' };
+  }
+  return { c: 'solo', l: link === 'up' ? '혼자 세는 중 · 폰 대기' : '혼자 세는 중 · 연결 중', s: '혼자' };
+}
+function renderLink() {
+  if (!M) return;
+  var ls = linkState(), dot = document.querySelector('#games i');
+  if (dot) dot.className = ls.c;
+  $('state').textContent = lastLab ? lastLab + ' · ' + ls.s : ls.l;
+}
+function showPlay() { $('join').style.display = 'none'; $('play').style.display = 'flex'; pairStop(); renderVoiceBtn(); render(); }
+function joinShown() { return $('join').style.display !== 'none'; }
+function codeMode(on) { var j = $('join'); if (on === undefined) on = j.className.indexOf('code') < 0; j.className = on ? 'code' : ''; $('code-tog').textContent = on ? '번호로 연결' : '코드로 연결'; }
+// ── v1.84 번호로 연결: 이 워치의 번호(숫자 6자리)를 보여 주고 pair:<번호>에서 기다림 → 폰 점수판 [워치 연결]에 그 번호를 넣으면 폰이 리모컨 코드를 보내 줌 ──
+//   받으면 'paired'로 답(폰은 자기 확인 번호의 답만 받음)하고 그 코드로 joinRoom(지난 코드 기억도 그대로 — 다음부터는 열기만 하면 붙음).
+//   번호는 채널에 들어간 뒤에만 보임. 번호는 10분 동안 기억(tm-rc-pair) — 폰에서 치는 동안 워치 화면이 꺼져 페이지가 다시 열려도 같은 번호.
+//   잠깐 끊기면 라이브러리가 같은 번호로 다시 들어가게 둠 — 20초 넘게 계속 못 들어가면 그때 새 번호(라이브러리가 같은 주제의 나가는 중인 채널을 돌려주지 않게).
+//   6자리인 까닭: pair:는 익명 공개 채널이고 폰의 고정 코드가 그 위로 감 — 4자리(9000개)면 남이 모든 번호를 듣거나 밀어 넣을 수 있음.
+var pairNo = '', pairCh = null, pairUp = false, pairAt = 0, pairDownAt = 0;
+function pairNew() { pairNo = String(100000 + Math.floor(Math.random() * 900000)); try { localStorage.setItem('tm-rc-pair', JSON.stringify({ n: pairNo, at: now() })); } catch (e) {} }
+function pairLoad() { try { var o = JSON.parse(localStorage.getItem('tm-rc-pair') || 'null'); if (o && typeof o.n === 'string' && /^[1-9][0-9]{5}$/.test(o.n) && typeof o.at === 'number' && now() - o.at >= -60000 && now() - o.at < 600000) return o.n; } catch (e) {} return ''; }
+function pairForget() { pairNo = ''; try { localStorage.removeItem('tm-rc-pair'); } catch (e) {} }
+function pairRender() {
+  var n = $('pair-no'), m = $('pair-msg'); if (!n || !m) return;
+  if (pairUp && pairNo) { n.textContent = pairNo.slice(0, 3) + ' ' + pairNo.slice(3); n.className = ''; m.innerHTML = '폰 점수판 [워치 연결]에<br>이 번호를 넣으세요'; }
+  else { n.textContent = '연결 중…'; n.className = 'wait'; m.innerHTML = '인터넷에 연결되면<br>번호가 나와요'; }
+}
+function pairStop() {
+  var c = pairCh; pairCh = null; pairUp = false;
+  if (c) { try { if (client && typeof client.removeChannel === 'function') client.removeChannel(c); else if (typeof c.unsubscribe === 'function') c.unsubscribe(); } catch (e) {} }
+  pairRender();
+}
+function pairStart() {
+  if (wantLink || !joinShown()) { pairStop(); return; }
+  if (pairCh) return;
+  pairAt = now(); pairDownAt = pairAt;
+  try {
+    if (!client) client = window.__testClient || (window.supabase && typeof window.supabase.createClient === 'function' ? window.supabase.createClient(SB_URL, SB_KEY) : null);
+  } catch (e) { client = null; }
+  if (!client) { libLoad(); pairRender(); return; }
+  if (!pairNo) pairNo = pairLoad();
+  if (!pairNo) pairNew();
+  try {
+    var ch = client.channel('pair:' + pairNo, { config: { broadcast: { self: false } } });
+    pairCh = ch;
+    ch.on('broadcast', { event: 'pair' }, function (p) { if (pairCh === ch) pairGot(ch, p && p.payload); });
+    ch.subscribe(function (st) {
+      if (pairCh !== ch) return;
+      if (st === 'SUBSCRIBED') { pairUp = true; pairDownAt = 0; }
+      else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT' || st === 'CLOSED') { if (pairUp || !pairDownAt) pairDownAt = now(); pairUp = false; }
+      pairRender();
+    });
+  } catch (e) { pairCh = null; pairUp = false; }
+  pairRender();
+}
+function pairGot(ch, q) { // 폰이 보낸 코드 — 6자리 영문·숫자만
+  if (!q || typeof q !== 'object' || typeof q.code !== 'string' || !/^[A-Z0-9]{6}$/.test(q.code) || wantLink || !joinShown()) return;
+  var id = typeof q.id === 'string' && IDRE.test(q.id) ? q.id : '';
+  try { var r = ch.send({ type: 'broadcast', event: 'paired', payload: { id: id } }); if (r && typeof r.then === 'function') r.then(null, function () {}); } catch (e) {}
+  pairCh = null; pairUp = false; pairForget(); /* 이 채널은 여기서 떼어 냄(두 번째 코드는 안 받음) — 답이 나갈 시간을 두고 닫음. 쓴 번호는 잊음 */
+  setTimeout(function () { try { if (client && typeof client.removeChannel === 'function') client.removeChannel(ch); else if (typeof ch.unsubscribe === 'function') ch.unsubscribe(); } catch (e) {} }, 1500);
+  $('code').value = q.code;
+  joinRoom();
+  speak('폰과 연결했어요'); vib(80);
+}
+function joinRoom() {
+  var c = ($('code').value || '').trim().toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(c)) { $('msg').textContent = '코드 6자리를 입력하세요'; return; }
+  if (c !== code) resetHost();
+  code = c; wantLink = true; M.ign = null;
+  try { localStorage.setItem('tm-rc-last', c); localStorage.setItem('tm-rc-auto', c); localStorage.removeItem('tm-rc-solo'); } catch (e) {}
+  save(); showPlay(); connect();
+}
+function soloStart() { // 코드 없이 — 폰 없이 워치로만
+  wantLink = false; code = ''; teardown(); resetHost();
+  try { localStorage.removeItem('tm-rc-auto'); localStorage.setItem('tm-rc-solo', '1'); } catch (e) {}
+  showPlay();
+}
+
+// ── 메뉴 ──
+var newArm = 0, newArmT = 0;
+function phoneOwns() { return aligned() && hostHeard() && H.done !== true; } // 폰과 연결된 진행 중 경기 — 새 경기는 폰에서
+function fmtLocked() { return !!M.tag && M.ign !== M.tag; } // 폰 경기에 맞춰 놓은 동안 경기 방식은 폰 것
+function menuOpen() { newArm = 0; menuRender(); $('menu').className = 'ov show'; }
+function menuClose() { $('menu').className = 'ov'; }
+function menuRender() {
+  var E = M.E, own = phoneOwns(), lock = fmtLocked(), HE = H ? fromHost(H, M.E) : null, ign = ignored();
+  $('menu-info').textContent = own ? '폰과 연결된 경기예요 — 새 경기·경기 방식은 점수판 폰에서' : ign ? '폰과 따로 세는 중이에요' : lock ? '경기 방식은 폰 경기 것을 써요' : !wantLink ? '워치로만 세요' : hostHeard() ? '워치가 직접 세요. 폰이 연결되면 맞춰요' : '폰이 안 들려요. 다른 폰과 연결하려면 [연결 끊기] → 번호';
+  $('m-new').textContent = newArm && age(newArm) < 4000 ? '한 번 더 누르면 0:0' : '새 경기 (0:0)';
+  $('m-gt').textContent = '세트당 ' + E.gT + '게임';
+  $('m-sn').textContent = E.sNeed === 1 ? '단판' : '3판 2선승';
+  $('m-ad').textContent = E.noAd ? '노애드 (듀스 한 점)' : '어드밴티지';
+  $('m-srv').textContent = '서브: ' + (E.srv ? '상대' : '우리');
+  $('m-new').disabled = own;
+  ['m-gt', 'm-sn', 'm-ad', 'm-srv'].forEach(function (k) { $(k).disabled = own || lock; });
+  $('m-phone').textContent = ign ? '폰 점수 따라가기' : '폰 점수로 맞추기';
+  $('m-phone').style.display = HE && H.done !== true && hostHeard() && (ign || keyOf(HE) !== keyOf(E)) ? '' : 'none';
+  $('m-link').textContent = wantLink ? '연결 끊기' : '폰과 연결';
+}
+function menuNew() {
+  if (phoneOwns()) return;
+  if (!newArm || age(newArm) > 4000) { newArm = now(); menuRender(); clearTimeout(newArmT); newArmT = setTimeout(function () { if ($('menu').className.indexOf('show') >= 0) menuRender(); }, 4100); return; }
+  newArm = 0; M.E = fresh(fmtLoad()); M.Eh = []; M.tx = []; M.unsent = 0; M.tag = null; M.baseE = null; M.base = null; syncQ = null; syncs = []; syncFail = 0; askClose(); lastLocalAt = now(); /* 따로 세기(ign)는 그대로 — 폰 점수 따라가기·연결 끊기·폰의 새 경기에서 풀림 */
+  save(); render(); menuClose(); speak('새 경기. 게임 0 대 0');
+}
+function menuFmt(k) {
+  if (phoneOwns() || fmtLocked()) return;
+  var E = M.E, f = fmtLoad();
+  if (k === 'gT') E.gT = f.gT = E.gT === 6 ? 4 : 6;
+  else if (k === 'sNeed') E.sNeed = f.sNeed = E.sNeed === 2 ? 1 : 2;
+  else if (k === 'noAd') E.noAd = f.noAd = !E.noAd;
+  try { localStorage.setItem('tm-rc-fmt', JSON.stringify(f)); } catch (e) {}
+  save(); render(); menuRender();
+}
+function menuSrv() { if (phoneOwns() || fmtLocked()) return; M.E.srv = 1 - M.E.srv; save(); render(); menuRender(); speak('서브 ' + (M.E.srv ? '상대' : '우리')); }
+function menuPhone() { if (!H) return; adopt(fromHost(H, M.E), true); save(); render(); menuClose(); speak('폰 점수로 바꿨어요. ' + scoreText(viewOf(M.E))); } /* 사용자가 고른 맞춤 — 워치의 옛 점수로 되돌아가지 않게 되돌리기 칸도 비움 */
+function menuLink() {
+  menuClose();
+  if (wantLink) { wantLink = false; teardown(); resetHost(); M.ign = null; save(); try { localStorage.removeItem('tm-rc-auto'); } catch (e) {} }
+  try { localStorage.removeItem('tm-rc-solo'); } catch (e) {} /* v1.84b: 연결 화면을 고른 것 — 화면이 꺼져 다시 열려도 '워치로만' 대신 번호 화면 */
+  $('play').style.display = 'none'; $('join').style.display = 'flex'; codeMode(false); $('msg').textContent = '코드 6자리를 넣고 연결을 누르세요';
+  pairStop(); pairNew(); pairStart(); /* v1.84: 연결 화면을 새로 열 때마다 새 번호 */
+}
+
+// ── 1초마다: 폰 확인·다시 연결·상태 ──
+function busy() { return (M.unsent || M.tx.length || syncQ || ask) && (!H || (!ignored() && !(M.tag !== hk() && H.done === true))); } // 폰을 자주 확인해야 하나(따로 세기·폰의 끝난 다른 경기면 아님)
+function tick() {
+  if (!wantLink && joinShown()) { /* v1.84 번호 채널: 없으면 5초마다 다시, 20초 넘게 계속 못 들어가면 새 번호로(잠깐 끊김은 라이브러리가 같은 번호로 다시 들어감) */
+    if (!pairCh) { if (age(pairAt) >= 5000) pairStart(); }
+    else if (!pairUp && pairDownAt && age(pairDownAt) >= 20000) { pairStop(); pairNew(); pairStart(); }
+  }
+  if (wantLink) {
+    if (link !== 'up' && age(linkAt) > 25000) connect(); // 끊긴 채 오래면 채널을 새로(인터넷 없이 열렸으면 스크립트부터)
+    if (link === 'up') {
+      var b = busy(), gap = b || !hostHeard() ? 3000 : 12000;
+      if (H && !Hv2 && b) gap = 12000; // 옛 점수판은 hello에 공기계 점수까지 다시 보냄 — 자주 부르지 않음
+      if (age(lastHello) >= gap) hello();
+    }
+  }
+  if (H && busy()) reconcile(); else renderLink();
 }
 $('code').addEventListener('keydown', function (e) { if (e.key === 'Enter') joinRoom(); });
-renderVoiceBtn();
-try { var lastCode = localStorage.getItem('tm-rc-last'); if (lastCode && /^[A-Z0-9]{6}$/.test(lastCode)) { $('code').value = lastCode; $('msg').textContent = '지난 코드 ' + lastCode + ' — 연결을 누르세요 (점수판 폰 코드는 고정이에요)'; } } catch (e) {}
+addEventListener('online', function () { if (wantLink) { libAt = 0; connect(); } else if (joinShown() && !pairCh) { libAt = 0; pairStart(); } });
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState !== 'visible') return;
+  if (wantLink) { if (link === 'up') hello(); else { libAt = 0; connect(); } }
+  else if (joinShown() && !pairCh) { libAt = 0; pairStart(); } /* 번호 채널이 있으면 그대로(라이브러리가 같은 번호로 다시 들어감) */
+});
+(function boot() {
+  var had = loadM();
+  renderVoiceBtn(); render();
+  try { /* 인터넷 없는 코트에서도 이 페이지가 열리게 — 'load'를 기다리지 않음(스크립트가 늦으면 load가 오지 않음) */
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function () {});
+      if (!navigator.serviceWorker.controller) navigator.serviceWorker.addEventListener('controllerchange', function warm() { /* 첫 방문: 워커가 붙은 뒤 이 페이지·스크립트를 한 번 더 받아 캐시에 넣음 */
+        navigator.serviceWorker.removeEventListener('controllerchange', warm);
+        try { fetch(location.origin + location.pathname, { cache: 'no-store' }).catch(function () {}); if (!window.__testClient) fetch(SB_SRC, { mode: 'no-cors' }).catch(function () {}); } catch (e) {}
+      });
+    }
+  } catch (e) {}
+  libLoad();
+  var last = '', auto = '', solo = false;
+  try { last = localStorage.getItem('tm-rc-last') || ''; auto = localStorage.getItem('tm-rc-auto') || ''; solo = localStorage.getItem('tm-rc-solo') === '1'; } catch (e) {}
+  if (/^[A-Z0-9]{6}$/.test(last)) { $('code').value = last; $('msg').textContent = '지난 코드 ' + last + ' — 연결을 누르세요'; }
+  if (/^[A-Z0-9]{6}$/.test(auto)) { code = auto; wantLink = true; showPlay(); connect(); } // 지난번에 연결해 둔 워치 — 열자마자 이어서(화면이 꺼졌다 켜져 페이지가 다시 열려도)
+  else if (solo && had) showPlay();
+  else pairStart(); /* v1.84: 연결 화면 — 워치 번호를 보여 주고 폰을 기다림(10분 안이면 아까 번호 그대로) */
+  setInterval(tick, 1000);
+})();
 </script>
 </body>
 </html>
