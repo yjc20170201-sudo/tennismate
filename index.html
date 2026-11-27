@@ -35,6 +35,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
   function tmCurVer() { try { return typeof APP_VERSION !== 'undefined' ? APP_VERSION : ''; } catch (e) { return ''; } }
   function tmBusy() { // 녹화·전송 대기·랠리 촬영·경기 진행·매치룸 녹화 중이면 자동 새로고침 금지
     try { if (typeof mhBusy !== 'undefined' && mhBusy) return true; } catch (e) {} // v1.28 내 영상 하이라이트 분석·만들기 중
+    try { if (typeof mhEd !== 'undefined' && mhEd && mhEd.rows && mhEd.rows.length) return true; } catch (e) {} // v1.85 분석을 마친 편집 화면(만들기 전·뒤) — 새로고침하면 긴 분석이 사라짐(업데이트 바만)
     try { if (typeof ccStream !== 'undefined' && ccStream) return true; } catch (e) {}
     try { if (typeof ccSendMode !== 'undefined' && ccSendMode) return true; } catch (e) {}
     try { if (typeof lvCam !== 'undefined' && lvCam) return true; } catch (e) {}
@@ -1159,7 +1160,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
   <div class="tab-content" id="tab-judge">
     <div class="section-title" id="mh-sec">내 영상 하이라이트</div>
     <div class="card" id="mh-card">
-      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 세로로 찍은 영상은 화면을 위·아래로 나눠 봐서 분석이 더 걸려요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 타수·길이 순으로 고르고, 화면이 공을 따라가며 먼 코트는 크게 확대하는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 서브도 찾아 표시해요. 타수는 공이 네트 너머로 오간 횟수를 화면으로 센 추정치라 먼 공을 놓치면 조금 적게 나올 수 있어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요.</div></details>
+      <details class="help"><summary>이렇게 찍으면 잘 돼요</summary><div class="muted">코트 뒤쪽 가운데(펜스 위처럼 높을수록 좋아요)에서 <b>가로로</b>, 코트 전체가 화면에 들어오게 찍은 영상이 가장 잘 돼요. 세로로 찍은 영상은 화면을 위·아래로 나눠 봐서 분석이 더 걸려요. 앱이 공을 인식해 랠리가 오간 구간만 찾아 타수·길이 순으로 고르고, 화면이 공을 따라가며 먼 코트는 크게 확대하는 세로(쇼츠) 영상이나 가로 영상으로 만들어요. 서브도 찾아 표시해요. 타수는 공이 네트 너머로 오간 횟수를 화면으로 센 추정치라 먼 공을 놓치면 조금 적게 나올 수 있어요. 분석은 폰 성능에 따라 영상 길이의 절반~한 배쯤 걸리고, 그동안 화면을 켜 둔 채 이 화면에 있어야 해요. 영상은 폰 밖으로 나가지 않아요. 타구 작전판(기본 켬)은 공을 친 순간 영상 왼쪽 위에 그 공을 친 쪽을 색으로(주황 = 카메라에서 가까운 쪽, 하늘색 = 먼 쪽 — 코트를 바꾸면 바뀌어요) 보여 주고, 확실할 때만 서브·리턴과 코스(크로스·스트레이트·센터)·깊이(서비스 박스·깊게·중간 깊이·짧게)를 적어요. 애매하면 '랠리'로만 적고, 번호·타수·인/아웃은 적지 않아요. 공 궤적 다듬기로 다시 본 랠리에서, 앱이 코트를 인식하고 잰 카메라 높이가 2.4m 이상일 때만 나와요(손에 들고 찍으면 대개 이보다 낮아 나오지 않아요). 관람석처럼 높은 곳에서 손에 들고 찍은 영상에도 나올 수 있지만 그런 영상의 정확도는 아직 재지 않았고, 앱으로 찍은 영상에는 아직 나오지 않아요. 정확도: 펜스 높이(2.6m·4.1m)에 단 폰 두 대로 찍은 복식 경기(2026-10-23) 중 미리 보지 않은 15분을 폰 속도로 재 보니, 두 카메라로 만든 기준과 맞춰 볼 수 있었던 공 중 친 쪽 76개 중 75개, 서브 17개 중 17개, 코스 23개 중 23개, 깊이 41개 중 39개(틀린 2개는 옆 칸)가 맞았고, 랠리 속 공의 약 3분의 1에 적었어요. 기준과 맞춰 볼 수 없었던 공도 있어요 — 포인트 사이에 넘겨 주는 공이나 연습 때 던져 주는 공에도 가끔 '서브'나 친 쪽이 적힐 수 있어요.</div></details>
       <label class="btn full" style="display:block;text-align:center;margin-top:10px;cursor:pointer">경기 영상 고르기 (여러 개 가능)
         <input type="file" id="mh-file" accept="video/*" multiple style="display:none" onchange="mhPick(event)">
       </label>
@@ -1174,6 +1175,7 @@ function openExternalBrowser() { // 카톡 웹뷰에서 기본 브라우저로 �
       </div>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-audio" checked> 원래 소리(타구음) 넣기</label>
       <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-relook" checked onchange="mhRlSet(this)"> 공 궤적 다듬기 (만들기 전에 고른 랠리를 다시 봐서 공 꼬리가 덜 끊겨요 · 랠리 길이의 1~2배 더 걸려요)</label><!-- v1.83 -->
+      <label class="muted" style="font-size:12px;display:flex;align-items:center;gap:6px;margin-top:6px;cursor:pointer"><input type="checkbox" id="mh-board" checked onchange="mhSbSet(this)"> 타구 작전판 (확실할 때만 친 쪽·서브·리턴·코스·깊이를 영상 왼쪽 위에 적어요 · 앱이 잰 카메라 높이가 2.4m 이상인 영상만, 정확도는 펜스 위에 단 카메라로만 쟀어요 · 바로 위 공 궤적 다듬기를 켜야 나와요)</label><!-- v1.85 -->
       <div class="row" style="gap:6px;margin-top:10px">
         <button type="button" class="btn" id="mh-go" style="flex:1" disabled onclick="mhGo()">하이라이트 만들기</button>
         <button type="button" class="btn outline" id="mh-stop" style="flex:0 0 auto;display:none" onclick="mhStopNow()">멈추기</button>
@@ -2403,7 +2405,7 @@ window.TMAuth = TMAuth;
 </script>
 <script>
 // ===== 데이터 (메모리 내 데모 데이터, 추후 서버 연동 예정) =====
-const APP_VERSION = 'v1.84';
+const APP_VERSION = 'v1.85';
 const ME = { name: '나', ntrp: 3.5, region: '제주시', style: '올라운더', cal: 3.5, calDelta: 0 }; /* v1.71: 데모 기본 이름은 가상('나') — 공개 코드에 회원 실명을 두지 않음. 로그인하면 서버 닉네임으로 바뀜(applyServerProfile) */
 
 /* v0.38 전국 지역 목록 — 온보딩·프로필·필터 셀렉트 공용.
@@ -11099,7 +11101,7 @@ function mhCalib(v, fast) { // v1.59c fast = 녹화 중(다듬기 없이) // 판
   const cv = document.createElement('canvas'); cv.width = w2; cv.height = h2; const cx = cv.getContext('2d', { willReadFrequently: true });
   try { cx.drawImage(v, 0, 0, w2, h2); } catch (e) { return null; }
   const d = cx.getImageData(0, 0, w2, h2).data;
-  const pk = aiAutoCalPick(v, d, w2, h2, fast); if (!pk) return null; // v1.59b
+  const pk = aiAutoCalPick(v, d, w2, h2, fast); mhCalib.pk = pk; /* v1.85: 고른 보정을 남김 — 작전판이 다듬어졌는지·카메라 자리를 봄(돌려주는 H는 그대로) */ if (!pk) return null; // v1.59b
   if (pk.rf && pk.rf.H) return pk.rf.H;
   return aiHomography(pk.pts, clCourtDst(pk.mode));
 }
@@ -11479,6 +11481,392 @@ function mhTrailBuild(samples, vw, vh, opts) { // 랠리마다 한 번(mhRender)
   extr(N[N.length - 1], N[N.length - 1].t, N[N.length - 1].t1 + o.extF, false);
   P.t0 = t0; P.n = n; P.xs = xs; P.ys = ys; P.w = w; P.run = run; return P;
 }
+// ── v1.85 타구 작전판(mhSb*) 계산: 공 궤적 다듬기로 다시 본 촘촘한 표본(r.rl)·다듬어진 코트 보정·카메라 자리 → 공마다 친 쪽(카메라에서 가까운 쪽/먼 쪽)·서브·리턴·코스·깊이(확실한 것만) ──
+//   방법: 궤적 꺾임 후보마다 3차원 두 포물선(내려와서 튀어 오름)으로 바운스를 확인 → 바운스가 어느 쪽 코트에서 왔는지 증거가 있을 때만 친 쪽을 적음 + 심판 규칙 J1~J10.
+//   근거(2026-11-23 평가, 동의한 날 2026-10-23·10-07 영상만): 세 방법(꺾임·점유·PC 규칙)을 같은 채점기로 견줘 꺾임을 고르고 규칙을 더함. 미리 보지 않은 15분(10/23 W4b)을 폰 속도로:
+//   친 쪽 75/76 · 서브 17/17 · 코스 23/23 · 깊이 39/41(틀린 둘은 옆 칸). 펜스 높이 캠(2.6~4.1m)만 잼 — 손에 든 영상은 잰 적 없음(J9: 2.4m 아래는 아무것도 안 적음).
+//   규칙: 불러올 때 아무것도 하지 않는 순수 함수만(mhshots_test·궤적 조각 시험이 이 줄들을 전역 없이 그대로 실행함). 공 인식(WASB)·mhTrailBuild·mhRlTable은 부르지 않음
+//   (relook183 시험이 그 호출 수를 셈) — mhTrailBuild·mhRlTable과 같은 잇기 규칙을 mhTrNodes·mhTrLink로 다시 함. 값·규칙을 바꾸면 deploy/tests/board185_unit_test.mjs(고정 자료의 판이 한 글자도 같아야 함)와 평가를 다시.
+const mhSbDef = {
+  needRl: true, minCamZ: 2.4, arcNetZ: 0.8, netGapS1: 1.5, s2MaxArc: 1.2, svLat: 4.4, svSameHx: 1.0, svSameLx: 1.37, // 심판 규칙 J1·J9·J2·J3·J4·J6
+  candK0: true, g: 9.81, ballR: 0.033, scan: 0.15, win: 0.30, win2: 0.50, minPts: 3, pxGrow: 4.0, bCost: 2.5, bVzIn: -3.5, bVzOut: 2.0, bVyIn: -3.0, bVyOut: -3.0, courtPad: [1.5, 2.0], clusterDt: 0.20,
+  drag: 0.018, sigA: [8, 4], priorPx: 1.5, pxLong: 4.0, dAmax: 2.0, arcGap: 0.4,
+  srcT: 1.4, srcTb: 2.2, srcCont: 0.5, srcNoArc: 1.0, srcHmax: 1.5, srcNear: 1.0, srcArc: 1.5, srcArcSpan: 0.25, srcArcZ: 4.0,
+  flightMin: 0.45, flightMax: 2.2, xDist: 1.5, gapSmall: 0.25,
+  useS2: true, s2MinArc: 0.1, s2Go: 1.4, s2Sky: false, mergeDt: 0.6, s2Clock: true, implied: true, impliedGap: 0.6, impliedTimed: true,
+  calKey: 'cal', calFallback: 'calBest',
+  writeDepth: true, depthMargin: 0.4, depthOut: -0.3, writeCourse: true, coZmin: 2.5, coSpan: 0.3, coLand: 0.6, coHit: 0.8,
+  serve: true, svQuiet: 3.0, svQuietBall: 3.5, svBallV: 0.30, svZ: 2.2, svDepth: 7.0, svSpan: [0.2, 0.95], svFlight: 1.0, svReturnDt: 2.5, writeReturn: true,
+  writeLand: false, landBracket: 1.5, countMode: 'null', // 떨어진 자리 표시·타수는 1단계에서 안 씀(평가에서 기준을 못 넘음)
+  showMin: 1.4, showMax: 2.2, showLand: 0.4, // 한 줄을 보여 주는 시간(초): 친 순간부터 (떨어진 순간 + 0.4)까지, 1.4~2.2초 — 다음 공을 치면 바로 끝
+  minDen: 3.5, // 다시 본 촘촘함 r.rl.tps(영상 1초에 본 3장 묶음 수 — 공을 못 찾은 묶음도 셈, 랠리 앞뒤 여유까지의 구간 평균)가 이보다 낮은 랠리는 작전판 없음(mhSbMake 'thin' — 판 계산 mhSbBuild는 이 값을 안 씀).
+  //   다시 보기는 2.8번까지 받지만(더 못 낮출 배속 동안만 잰 값으로도) 그만큼 듬성하면 친 쪽이 더 틀림 — 2026-11-24 검증(동의한 날 자료를 묶음 시간축에서 고르게 솎음):
+  //   2.6~3.2번 친 쪽 틀림 0.7~1.7%·확실히 틀린 줄 2.5~4.7% · 3.5번 0.3%·1.4% · 4번 이상은 폰 속도(4.2~5.3번)와 같음. 평가한 폰 속도 자료(절반 솎음 4.2~5.3번·느린 추론 흉내 5.2~6.2번)는 모두 4.2번 이상 — 그것을 또 반으로 솎은 2.6~3.1번 자료만 이 아래
+  word: { serve: '서브', return: '리턴', rally: '랠리', cross: '크로스', straight: '스트레이트', center: '센터', box: '서비스 박스', deep: '깊게', mid: '중간 깊이', short: '짧게' } /* 보여 줄 낱말만(판 계산은 영어 값) — '중간'만 쓰면 코트 가운데(센터)로 읽혀 '중간 깊이' */
+};
+function mhSbGroups(D, miss, vw, vh) { // mhRlTable과 같은 토막 나누기(봤는데 비어 있던 묶음이 M번 이상이고 cutD보다 먼 틈)
+  const R = mhRlDef, S = D.slice().sort((p, q) => p.t - q.t);
+  let M = R.cutN; if (!miss || !miss.length || !(M > 0) || S.length < 6) return [S];
+  const G = [[S[0]]], far = (R.cutD || 0) * Math.max(+vw || 0, +vh || 0); let j = 0, hh = 0;
+  for (let i = 0; i + 1 < S.length; i++) { while (j < miss.length && miss[j] <= S[i].t) j++; if (!(j < miss.length && miss[j] < S[i + 1].t)) hh++; }
+  const p = hh / S.length; if (!(p > 0)) return [S]; if (p < 1) M = Math.max(M, Math.ceil(Math.log(R.cutP) / Math.log(1 - p) - 1e-9));
+  j = 0;
+  for (let i = 1; i < S.length; i++) { while (j < miss.length && miss[j] <= S[i - 1].t) j++; let c = 0; for (let q = j; q < miss.length && miss[q] < S[i].t; q++) c++; if (c >= M && Math.hypot(S[i].x - S[i - 1].x, S[i].y - S[i - 1].y) >= far) G.push([]); G[G.length - 1].push(S[i]); }
+  return G;
+}
+function mhSbNodes(samples) { // mhTrNodes와 같은 마디(같은 순서·정렬·중복 빼기) + 마디마다 원래 표본
+  const N = [];
+  for (const s of samples) { const n = mhTrNodes([s])[0]; if (n) { n.s = s; N.push(n); } }
+  N.sort((a, b) => a.t - b.t);
+  const out = []; for (const n of N) if (!out.length || n.t - out[out.length - 1].t > 1e-3) out.push(n);
+  return out;
+}
+function mhSbTrail(samples, vw, vh, ay) { // mhTrailBuild와 같은 마디 거르기·잇기(빠르기·외톨이·꺾임 가속 다듬기) → { N, L }
+  const o = mhTrDef, W = Math.max(+vw || 0, +vh || 0); vh = +vh || 0;
+  const N0 = W > 0 && vh > 0 ? mhSbNodes(samples) : [], N = [];
+  for (const n of N0) if (Math.hypot(n.vx, n.vy) <= o.vmax * W) N.push(n);
+  const L = []; for (let i = 0; i + 1 < N.length; i++) L.push(mhTrLink(N[i], N[i + 1], W, vh, o, ay));
+  for (let i = 0; i < N.length; i++) {
+    if ((i > 0 && L[i - 1].m) || (i < N.length - 1 && L[i].m)) continue;
+    const sp = Math.hypot(N[i].vx, N[i].vy);
+    const bridge = i > 0 && i < N.length - 1 && mhTrLink(N[i - 1], N[i + 1], W, vh, o, ay).m;
+    if (!bridge && N[i].n >= 3 && sp >= o.isoMin * W) continue;
+    N.splice(i, 1);
+    if (i > 0 && i < N.length) L.splice(i - 1, 2, mhTrLink(N[i - 1], N[i], W, vh, o, ay)); else if (i === 0) L.splice(0, 1); else L.splice(i - 1, 1);
+    i = Math.max(-1, i - 2);
+  }
+  if (o.accN > 0) for (let i = 0; i < L.length; i++) {
+    if (!(L[i].m === 2 || (L[i].m === 0 && L[i].K))) continue;
+    let aL = ay, aR = ay; const cl = a => Math.max(0, Math.min(o.aMax * vh, a));
+    if (i > 0 && L[i - 1].m === 1) aL = ay + o.accN * (cl((N[i].vy - N[i - 1].vy) / (N[i].t - N[i - 1].t)) - ay);
+    if (i + 1 < L.length && L[i + 1].m === 1) aR = ay + o.accN * (cl((N[i + 2].vy - N[i + 1].vy) / (N[i + 2].t - N[i + 1].t)) - ay);
+    if (aL !== ay || aR !== ay) L[i] = mhTrLink(N[i], N[i + 1], W, vh, o, ay, aL, aR);
+  }
+  return { N, L };
+}
+function mhSbCam(cal, vw, vh) { // 다듬어진 H + 카메라 자리(clCamPose) → 3차원 광선 계산용
+  const H = cal && cal.H, P = cal && cal.pose; if (!H || !P || !(P.Z > 0.6) || !(P.f > 0)) return null;
+  const Hi = aiInv3(H); if (!Hi) return null;
+  const pc = aiCourtToImg(Hi, 5.485, 11.885), w = H[6] * pc[0] + H[7] * pc[1] + H[8];
+  return { H, C: [P.X, P.Y, P.Z], f: P.f, s0: w >= 0 ? 1 : -1, sc: 720 / Math.min(vw, vh) };
+}
+function mhSbRay(c, x, y) {
+  const H = c.H, C = c.C, gX = H[0] * x + H[1] * y + H[2], gY = H[3] * x + H[4] * y + H[5], gW = H[6] * x + H[7] * y + H[8];
+  const dx = (gX - C[0] * gW) * c.s0, dy = (gY - C[1] * gW) * c.s0, dz = (-C[2] * gW) * c.s0, n = Math.hypot(dx, dy, dz) || 1;
+  return [dx / n, dy / n, dz / n];
+}
+function mhSbX(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+function mhSbPos(B, V, tau, g) { return [B[0] + V[0] * tau, B[1] + V[1] * tau, B[2] + V[2] * tau - 0.5 * g * tau * tau]; }
+function mhSbErr(c, X, d) { const p = [X[0] - c.C[0], X[1] - c.C[1], X[2] - c.C[2]], q = mhSbX(p, d), n = Math.hypot(p[0], p[1], p[2]) || 1; return Math.hypot(q[0], q[1], q[2]) / n * c.f * c.sc; } // 720p 기준 px
+function mhSbSolve(A, b) {
+  const [a, bb, cc, d, e, f, g, h, i] = A, det = a * (e * i - f * h) - bb * (d * i - f * g) + cc * (d * h - e * g);
+  let sc = 0; for (const v of A) sc = Math.max(sc, Math.abs(v)); if (!(sc > 0) || !(Math.abs(det) > 1e-9 * sc * sc * sc)) return null;
+  const v = [(e * i - f * h), -(bb * i - cc * h), (bb * f - cc * e), -(d * i - f * g), (a * i - cc * g), -(a * f - cc * d), (d * h - e * g), -(a * h - bb * g), (a * e - bb * d)];
+  return [(v[0] * b[0] + v[1] * b[1] + v[2] * b[2]) / det, (v[3] * b[0] + v[4] * b[1] + v[5] * b[2]) / det, (v[6] * b[0] + v[7] * b[1] + v[8] * b[2]) / det];
+}
+function mhSbFit(c, B, tb, obs, g) { // X(t) = B + V(t − tb) − ½g(t − tb)²ẑ 의 V — 각도 최소제곱(V에 선형, 무게 때문에 두 번)
+  let V = null;
+  for (let pass = 0; pass < 2; pass++) {
+    const A = [0, 0, 0, 0, 0, 0, 0, 0, 0], bv = [0, 0, 0];
+    for (const o of obs) {
+      const tau = o.t - tb, d = o.d, P0 = [B[0] - c.C[0], B[1] - c.C[1], B[2] - c.C[2] - 0.5 * g * tau * tau];
+      const X = V ? [P0[0] + V[0] * tau, P0[1] + V[1] * tau, P0[2] + V[2] * tau] : P0, w = 1 / Math.max(1, Math.hypot(X[0], X[1], X[2])), w2 = w * w;
+      const dc = mhSbX(d, mhSbX(P0, d));
+      for (let r = 0; r < 3; r++) { for (let k = 0; k < 3; k++) A[r * 3 + k] += w2 * tau * tau * ((r === k ? 1 : 0) - d[r] * d[k]); bv[r] -= w2 * tau * dc[r]; }
+    }
+    const s = mhSbSolve(A, bv); if (!s) return null; V = s;
+  }
+  let se = 0; for (const o of obs) { const e = mhSbErr(c, mhSbPos(B, V, o.t - tb, g), o.d); se += e * e; }
+  return { V, rms: Math.sqrt(se / Math.max(1, obs.length)) };
+}
+function mhSbSide(c, P, tb, groups, o) { // 바운스 한쪽: 가까운 마디부터, 맞지 않는 바깥 마디는 뺌
+  const G = groups.slice();
+  for (;;) {
+    const obs = G.flat(); if (obs.length < o.minPts) return null;
+    const f = mhSbFit(c, P, tb, obs, o.g); if (!f) return null;
+    const last = G[G.length - 1]; let worst = 0; for (const p of last) worst = Math.max(worst, mhSbErr(c, mhSbPos(P, f.V, p.t - tb, o.g), p.d));
+    if (worst <= o.pxGrow || G.length === 1 || obs.length - last.length < o.minPts) { f.n = obs.length; f.worst = worst; f.tFar = last[tb < last[0].t ? last.length - 1 : 0].t; f.cut = G.length < groups.length; return f; }
+    G.pop();
+  }
+}
+function mhSbSides(c, nodes, ta, win) {
+  const I = [], O = [];
+  for (const n of nodes) {
+    if (n.t1 < ta - win || n.t0 > ta + win) continue;
+    const a = n.obs.filter(p => p.t < ta - 1e-4 && p.t >= ta - win), b = n.obs.filter(p => p.t > ta + 1e-4 && p.t <= ta + win);
+    if (a.length) I.push(a); if (b.length) O.push(b);
+  }
+  I.sort((p, q) => q[q.length - 1].t - p[p.length - 1].t); O.sort((p, q) => p[0].t - q[0].t);
+  return [I, O];
+}
+function mhSbAnchors(e, nodes, o) { // 꺾임 시각 ±scan 안의 점마다 바운스 자리로 시험
+  const A = [{ t: e.t, x: e.x, y: e.y, d: null }];
+  for (const n of nodes) { if (n.t1 < e.t - o.scan || n.t0 > e.t + o.scan) continue; for (const p of n.obs) if (Math.abs(p.t - e.t) <= o.scan) A.push(p); }
+  return A;
+}
+function mhSbTry(c, P, ta, nodes, o) {
+  let [I, O] = mhSbSides(c, nodes, ta, o.win);
+  if (o.win2 > o.win && (I.flat().length < o.minPts || O.flat().length < o.minPts)) { const [I2, O2] = mhSbSides(c, nodes, ta, o.win2); if (I.flat().length < o.minPts) I = I2; if (O.flat().length < o.minPts) O = O2; }
+  if (!I.length || !O.length) return null;
+  const fi = mhSbSide(c, P, ta, I, o), fo = mhSbSide(c, P, ta, O, o); if (!fi || !fo) return null;
+  const rms = Math.sqrt((fi.rms * fi.rms * fi.n + fo.rms * fo.rms * fo.n) / (fi.n + fo.n));
+  let cost = 0, cnt = 0; const cap2 = o.pxGrow * o.pxGrow;
+  for (const p of I.flat()) { const e = mhSbErr(c, mhSbPos(P, fi.V, p.t - ta, o.g), p.d); cost += Math.min(e * e, cap2); cnt++; }
+  for (const p of O.flat()) { const e = mhSbErr(c, mhSbPos(P, fo.V, p.t - ta, o.g), p.d); cost += Math.min(e * e, cap2); cnt++; }
+  return { P, te: ta, Vi: fi.V, Vo: fo.V, rI: fi.rms, rO: fo.rms, nI: fi.n, nO: fo.n, cutI: fi.cut, cutO: fo.cut, rms, cost: Math.sqrt(cost / Math.max(1, cnt)), cnt };
+}
+function mhSbEvFit(c, e, nodes, o, vw, vh) { // 바운스 = 그 화소의 바닥점 위 공 반지름(aiGroundFix — 판정 자리와 같게)
+  let best = null;
+  for (const a of mhSbAnchors(e, nodes, o)) {
+    const gf = aiGroundFix(c.H, vw, vh, aiMapPt(c.H, a.x, a.y)); if (!(gf[0] > -5 && gf[0] < 16 && gf[1] > -8 && gf[1] < 32)) continue;
+    const q = mhSbTry(c, [gf[0], gf[1], o.ballR], a.t, nodes, o); if (!q) continue;
+    if (!best || q.cost < best.cost) best = q;
+  }
+  return best;
+}
+function mhSbEvents(F, r, ctx, cal, o) {
+  const vw = F.vw, vh = F.vh, ay = +F.trAy || 0;
+  const groups = ctx.src === 'rl' ? mhSbGroups(ctx.samples, ctx.miss, vw, vh) : [ctx.samples.slice().sort((p, q) => p.t - q.t)];
+  const c = mhSbCam(cal, vw, vh);
+  const nodes = [], cands = [];
+  for (const G of groups) {
+    const { N, L } = mhSbTrail(G, vw, vh, ay);
+    for (const n of N) { n.obs = c ? n.s.pts.map(p => ({ t: +p[0], x: +p[1], y: +p[2], d: mhSbRay(c, +p[1], +p[2]) })).sort((a, b) => a.t - b.t) : []; nodes.push(n); }
+    for (let i = 0; i < L.length; i++) {
+      const lk = L[i]; if (!(lk.m === 2 || (o.candK0 && lk.m === 0 && lk.K))) continue;
+      const A = N[i], K = lk.K, tk = K.tau;
+      cands.push({ t: A.t + tk, x: A.x + A.vx * tk + 0.5 * K.lx * tk * tk, y: A.y + A.vy * tk + 0.5 * (K.aL + K.ly) * tk * tk, m: lk.m, need: K.need / vh });
+    }
+  }
+  cands.sort((a, b) => a.t - b.t);
+  if (!c) return { nodes, cands, cam: null };
+  for (const e of cands) {
+    e.b = mhSbEvFit(c, e, nodes, o, vw, vh);
+    e.cls = mhSbClass(e, o);
+  }
+  return { nodes, cands, cam: c };
+}
+function mhSbClass(e, o) { // 바운스 = 내려와 닿고 튀어 오름(가까운 쪽 코트면 계속 카메라 쪽으로)
+  const B = e.b;
+  if (B && B.cost <= o.bCost) {
+    const vi = B.Vi, vo = B.Vo, P = B.P, s = P[1] > 11.885 ? 1 : -1, inCourt = P[0] >= -o.courtPad[0] && P[0] <= 10.97 + o.courtPad[0] && P[1] >= -o.courtPad[1] && P[1] <= 23.77 + o.courtPad[1];
+    if (inCourt && vi[2] <= o.bVzIn && vo[2] >= o.bVzOut && (s > 0 ? s * vo[1] >= o.bVyOut : s * vi[1] >= o.bVyIn)) return 'bounce';
+  }
+  return 'none';
+}
+function mhSbGauss(M, b, n) {
+  const A = M.slice(), x = b.slice();
+  for (let k = 0; k < n; k++) {
+    let p = k, mx = Math.abs(A[k * n + k]); for (let r = k + 1; r < n; r++) if (Math.abs(A[r * n + k]) > mx) { mx = Math.abs(A[r * n + k]); p = r; }
+    if (!(mx > 0)) return null;
+    if (p !== k) { for (let c = 0; c < n; c++) { const t = A[k * n + c]; A[k * n + c] = A[p * n + c]; A[p * n + c] = t; } const t = x[k]; x[k] = x[p]; x[p] = t; }
+    for (let r = k + 1; r < n; r++) { const f = A[r * n + k] / A[k * n + k]; if (!f) continue; for (let c = k; c < n; c++) A[r * n + c] -= f * A[k * n + c]; x[r] -= f * x[k]; }
+  }
+  for (let k = n - 1; k >= 0; k--) { let s = x[k]; for (let c = k + 1; c < n; c++) s -= A[k * n + c] * x[c]; x[k] = s / A[k * n + k]; }
+  return x.every(Number.isFinite) ? x : null;
+}
+function mhSbPosA(P, V, A, tau) { return [P[0] + V[0] * tau + 0.5 * A[0] * tau * tau, P[1] + V[1] * tau + 0.5 * A[1] * tau * tau, P[2] + V[2] * tau + 0.5 * A[2] * tau * tau]; }
+function mhSbFitA(c, P, tb, obs, o) { // 긴 호: 가속 A도 풀되 공기 저항 + 중력 쪽으로 당김
+  const f0 = mhSbFit(c, P, tb, obs, o.g); if (!f0) return null;
+  const V0 = f0.V, sp = Math.hypot(V0[0], V0[1], V0[2]), A0 = [-o.drag * sp * V0[0], -o.drag * sp * V0[1], -o.drag * sp * V0[2] - o.g];
+  const eps = o.priorPx / (c.f * c.sc), pw = [eps * eps / (o.sigA[0] * o.sigA[0]), eps * eps / (o.sigA[0] * o.sigA[0]), eps * eps / (o.sigA[1] * o.sigA[1])];
+  let V = V0, A = A0;
+  for (let pass = 0; pass < 2; pass++) {
+    const M = new Array(36).fill(0), b = new Array(6).fill(0), row = new Array(6);
+    for (const ob of obs) {
+      const tau = ob.t - tb, d = ob.d, D = [[0, -d[2], d[1]], [d[2], 0, -d[0]], [-d[1], d[0], 0]], cc = mhSbX([P[0] - c.C[0], P[1] - c.C[1], P[2] - c.C[2]], d);
+      const X = mhSbPosA(P, V, A, tau), w = 1 / Math.max(1, Math.hypot(X[0] - c.C[0], X[1] - c.C[1], X[2] - c.C[2])), w2 = w * w;
+      for (let r = 0; r < 3; r++) {
+        for (let k = 0; k < 3; k++) { row[k] = -tau * D[r][k]; row[3 + k] = -0.5 * tau * tau * D[r][k]; }
+        const rhs = -cc[r];
+        for (let i = 0; i < 6; i++) { if (!row[i]) continue; b[i] += w2 * row[i] * rhs; for (let j = 0; j < 6; j++) M[i * 6 + j] += w2 * row[i] * row[j]; }
+      }
+    }
+    for (let k = 0; k < 3; k++) { M[(3 + k) * 6 + 3 + k] += pw[k]; b[3 + k] += pw[k] * A0[k]; }
+    const s = mhSbGauss(M, b, 6); if (!s) return null; V = [s[0], s[1], s[2]]; A = [s[3], s[4], s[5]];
+  }
+  let se = 0; for (const ob of obs) { const e = mhSbErr(c, mhSbPosA(P, V, A, ob.t - tb), ob.d); se += e * e; }
+  const dA = Math.max(Math.abs(A[0] - A0[0]) / o.sigA[0], Math.abs(A[1] - A0[1]) / o.sigA[0], Math.abs(A[2] - A0[2]) / o.sigA[1]);
+  return { V, A, A0, dA, rms: Math.sqrt(se / Math.max(1, obs.length)) };
+}
+function mhSbLong(c, P, tb, nodes, dir, tStop, o) {
+  const side = [];
+  for (const n of nodes) { const a = n.obs.filter(p => (dir < 0 ? p.t < tb - 1e-4 && p.t > tStop : p.t > tb + 1e-4 && p.t < tStop)); if (a.length) side.push(a); }
+  side.sort((p, q) => dir * (p[0].t - q[0].t));
+  let used = [], k = 0, fit = null;
+  while (k < side.length && used.length < o.minPts) used = used.concat(side[k++]);
+  if (used.length < o.minPts) return null;
+  fit = mhSbFitA(c, P, tb, used, o); if (!fit || fit.rms > o.pxGrow) return null;
+  for (; k < side.length; k++) {
+    let edge = tb; for (const p of used) edge = dir < 0 ? Math.min(edge, p.t) : Math.max(edge, p.t);
+    if (Math.abs((dir < 0 ? side[k][side[k].length - 1].t : side[k][0].t) - edge) > o.arcGap) break; // 긴 추적 틈은 잇지 않음(그 사이에 친 공이 숨을 수 있음)
+    const tr = used.concat(side[k]), f2 = mhSbFitA(c, P, tb, tr, o); if (!f2) break;
+    let worst = 0; for (const p of side[k]) worst = Math.max(worst, mhSbErr(c, mhSbPosA(P, f2.V, f2.A, p.t - tb), p.d));
+    if (worst > o.pxLong || f2.dA > o.dAmax) break;
+    used = tr; fit = f2;
+  }
+  let tFar = tb; for (const p of used) tFar = dir < 0 ? Math.min(tFar, p.t) : Math.max(tFar, p.t);
+  return { P, tb, V: fit.V, A: fit.A, rms: fit.rms, n: used.length, tFar, tNext: k < side.length ? side[k][dir < 0 ? side[k].length - 1 : 0].t : null };
+}
+function mhSbBounces(E, o) {
+  const B = E.cands.filter(e => e.cls === 'bounce').map(e => ({ t: e.b.te, P: e.b.P, Vi: e.b.Vi, Vo: e.b.Vo, cost: e.b.cost, nI: e.b.nI, nO: e.b.nO, px: [e.x, e.y] })).sort((a, b) => a.t - b.t);
+  const out = [];
+  for (const b of B) { const q = out[out.length - 1]; if (q && b.t - q.t < o.clusterDt) { if (b.cost < q.cost) out[out.length - 1] = b; } else out.push(b); }
+  return out;
+}
+function mhSbHalfAt(c, p, o, NET) { // 그 점의 바닥 투영 y(카메라보다 높은 공 = -Infinity)
+  const d = p.d; let yg;
+  if (d[2] < -1e-6) { const lam = -c.C[2] / d[2]; yg = c.C[1] + lam * d[1]; } else yg = -Infinity;
+  return yg;
+}
+function mhSbProof(c, nodes, tA, tB, half, dir, o, NET, allowSky) { // [tA, tB] 안에서 공이 그 쪽 코트에 있었다는 증거(바닥 투영으로) — 첫(dir +1)/마지막(dir −1) 시각 | null
+  const yFar = c.C[2] > o.srcHmax + 0.2 ? c.C[1] - (c.C[1] - NET) / (1 - o.srcHmax / c.C[2]) : -Infinity;
+  let best = null;
+  for (const n of nodes) {
+    if (n.t1 < tA || n.t0 > tB) continue;
+    for (const p of n.obs) {
+      if (p.t < tA || p.t > tB) continue;
+      const yg = mhSbHalfAt(c, p, o, NET);
+      const ok = half === 'near' ? yg > NET + o.srcNear : (yg === -Infinity ? allowSky : yg < yFar);
+      if (ok && (best == null || (dir > 0 ? p.t < best : p.t > best))) best = p.t;
+    }
+  }
+  return best;
+}
+function mhSbDepth(P, o, NET, L) { // 네트에서 떨어진 거리: 짧게 ≤ 6.0 · 중간 6.8~8.485 · 깊게 ≥ 9.285m(가운데 띠는 안 적음), 베이스라인 0.3m 넘게 밖이면 안 적음
+  if (!o.writeDepth || P[1] < -o.depthOut || P[1] > L + o.depthOut) return null;
+  const dn = Math.abs(P[1] - NET), m = o.depthMargin;
+  return dn <= 6.40 - m ? 'short' : dn >= 8.885 + m ? 'deep' : dn >= 6.40 + m && dn <= 8.885 - m ? 'mid' : null;
+}
+function mhSbBuild(F, r, ctx) { // → { shots: [{ i, t(맞힌 순간, 파일 시각), side, type, course, depth, land, conf }], count, why } — 던지지 않음
+  try { return mhSbBoard(F, r, ctx); } catch (e) { return { fi: F && F.fi, row: r && r.no, shots: [], count: null, why: 'error — nothing written: ' + String(e && e.message || e).slice(0, 120) }; }
+}
+function mhSbBoard(F, r, ctx) {
+  const o = mhSbDef, L = 23.77, NET = L / 2, why = [ctx.src + ' ' + (ctx.samples ? ctx.samples.length : 0)];
+  if (o.needRl && ctx.src !== 'rl') return { fi: F.fi, row: r.no, shots: [], count: null, why: why.concat('[J1] no relook samples (relook off, failed or too thin) — nothing written; the app keeps its v1.84 chips').join('; ') };
+  if (ctx.recorded && ctx.src !== 'rl') return { fi: F.fi, row: r.no, shots: [], count: null, why: why.concat('app-recorded file without relook samples: only r.rl is on the file clock (critic Q4) — nothing written').join('; ') };
+  let cal = ctx[o.calKey] || null; if ((!cal || !cal.H || !cal.pose) && o.calFallback && ctx[o.calFallback] && ctx[o.calFallback].H && ctx[o.calFallback].pose) cal = ctx[o.calFallback];
+  if (!cal || !cal.H || !cal.pose) return { fi: F.fi, row: r.no, shots: [], count: null, why: why.concat('no refined calibration with trusted pose — nothing written').join('; ') };
+  if (!(cal.pose.Z >= o.minCamZ)) return { fi: F.fi, row: r.no, shots: [], count: null, why: why.concat('[J9] camera ' + (+cal.pose.Z).toFixed(2) + ' m high: lower than any measured mount (2.56–4.09 m) — nothing written').join('; ') };
+  const E = mhSbEvents(F, r, ctx, cal, o); if (!E.cam) return { fi: F.fi, row: r.no, shots: [], count: null, why: why.concat('no camera').join('; ') };
+  const c = E.cam, bl = mhSbBounces(E, o), S = [];
+  const atNet = b => Math.abs(b.P[1] - NET) < o.netGapS1; // [J3]
+  const halfOf = P => (P[1] > NET ? 'near' : 'far'), other = h => (h === 'near' ? 'far' : 'near');
+  let nSkip = 0;
+  for (let k = 0; k < bl.length; k++) {
+    const b = bl[k], half = halfOf(b.P), prev = k > 0 ? bl[k - 1] : null, next = k + 1 < bl.length ? bl[k + 1] : null;
+    let prevSame = null; for (let j = k - 1; j >= 0; j--) if (halfOf(bl[j].P) === half) { prevSame = bl[j]; break; }
+    b.half = half;
+    // S1 — 이 바운스를 만든 공: 친 쪽 = 반대쪽 코트(공이 거기서 왔다는 증거가 있을 때만)
+    const tMin = Math.max(b.t - o.flightMax, prev ? prev.t + 0.1 : -Infinity), tMax = b.t - o.flightMin;
+    const aIn = mhSbLong(c, b.P, b.t, E.nodes, -1, Math.max(tMin - 0.3, prev ? prev.t : -Infinity), o);
+    const tLo = Math.max(b.t - o.srcT, prevSame ? prevSame.t + 0.05 : -Infinity, aIn ? aIn.tFar - o.srcCont : b.t - o.srcNoArc);
+    let tOther = mhSbProof(c, E.nodes, tLo, b.t - 0.05, other(half), -1, o, NET, false), how = 'proj'; // [J5]
+    if (tOther == null && o.srcTb > 0 && prev && !atNet(prev) && halfOf(prev.P) === other(half) && b.t - prev.t <= o.srcTb) { tOther = prev.t; how = 'bounce'; } // [J3]·[J10]
+    if (tOther == null && half === 'far' && o.srcArc != null && aIn && b.t - aIn.tFar >= o.srcArcSpan && aIn.tFar >= tLo) {
+      const X = mhSbPosA(aIn.P, aIn.V, aIn.A, aIn.tFar - b.t);
+      if (X[1] > NET + o.srcArc && X[2] > 0 && X[2] < o.srcArcZ) { // [J2] 네트 위로 넘어온 호만
+        let zNet = null; for (let tt = b.t; tt >= aIn.tFar - 1e-6; tt -= 0.005) { const Y = mhSbPosA(aIn.P, aIn.V, aIn.A, tt - b.t); if ((Y[1] - NET) * (b.P[1] - NET) < 0) { zNet = Y[2]; break; } }
+        if (zNet != null && zNet >= o.arcNetZ) { tOther = aIn.tFar; how = 'arc'; }
+      }
+    }
+    if (tOther != null) {
+      let tc = null, src = '';
+      if (prev && halfOf(prev.P) === other(half)) {
+        const aOut = mhSbLong(c, prev.P, prev.t, E.nodes, +1, b.t, o);
+        if (aIn && aOut) {
+          let bd = 1e9, bt = null;
+          for (let t = prev.t + 0.1; t <= tMax; t += 0.01) { const X1 = mhSbPosA(aOut.P, aOut.V, aOut.A, t - prev.t), X2 = mhSbPosA(aIn.P, aIn.V, aIn.A, t - b.t), d = Math.hypot(X1[0] - X2[0], X1[1] - X2[1], X1[2] - X2[2]); if (d < bd) { bd = d; bt = t; } }
+          if (bt != null && bd <= o.xDist) { tc = bt; src = 'x' + bd.toFixed(1); }
+        }
+      }
+      if (tc == null && aIn) { tc = aIn.tNext != null && aIn.tFar - aIn.tNext <= o.gapSmall ? (aIn.tFar + aIn.tNext) / 2 : aIn.tFar - 0.05; src = 'in'; }
+      if (tc == null) { tc = b.t - 0.8; src = 'est'; }
+      tc = Math.max(tMin, Math.min(tMax, tc));
+      const Xc = aIn ? mhSbPosA(aIn.P, aIn.V, aIn.A, tc - b.t) : null, inSpan = aIn ? b.t - aIn.tFar : 0;
+      if (atNet(b)) S.push({ t: tc, side: null, depth: null, land: null, kind: 'S1n', src, from: how }); // [J3] 적지 않음
+      else S.push({ t: tc, side: other(half), depth: mhSbDepth(b.P, o, NET, L), land: b, kind: 'S1', src, from: how, Xc, inSpan, aIn });
+    } else nSkip++;
+    // S2 — 이 바운스 다음 공: 친 쪽 = 이 코트(튀어 오른 호가 끝나고 공이 반대쪽 코트로 간 증거가 있을 때만)
+    if (o.useS2) {
+      const tStop = next ? next.t : b.t + 2.5, aOut = mhSbLong(c, b.P, b.t, E.nodes, +1, tStop, o);
+      if (aOut && aOut.tFar - b.t >= o.s2MinArc && aOut.tFar - b.t <= o.s2MaxArc) { // [J4]
+        const te = aOut.tNext != null && aOut.tNext - aOut.tFar <= 0.25 ? (aOut.tFar + aOut.tNext) / 2 : aOut.tFar + 0.05;
+        const tGo = mhSbProof(c, E.nodes, te, te + o.s2Go, other(half), +1, o, NET, o.s2Sky);
+        if (tGo != null && (!next || te < next.t - o.flightMin)) S.push({ t: te, side: atNet(b) ? null : half, depth: null, land: null, kind: atNet(b) ? 'S2n' : 'S2', src: 'out', from: 'go' }); // [J3]
+      }
+    }
+  }
+  S.sort((p, q) => p.t - q.t);
+  const M = [];
+  for (const s of S) {
+    const d = M.find(q => q.side === s.side && Math.abs(q.t - s.t) <= o.mergeDt);
+    if (!d) { M.push(s); continue; }
+    const s1 = d.kind === 'S1' ? d : s, s2 = d.kind === 'S2' ? d : s;
+    if (s1 !== s2 && s1.kind === 'S1' && s2.kind === 'S2') { const t = (s1.side === 'near' || !/^x/.test(s1.src)) && o.s2Clock ? s2.t : s1.t; Object.assign(d, s1, { t, src: s1.src + '+out' }); }
+  }
+  M.sort((p, q) => p.t - q.t);
+  if (o.serve) { // 서브: 조용한 뒤 첫 공 + (토스 | 높은 타점·서비스 박스 깊이·짧은 비행) + 대각선
+    const W = Math.max(F.vw, F.vh);
+    let toss = []; try { toss = mhServes({ vw: F.vw, vh: F.vh, samples: ctx.samples }) || []; } catch (e) { toss = []; }
+    let tossS = []; if (!ctx.recorded) try { tossS = mhServes({ vw: F.vw, vh: F.vh, samples: ctx.sparse || [] }) || []; } catch (e) { tossS = []; } // [J8]
+    for (let k = 0; k < M.length; k++) {
+      const s = M[k]; if ((s.kind !== 'S1' && !/^S1/.test(s.kind)) || !s.side || !s.land) continue;
+      const prevShot = k > 0 ? M[k - 1] : null; if (prevShot && s.t - prevShot.t < o.svQuiet) continue;
+      const busy = E.nodes.some(n => n.t > s.t - o.svQuietBall && n.t < s.t - 0.35 && Math.hypot(n.vx, n.vy) > o.svBallV * W); if (busy) continue;
+      const hasToss = toss.some(q => q.t >= s.t - 0.7 && q.t <= s.t + 0.3) || tossS.some(q => q.t >= s.t - 0.9 && q.t <= s.t + 0.3);
+      const dl = s.land ? Math.abs(s.land.P[1] - NET) : 99, fl = s.land ? s.land.t - s.t : 99;
+      const geo = s.Xc && s.Xc[2] >= o.svZ && dl <= o.svDepth && s.inSpan >= o.svSpan[0] && s.inSpan <= o.svSpan[1] && fl <= o.svFlight;
+      const lxs = s.land ? s.land.P[0] : null, hxs = s.Xc ? s.Xc[0] : null, Cx = 5.485;
+      const latOk = lxs != null && Math.abs(lxs - Cx) <= o.svLat; // [J6]
+      const sameSide = lxs != null && hxs != null && Math.abs(hxs - Cx) >= o.svSameHx && Math.abs(lxs - Cx) >= o.svSameLx && (hxs - Cx) * (lxs - Cx) > 0; // [J6]
+      if ((hasToss || geo) && latOk && !sameSide) { s.type = 'serve'; s.svWhy = hasToss ? 'toss' : 'geo'; if (s.land && dl <= 6.40 - o.depthMargin) s.depth = 'box'; }
+    }
+    for (let k = 1; k < M.length; k++) if (M[k - 1].type === 'serve' && M[k].side && M[k].side !== M[k - 1].side && M[k].t - M[k - 1].t <= o.svReturnDt && o.writeReturn) M[k].type = 'return';
+  }
+  if (o.writeCourse && c.C[2] >= o.coZmin) for (const s of M) { // 코스: 친 자리 x(3차원 호)·떨어진 x를 단식 폭 셋으로(4.113·6.857, 가운데 5.485), 경계 근처는 안 적음
+    if (!s.land || !s.Xc || s.inSpan < o.coSpan) continue;
+    const lx = s.land.P[0], hx = s.Xc[0];
+    if (lx < 1.37 - 0.5 || lx > 9.60 + 0.5 || hx < -1.5 || hx > 12.5) continue;
+    if (Math.abs(lx - 4.113) < o.coLand || Math.abs(lx - 6.857) < o.coLand) continue;
+    if (lx > 4.113 && lx < 6.857) { s.course = 'center'; continue; }
+    if (Math.abs(hx - 5.485) < o.coHit) continue;
+    s.course = (hx < 5.485) === (lx < 5.485) ? 'straight' : 'cross';
+    if (s.type === 'serve' && s.course === 'straight') s.course = null; // [J7]
+  }
+  if (o.implied) { // 같은 쪽이 두 번 이어지면 그 사이에 반대쪽이 친 공(시각을 모르면 아무것도 안 적음)
+    for (let k = M.length - 1; k > 0; k--) {
+      const A = M[k - 1], B = M[k]; if (!(A.side && A.side === B.side && B.t - A.t >= o.impliedGap)) continue;
+      let im = { t: (A.t + B.t) / 2, side: null, depth: null, land: null, kind: 'implied', src: 'alternation' };
+      if (o.impliedTimed && A.land && A.land.t < B.t - o.flightMin) {
+        const aO = mhSbLong(c, A.land.P, A.land.t, E.nodes, +1, B.t - o.flightMin, o);
+        if (aO && aO.tFar - A.land.t >= o.s2MinArc && aO.tFar - A.land.t <= o.s2MaxArc) { const te = aO.tNext != null && aO.tNext - aO.tFar <= o.gapSmall ? (aO.tFar + aO.tNext) / 2 : aO.tFar + 0.05; if (te > A.land.t + 0.05 && te < B.t - o.flightMin) im = { t: te, side: A.side === 'near' ? 'far' : 'near', depth: null, land: null, kind: 'S2i', src: 'out+alternation' }; }
+      }
+      M.splice(k, 0, im);
+    }
+  }
+  const shots = M.map((s, k) => ({ i: k + 1, t: s.t, side: o.implied && s.kind === 'implied' ? null : s.side, type: s.type || null, course: s.course || null, depth: s.depth,
+    land: o.writeLand && s.land && (!o.landBracket || M.some(q => q !== s && q.side && q.side !== s.side && q.t > s.land.t + 0.05 && q.t < s.land.t + o.landBracket)) ? { t: s.land.t, px: s.land.px, court: [s.land.P[0], s.land.P[1]] } : null,
+    conf: { kind: s.kind, src: s.src, from: s.from, svWhy: s.svWhy || null, Xc: s.Xc || null, inSpan: s.inSpan || null, land: s.land ? { t: s.land.t, court: [s.land.P[0], s.land.P[1]] } : null, P: s.land && s.land.P, Vi: s.land && s.land.Vi, Vo: s.land && s.land.Vo, cost: s.land && s.land.cost, nI: s.land && s.land.nI, nO: s.land && s.land.nO } }));
+  why.push(E.cands.length + ' kinks, ' + bl.length + ' bounces (' + bl.filter(atNet).length + ' at the net: unlabelled), ' + nSkip + ' not proven from the other half');
+  let count = shots.length;
+  if (o.countMode === 'null') count = null;
+  else if (o.countMode === 'serve') count = shots.length && shots[0].type === 'serve' && !M.some(s => s.kind === 'implied') ? shots.length : null;
+  return { fi: F.fi, row: r.no, shots, count, why: why.join('; ') };
+}
+function mhSbView(B, r) { // 판 → 그릴 자료(r.sb): 친 쪽이 있는 공만 한 줄씩(번호·타수 없음 — 판이 랠리 공의 절반쯤만 찾아서 번호를 매기면 틀림). 줄은 친 순간 나타나 다음 공을 칠 때(또는 떨어진 뒤 0.4초, 1.4~2.2초)까지
+  const o = mhSbDef, S = (B && B.shots) || [], ev = [];
+  for (let k = 0; k < S.length; k++) {
+    const s = S[k]; if (!s || !s.side || !isFinite(s.t)) continue;
+    const nx = k + 1 < S.length && isFinite(S[k + 1].t) ? S[k + 1].t : Infinity, lt = s.conf && s.conf.land && isFinite(s.conf.land.t) ? s.conf.land.t : null;
+    const t1 = Math.min(nx - 0.05, s.t + Math.min(o.showMax, Math.max(o.showMin, lt != null ? lt - s.t + o.showLand : 0)), r.t1);
+    if (!(t1 > s.t + 0.3) || !(t1 > r.t0)) continue;
+    const w = []; if (s.type === 'serve' || s.type === 'return') w.push(o.word[s.type]); if (s.course && s.type !== 'serve' && o.word[s.course]) w.push(o.word[s.course]); if (s.depth && o.word[s.depth] && (s.type !== 'serve' || s.depth === 'box')) w.push(o.word[s.depth]); if (!w.length) w.push(o.word.rally); // 서브의 깊이 낱말은 '서비스 박스'만 — '서브 · 중간 깊이'·'서브 · 깊게'는 폴트라고 말하는 셈(1단계는 인/아웃·폴트를 적지 않음). 판(s.depth)은 그대로
+    ev.push({ t: s.t, t1, side: s.side === 'near' ? 'near' : 'far', w, cont: false, cut: false });
+  }
+  for (let j = 0; j < ev.length; j++) { ev[j].cont = j > 0 && ev[j - 1].t1 >= ev[j].t - 0.1; ev[j].cut = j + 1 < ev.length && ev[j + 1].t - ev[j].t1 <= 0.1; }
+  return ev.length ? { ev, n: ev.length, rl: r.rl || null, why: String((B && B.why) || '') } : null;
+}
 const mhTrSK = new Float32Array(160), mhTrSA = new Float32Array(160); /* v1.83: 꼬리 창 안 칸마다 그 칸이 든 조각의 남길 비율·끝난 뒤 시간(mhTrailDrawD — 장면마다 새로 만들지 않음) */
 function mhTrailAt(P, t, out) { // 시각 t의 보간 위치(out[0] = x, out[1] = y, out[2] = 확신 0~1) — 궤적이 없는 시각이면 false
   var f = (t - P.t0) / P.dt, i = Math.floor(f + 1e-6), fr = f - i; if (fr < 0) fr = 0;
@@ -11593,6 +11981,50 @@ function mhPath(F, r, zmax) { // 세로 창 중심(원본 px): 공 위치 보간
 }
 function mhPathAt(p, t, arr) { const a = arr || p.xs; return a[Math.max(0, Math.min(a.length - 1, Math.round((t - p.t0) / p.dt)))]; }
 function mhRRect(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+// v1.85 타구 작전판 그리기(r.sb가 있을 때만 mhDraw가 부름 — 없으면 캔버스를 전혀 건드리지 않음 = v1.84 그대로): 왼쪽 위 제목 칩 아래 한 줄 판 = 친 쪽 색 점 + (서브·리턴·코스·깊이 | 랠리) + 색 설명 '친 쪽 ● 가까운 쪽 ● 먼 쪽'.
+//   번호·타수는 쓰지 않음(판은 랠리 공의 절반쯤만 찾음 — 'n타' 칩·제목 아래 줄·SERVE 띠는 v1.84 그대로). 줄 그림은 줄마다 한 번 만들어 둠(장면마다 글자·폭 재기 없음, getImageData 없음), 장면마다 drawImage 한 번.
+//   크기 단위 b = min(OW, 1.25·OH)/720(가로 영상에서 판이 화면 높이를 덜 차지). 공 머리가 판 위에 있으면 옅게(0.35). 새 줄은 1.2초 진하게, 그다음 0.4초에 걸쳐 0.6으로(먼 코트 선수를 덜 가림).
+const mhSbUI = { col: { near: '#ffa24c', far: '#5ec8ff' }, fadeIn: 0.15, fadeOut: 0.25, hold: 1.2, relax: 0.4, rest: 0.6, dim: 0.35, keep: 3 };
+let mhSbCur = null; const mhSbHd = new Float32Array(3); // 지금 그리는 랠리의 r.sb(앞 랠리의 줄 그림은 바로 놓음) · 공 머리 자리(장면마다 새로 만들지 않음)
+function mhSbFree(sb) { const L = sb && sb._lay; if (!L) return; for (let j = 0; j < L.keep.length; j++) { const c = L.img[L.keep[j]]; if (c) { c.width = 0; c.height = 0; } } sb._lay = null; }
+function mhSbLay(sb, OW, OH, vert) { // 랠리·출력 크기마다 한 번: 자리·크기(판 폭 = 이 랠리의 가장 긴 줄 — 랠리 안에서 판 폭이 바뀌지 않게)
+  if (mhSbCur !== sb) { if (mhSbCur) mhSbFree(mhSbCur); mhSbCur = sb; }
+  let L = sb._lay; if (L && L.OW === OW && L.OH === OH) return L;
+  const u = OW / 720, b = Math.min(OW, 1.25 * OH) / 720, c = document.createElement('canvas').getContext('2d');
+  L = { OW, OH, b, k: 1, padX: 12 * b, padY: 8 * b, r: 10 * b, gap: 9 * b, sep: 0.55, f: 24 * b, h1: 40 * b, fl: 20 * b, hl: 28 * b, img: {}, keep: [] }; // 색 설명(fl)은 영상을 받은 사람이 볼 유일한 설명이라 워터마크(18)보다 크게
+  let tw = 0; c.font = 'bold ' + Math.round(L.f) + 'px sans-serif';
+  for (let j = 0; j < sb.ev.length; j++) { const w = sb.ev[j].w; let x = 0; for (let q = 0; q < w.length; q++) x += c.measureText(w[q]).width + (q ? L.sep * L.f : 0); if (x > tw) tw = x; }
+  c.font = 'bold ' + Math.round(L.fl) + 'px sans-serif'; const lw = c.measureText('친 쪽').width + c.measureText('가까운 쪽').width + c.measureText('먼 쪽').width + 2 * (0.64 * L.fl + 6 * b) + 2 * 12 * b;
+  let w = Math.max(2 * L.padX + 2 * L.r + L.gap + tw, lw + 2 * L.padX) + 2 * b;
+  L.k = Math.max(0.78, Math.min(1, (vert ? 0.47 : 0.30) * OW / w)); // 너무 넓으면 글자를 0.78배까지 줄임(1단계 낱말로는 안 일어남)
+  ['padX', 'padY', 'r', 'gap', 'f', 'h1', 'fl', 'hl'].forEach(p => { L[p] *= L.k; }); w *= L.k;
+  L.w = Math.ceil(w); L.h = Math.ceil(2 * L.padY + L.h1 + L.hl); L.x = Math.round(20 * u); L.y = Math.round(104 * u + 8 * b);
+  sb._lay = L; return L;
+}
+function mhSbImg(sb, L, j) { // 줄 j의 판 그림(처음 그릴 때 한 번 — 최근 keep장만 남김)
+  if (L.img[j]) return L.img[j];
+  const e = sb.ev[j], cv = document.createElement('canvas'); cv.width = L.w; cv.height = L.h; const c = cv.getContext('2d'), k = L.k, b = L.b;
+  c.fillStyle = 'rgba(0,0,0,.6)'; mhRRect(c, 0, 0, L.w, L.h, 14 * b * k); c.fill();
+  const cy = L.padY + L.h1 / 2, col = mhSbUI.col[e.side] || '#c9d1d6';
+  c.beginPath(); c.arc(L.padX + L.r, cy, L.r, 0, 6.2832); c.fillStyle = col; c.fill(); c.lineWidth = Math.max(1, L.r * 0.16); c.strokeStyle = 'rgba(0,0,0,.55)'; c.stroke();
+  c.font = 'bold ' + Math.round(L.f) + 'px sans-serif'; c.fillStyle = '#ffffff'; let x = L.padX + 2 * L.r + L.gap; const by = cy + L.f * 0.36;
+  for (let q = 0; q < e.w.length; q++) { if (q) { const dg = L.sep * L.f; c.beginPath(); c.arc(x + dg / 2, cy, Math.max(1.2, L.f * 0.08), 0, 6.2832); c.fill(); x += dg; } c.fillText(e.w[q], x, by); x += c.measureText(e.w[q]).width; }
+  const fl = L.fl, ly = L.padY + L.h1 + L.hl / 2; c.font = 'bold ' + Math.round(fl) + 'px sans-serif'; c.fillStyle = 'rgba(255,255,255,.85)'; x = L.padX; c.fillText('친 쪽', x, ly + fl * 0.36); x += c.measureText('친 쪽').width + 12 * b * k;
+  [['near', '가까운 쪽'], ['far', '먼 쪽']].forEach(p => { c.fillStyle = mhSbUI.col[p[0]]; c.beginPath(); c.arc(x + fl * 0.32, ly, fl * 0.32, 0, 6.2832); c.fill(); x += fl * 0.64 + 6 * b * k; c.fillStyle = '#ffffff'; c.fillText(p[1], x, ly + fl * 0.36); x += c.measureText(p[1]).width + 12 * b * k; });
+  L.img[j] = cv; L.keep.push(j); while (L.keep.length > mhSbUI.keep) { const o = L.keep.shift(), oc = L.img[o]; if (oc) { oc.width = 0; oc.height = 0; } delete L.img[o]; }
+  return cv;
+}
+function mhSbDraw(g, sb, t, OW, OH, vert, trail, X, Y) { // 장면마다: 지금 보일 줄(있으면) drawImage 한 번 — 줄이 없는 장면은 아무것도 안 함
+  const ev = sb.ev; if (!ev || !ev.length) return;
+  let j = sb._j | 0; if (j >= ev.length || ev[j].t > t) j = 0; while (j + 1 < ev.length && ev[j + 1].t <= t) j++; sb._j = j;
+  const e = ev[j], end = e.cut && j + 1 < ev.length ? ev[j + 1].t : e.t1; if (!(t >= e.t && t < end)) return; // 다음 줄이 바로 이어지면(cut) 그 줄이 나올 때까지 그대로 — 두 줄 사이에 판이 한두 장 꺼졌다 켜지지 않게(r.sb의 줄·시각은 그대로)
+  const L = mhSbLay(sb, OW, OH, vert), o = mhSbUI, age = t - e.t;
+  let a = 1; if (!e.cont) a = Math.min(a, age / o.fadeIn); if (!e.cut) a = Math.min(a, (end - t) / o.fadeOut);
+  if (age > o.hold) a *= Math.max(o.rest, 1 - (1 - o.rest) * (age - o.hold) / o.relax);
+  if (trail && trail.n && mhTrailAt(trail, t, mhSbHd)) { const hx = X(mhSbHd[0]), hy = Y(mhSbHd[1]), m = 16 * L.b; if (hx > L.x - m && hx < L.x + L.w + m && hy > L.y - m && hy < L.y + L.h + m) a *= o.dim; }
+  if (!(a > 0.01)) return;
+  const img = mhSbImg(sb, L, j); g.globalAlpha = Math.min(1, a); g.drawImage(img, L.x, L.y); g.globalAlpha = 1;
+}
 let mhSrcMode = 'el', mhBlackN = 0, mhVfUsed = false, mhDrawErr = '', mhTrHeadN = 0, mhTrDrawN = 0; /* v1.83: 공 자국 머리를 그린 장 / 그린 랠리 장(완성 줄의 '자국 n%') */
 function mhDraw(g, v, OW, OH, vert, t, path, trail, i, total, r) { /* v1.82: trail = mhTrailBuild가 만든 공 궤적 표(없으면 null) — v1.81까지는 표본 배열 */
   const vw = v.videoWidth || 16, vh = v.videoHeight || 9, u = OW / 720;
@@ -11625,6 +12057,7 @@ function mhDraw(g, v, OW, OH, vert, t, path, trail, i, total, r) { /* v1.82: tra
       g.fillStyle = '#fff'; g.fillText(String(sc.g[k]), bx + nameW + cw * (sc.sets.length + 0.5), y); g.fillStyle = '#d4e94e'; g.fillText(sc.pt[k], bx + nameW + cw * (sc.sets.length + 1.5), y); });
     g.textAlign = 'left';
   }
+  if (r.sb) { try { mhSbDraw(g, r.sb, t, OW, OH, vert, trail, X, Y); } catch (e) { r.sb = null; mhDrawErr = 'board ' + ((e && e.name) || ''); } } /* v1.85 타구 작전판 — r.sb가 없으면 아무것도 안 함(v1.84 그대로), 오류면 그 랠리만 끔 */
   g.textAlign = 'center'; g.fillStyle = 'rgba(255,255,255,.7)'; g.font = 'bold ' + Math.round(18 * u) + 'px sans-serif'; g.fillText('테니스메이트', OW / 2, OH - 26 * u); g.textAlign = 'left';
 }
 function mhCard(g, OW, OH, lines, p) { // 제목·끝 카드: [text, size, color]
@@ -11885,7 +12318,7 @@ async function mhAnalyzeAll() {
     if (!(dur > 1)) { an.files.push({ fi, name: f.name, err: '영상 길이를 알 수 없어요' }); continue; }
     total += dur;
     const vw = v.videoWidth, vh = v.videoHeight;
-    let H = null; for (const p of [0.2, 0.45, 0.7, 0.9]) { if (mhStop) break; await mhSeek(v, dur * p); H = mhCalib(v); if (H) break; }
+    let H = null, sbCal = null; for (const p of [0.2, 0.45, 0.7, 0.9]) { if (mhStop) break; await mhSeek(v, dur * p); H = mhCalib(v); if (H) { sbCal = mhSbCalOf(mhCalib.pk, vw, vh, p, v.currentTime); break; } } /* v1.85 sbCal = 같은 보정의 다듬어진 H·카메라 자리(작전판용) — H·띠·분석은 그대로 */
     const band = H ? mhBandFor(H, vh) : null;
     await mhSeek(v, 0);
     const base = doneV;
@@ -11897,9 +12330,51 @@ async function mhAnalyzeAll() {
     doneV += dur;
     const samples = mhDropStatic(samples0, vw); // v1.37 멈춘 물체 제거
     const rallies = mhRallies(samples, dur, vw, vh);
-    an.files.push({ fi, name: f.name, url, dur, vw, vh, H, samples, rallies, trAy: mhTrailAy(samples, vw, vh), date: f.lastModified || Date.now() }); /* v1.82: trAy = 공 자국 꺾임 조각의 기본 세로 가속(영상 전체로 한 번, 오류면 0) */
+    an.files.push({ fi, name: f.name, url, dur, vw, vh, H, sbCal, samples, rallies, trAy: mhTrailAy(samples, vw, vh), date: f.lastModified || Date.now() }); /* v1.82: trAy = 공 자국 꺾임 조각의 기본 세로 가속(영상 전체로 한 번, 오류면 0) */
   }
   return an;
+}
+// ── v1.85 타구 작전판 잇기(mhSb*): 설정 [타구 작전판](tm-mh-board, 기본 켬) · 분석 때 mhCalib이 고른 보정에서 다듬어진 H·카메라 자리를 따로 남김(F.sbCal — F.H는 그대로) ·
+//   만들기 직전(공 궤적 다시 보기가 끝난 뒤, 녹화기를 만들기 전 — mhGo) 고른 랠리마다 한 번 계산해 r.sb에 둠 → mhDraw는 읽기만. 꺼져 있으면 r.sb를 만들지 않음 = 영상·완성 줄이 v1.84 그대로.
+//   작전판이 없는 랠리(다시 보지 못함·폰이 느려 덜 촘촘히 봄·앱으로 찍은 영상·코트 인식 안 됨·카메라가 2.4m보다 낮음·확실한 공 없음)는 그 랠리만 v1.84 그대로. 절대 던지지 않음. 공 인식은 다시 부르지 않음.
+let mhSbStat = null, mhSbGot = []; // 마지막 만들기의 작전판 결과(완성 줄): { on, rl: 그때의 다시 보기 설정, n, ok, why: { 까닭: 랠리 수 }, ms } · mhSbGot = 작전판을 붙인 랠리(그리다 오류로 꺼진 것을 완성 줄에서 셈 — 검은 결과를 다시 만들어도 맞게)
+function mhSbOn() { const e = $('mh-board'); if (e) return !!e.checked; try { return localStorage.getItem('tm-mh-board') !== '0'; } catch (x) { return true; } }
+function mhSbSet(el) { try { localStorage.setItem('tm-mh-board', el && el.checked ? '1' : '0'); } catch (e) {} }
+document.addEventListener('DOMContentLoaded', () => { const e = $('mh-board'); if (e) { try { e.checked = localStorage.getItem('tm-mh-board') !== '0'; } catch (x) {} } });
+function mhSbCalOf(pk, vw, vh, p, t) { // mhCalib이 고른 보정(aiAutoCalPick 결과) → 작전판용 { H: 다듬어진 H | null, n, pose: 카메라 자리(높이 점검을 통과할 때만) | null } — 계산만(던지지 않음)
+  const rf = pk && pk.rf; if (!rf || !rf.H) return { p, t, H: null, n: 0, pose: null };
+  let pose = null; try { const hc = clHeightCheck(rf.H, vw, vh, rf.n >= 300), ps = clCamPose(rf.H, vw, vh); if (hc && ps) pose = { X: ps.X, Y: ps.Y, Z: ps.Z, f: ps.f }; } catch (e) { pose = null; }
+  return { p, t, H: rf.H, n: rf.n, pose };
+}
+function mhSbMake(F, r) { // 한 랠리 → r.sb | { why } (까닭: rec 앱으로 찍은 영상 · norl 다시 본 표본 없음 · thin 다시 봤지만 듬성함(폰이 느림) · nocal 다듬은 보정이나 카메라 자리(높이 점검) 없음 · low 카메라 높이 · none 적을 공 없음 · err)
+  if (mhRlRec(F)) return { why: 'rec' }; // 앱으로 찍은 영상: 보정이 다듬기 없는 빠른 보정뿐이고 분석 표본 시계가 파일과 어긋남 — 다음 판에서(잰 적 없음)
+  const D = mhRlOn() ? mhRlFor(F, r) : null; if (!D) return { why: 'norl' }; // [J1] 촘촘히 다시 본 표본이 없으면 안 적음
+  if (!(r.rl && +r.rl.tps >= mhSbDef.minDen)) return { why: 'thin' }; // 다시 본 촘촘함(r.rl.tps = 영상 1초에 본 3장 묶음 수, 공을 못 찾은 묶음 포함 · 랠리 앞뒤 여유까지 다시 본 구간의 평균)이 minDen(3.5) 아래 = 느린 폰 → 안 적음. 다시 보기가 받는 기준(2.8, 더 못 낮출 배속 동안만 잰 값도 받음)보다 엄함 — 그 값은 쓰지 않음
+  const c = F.sbCal; if (!c || !c.H || !c.pose) return { why: 'nocal' };
+  if (!(c.pose.Z >= mhSbDef.minCamZ)) return { why: 'low' }; // [J9]
+  const ctx = { src: 'rl', samples: D, miss: (r.rl && r.rl.miss) || [], sparse: (F.samples || []).filter(q => q.t >= r.t0 - 1 && q.t <= r.t1 + 1).sort((p, q) => p.t - q.t), cal: c, calBest: null, recorded: false };
+  const B = mhSbBuild(F, r, ctx); if (/^error/.test(B.why || '')) return { why: 'err' };
+  return mhSbView(B, r) || { why: 'none' };
+}
+function mhSbAll(sel) { // mhGo: 다시 보기 뒤·mhRender 앞에 한 번. 지난 만들기의 r.sb·줄 그림은 모두 버리고 새로(설정·다시 본 표본이 바뀌었을 수 있음). 동기 — 랠리 하나 PC 0.4~12ms
+  const st = mhSbStat = { on: false, rl: true, n: sel.length, ok: 0, why: {}, ms: 0 }, t0 = performance.now(); mhSbGot = [];
+  try { st.on = mhSbOn(); } catch (e) {}
+  try { st.rl = !!mhRlOn(); } catch (e) {} // 완성 줄은 이 값으로(만드는 동안 체크를 바꿔도 그린 것과 맞게)
+  try { if (mhSbCur) { mhSbFree(mhSbCur); mhSbCur = null; } (mhEd ? mhEd.rows : []).forEach(x => { if (x.r && x.r.sb) x.r.sb = null; }); } catch (e) {}
+  for (const q of sel) {
+    let w = ''; try { q.r.sb = null; if (!st.on) continue; const b = mhSbMake(q.F, q.r); if (b && b.ev) { q.r.sb = b; st.ok++; mhSbGot.push(q.r); } else w = (b && b.why) || 'none'; } catch (e) { w = 'err'; try { q.r.sb = null; } catch (x) {} }
+    if (w) st.why[w] = (st.why[w] || 0) + 1;
+  }
+  st.ms = performance.now() - t0; return st;
+}
+function mhSbDiag() { // 완성 줄: 몇 개 랠리에 작전판을 그렸는지·못 그린 까닭. 꺼져 있으면 빈 글자(완성 줄 v1.84 그대로). '공 궤적'·'자국'·'조각'·'다듬'은 쓰지 않음(relook183 시험이 다시 보기를 끈 완성 줄에서 찾음)
+  const st = mhSbStat; if (!st || !st.on) return '';
+  if (st.rl === false) return '작전판 0/' + st.n + '개 랠리(고른 랠리 다시 보기를 꺼서 없음)'; // 설정 줄 이름(공 궤적 다듬기)은 완성 줄에 못 씀 — 그 설정 설명의 '고른 랠리를 다시 봐서'와 같은 말로, 작전판 설정 줄에 '바로 위 … 켜야 나와요'
+  let lost = 0; try { lost = mhSbGot.filter(r => r && !r.sb).length; } catch (e) {} // 그리다 오류가 나 mhDraw가 끈 랠리(r.sb = null)
+  const ok = Math.max(0, st.ok - lost), cnt = Object.assign({}, st.why); if (lost) cnt.err = (cnt.err || 0) + lost;
+  const W = [['norl', '다시 못 본'], ['thin', '폰이 느려 덜 본'], ['rec', '앱으로 찍은'], ['nocal', '코트·카메라 높이를 못 잰'], ['low', '카메라가 낮은'], ['none', '확실한 공이 없는'], ['err', '오류 난']]; // 모두 랠리 수
+  const why = W.filter(p => cnt[p[0]]).map(p => p[1] + ' ' + cnt[p[0]] + '개');
+  return '작전판 ' + ok + '/' + st.n + '개 랠리' + (why.length ? '(' + why.join(' · ') + ')' : '');
 }
 let mhRendN = 0, mhRendSec = 0, mhRendErr = '', mhRendDraws = 0;
 function mhCpuCanvas() { try { const v = localStorage.getItem('tm-mh-cpu'); return v === '1' || v === APP_VERSION; } catch (e) { return false; } } // v1.73: 예전 CPU 캔버스('1' = 손으로, 버전 = 결과가 검어서 자동 — 업데이트되면 GPU를 다시 시도)
@@ -11988,7 +12463,7 @@ async function mhRender(sel, opt) {
   if (mhStop) return null;
   let blob = new Blob(parts, { type: fmt.type }); const raw0 = blob.size; mp4Defrag.info = null; if (fmt.type === 'video/mp4') blob = await mp4Defrag(blob); // v1.38 카톡에서 0초로 보이던 문제
   const di = mp4Defrag.info, mp4d = di ? (di.err ? 'MP4 정리 안 함(' + di.err + ')' : 'MP4 ' + di.tracks.join(', ')) : '';
-  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, OW + '×' + OH + ' · 랠리 초당 ' + Math.min(30, mhRendDraws / Math.max(1, mhRendSec)).toFixed(1) + '장 · ' + (bps / 1e6).toFixed(0) + 'Mbps' + (opt.cpu || mhCpuCanvas() ? ' (CPU)' : ''), '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB', mhRlDiag(), mhAspDiag(sel)].filter(Boolean).join(' · ') };
+  return { blob, ext: fmt.ext, type: fmt.type, n: sel.length, longest, diag: [mhVfUsed ? '검은 화면 감지 → 다른 방식으로 그림' : '', mhDrawErr ? '그리기 오류 ' + mhDrawErr : '', '랠리 ' + mhRendN + '/' + sel.length + '개 ' + Math.round(mhRendSec) + '초 녹화' + (mhRendErr ? ' (영상 열기 실패: ' + mhRendErr + ')' : ''), mp4d, OW + '×' + OH + ' · 랠리 초당 ' + Math.min(30, mhRendDraws / Math.max(1, mhRendSec)).toFixed(1) + '장 · ' + (bps / 1e6).toFixed(0) + 'Mbps' + (opt.cpu || mhCpuCanvas() ? ' (CPU)' : ''), '원본 ' + (raw0 / 1048576).toFixed(1) + 'MB', mhSbDiag(), mhRlDiag(), mhAspDiag(sel)].filter(Boolean).join(' · ') };
 }
 async function mhGo(onlyIdx) {
   if (mhBusy) return;
@@ -12020,6 +12495,7 @@ async function mhGo(onlyIdx) {
     if (!sel.length) { mhStatus('고른 랠리가 없어요 — 목록에서 체크해 주세요', null); mhEdShow(); return; }
     await mhRelookGo(sel); /* v1.83: 녹화기·캔버스를 만들기 전에 고른 랠리를 촘촘히 다시 봄(던지지 않음 — 못 본 랠리는 분석 표본 그대로). 화면이 가려져 있으면 돌아올 때까지 녹화를 시작하지 않음 */
     if (mhStop) { mhStatus('멈췄어요 — 다시 누르면 못 본 랠리부터 이어서 다듬고 만들어요', null); return; }
+    mhSbAll(sel); /* v1.85 타구 작전판: 다시 보기 뒤·녹화기를 만들기 전에 고른 랠리마다 한 번 → r.sb(던지지 않음, 꺼져 있으면 r.sb 없음 = v1.84) */
     const out = await mhRender(sel, opt);
     if (!out) { mhStatus('멈췄어요 — [하이라이트 만들기]를 다시 누르면 분석 결과로 바로 만들어요', null); return; }
     mhOut = out;
